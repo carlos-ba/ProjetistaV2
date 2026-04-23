@@ -19,7 +19,7 @@ As premissas iniciais do projeto são:
 - Criar o projeto com **Git e GitHub desde o início**.
 - Desenvolver o sistema com arquitetura baseada em **APIs**.
 - Utilizar um frontend moderno, visualmente agradável e com boa experiência de usuário.
-- Preparar o projeto para hospedagem futura na **AWS**.
+- Preparar o projeto para hospedagem em **Vercel (frontend) + Render (backend e banco)**.
 - Separar claramente backend, frontend, documentação, infraestrutura, banco de dados e scripts.
 - Criar documentação técnica desde o início para facilitar manutenção e evolução.
 - Usar o V1 apenas como referência de aprendizado, não como base direta desorganizada.
@@ -38,9 +38,9 @@ A stack técnica inicial recomendada é:
 | Estilização | Tailwind CSS |
 | Versionamento | Git + GitHub |
 | Ambiente local | PyCharm |
-| Deploy futuro | AWS |
+| Deploy futuro | Vercel + Render |
 | Documentação | Markdown |
-| Infraestrutura futura | Docker, AWS RDS, S3, CloudWatch |
+| Infraestrutura futura | Docker, Render Postgres, monitoramento e storage externo quando necessario |
 
 Estas escolhas poderão ser ajustadas ao longo do projeto, mas devem servir como referência inicial para manter o desenvolvimento organizado.
 
@@ -80,7 +80,7 @@ projeto-v2/
 │   ├── 03_banco_de_dados.md
 │   ├── 04_api.md
 │   ├── 05_frontend.md
-│   ├── 06_deploy_aws.md
+│   ├── 06_deploy_vercel_render.md
 │   └── 07_decisoes_tecnicas.md
 │
 ├── infra/
@@ -139,7 +139,7 @@ Cada parte do sistema deve ter uma função clara:
 | Backend | Regras de negócio, APIs, autenticação, integração com banco |
 | Frontend | Interface do usuário e experiência visual |
 | Banco de dados | Armazenamento estruturado das informações |
-| Infraestrutura | Configuração de deploy, Docker e AWS |
+| Infraestrutura | Configuracao de deploy, Docker e operacao em nuvem |
 | Documentação | Registro das decisões, regras e arquitetura |
 | Scripts | Automatizações e comandos auxiliares |
 | Testes | Validação do funcionamento do sistema |
@@ -203,7 +203,7 @@ Motivos da escolha:
 - É robusto.
 - É amplamente usado em produção.
 - Tem boa compatibilidade com Python.
-- Pode ser usado localmente e depois migrado para AWS RDS.
+- Pode ser usado localmente e em producao no Render PostgreSQL.
 - Suporta sistemas que crescem com mais segurança.
 
 O projeto deverá evitar criar tabelas sem planejamento.  
@@ -211,23 +211,22 @@ Antes de implementar o banco, deverão ser definidos os principais módulos, ent
 
 ---
 
-## 10. AWS e Deploy
+## 10. Deploy e Operacao em Nuvem
 
-O projeto será preparado para hospedagem futura na AWS.
+O projeto adotara, como premissa inicial, a seguinte distribuicao:
 
-Possibilidades futuras:
-
-| Serviço AWS | Uso provável |
+| Plataforma | Uso |
 |---|---|
-| Elastic Beanstalk | Deploy simplificado do backend |
-| EC2 | Servidor manual/controlado |
-| ECS | Containers em produção |
-| RDS PostgreSQL | Banco de dados gerenciado |
-| S3 | Armazenamento de arquivos |
-| CloudWatch | Logs e monitoramento |
-| Route 53 | Domínio e DNS |
+| Vercel | Hospedagem do frontend |
+| Render Web Service | Hospedagem do backend FastAPI |
+| Render PostgreSQL | Banco de dados gerenciado |
 
-A decisão final do modelo de deploy deverá ser tomada somente após a arquitetura inicial estar mais clara.
+Diretrizes iniciais:
+
+- Backend e frontend devem continuar separados.
+- Variaveis de ambiente devem ser usadas para URLs, credenciais e configuracoes.
+- Nao armazenar arquivos importantes no filesystem efemero do backend.
+- Manter logs, backups e monitoramento basico desde o inicio.
 
 ---
 
@@ -302,7 +301,7 @@ Após este arquivo, os próximos documentos recomendados são:
 03_banco_de_dados.md
 04_api.md
 05_frontend.md
-06_deploy_aws.md
+06_deploy_vercel_render.md
 07_decisoes_tecnicas.md
 ```
 
@@ -315,7 +314,7 @@ Cada arquivo deverá tratar uma parte específica do projeto, evitando que todas
 A definição estratégica inicial deste projeto é:
 
 ```text
-Criar um projeto independente, limpo, organizado e escalável, usando Python como base principal, APIs como padrão de comunicação, frontend moderno para boa experiência do usuário, GitHub como controle de versão e AWS como ambiente futuro de hospedagem.
+Criar um projeto independente, limpo, organizado e escalavel, usando Python como base principal, APIs como padrao de comunicacao, frontend moderno para boa experiencia do usuario, GitHub como controle de versao e Vercel + Render como ambiente inicial de hospedagem.
 ```
 
 Este documento deverá ser atualizado conforme o projeto evoluir.

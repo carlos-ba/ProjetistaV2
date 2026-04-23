@@ -28,7 +28,7 @@ Projeto V2 iniciado a partir de uma base limpa, organizada e escalavel, conforme
 - Backend: Python + FastAPI
 - Banco: PostgreSQL
 - Frontend: React ou Next.js
-- Infra futura: Docker + AWS
+- Deploy inicial: Vercel (frontend) + Render (backend e banco)
 
 ## Comandos padrao
 
