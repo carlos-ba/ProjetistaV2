@@ -35,3 +35,6 @@ build/
 
 # Logs
 *.log
+
+# Local tooling
+tools/
