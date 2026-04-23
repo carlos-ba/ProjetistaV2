@@ -1,0 +1,11 @@
+{
+  "name": "projetista-v2-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Base inicial do frontend (separado do backend).",
+  "scripts": {
+    "dev": "echo Frontend ainda nao inicializado",
+    "build": "echo Frontend ainda nao inicializado",
+    "test": "echo Sem testes configurados"
+  }
+}
