@@ -1,0 +1,155 @@
+import { useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
+
+export default function LoginPage() {
+  const { login } = useAuth();
+  const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro'
+  const [form, setForm] = useState({ username: '', email: '', password: '' });
+  const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleLogin = async e => {
+    e.preventDefault();
+    setErro('');
+    setLoading(true);
+    try {
+      await login(form.username, form.password);
+    } catch (err) {
+      setErro('Usuário ou senha inválidos.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCadastro = async e => {
+    e.preventDefault();
+    setErro('');
+    setSucesso('');
+    setLoading(true);
+    try {
+      await axios.post('/api/auth/register/', {
+        username: form.username,
+        email: form.email,
+        password: form.password,
+      });
+      setSucesso('Conta criada! Faça login.');
+      setAba('entrar');
+      setForm(f => ({ ...f, password: '' }));
+    } catch (err) {
+      const data = err.response?.data;
+      if (data) {
+        const msgs = Object.values(data).flat().join(' ');
+        setErro(msgs);
+      } else {
+        setErro('Erro ao criar conta.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] via-[#2a1245] to-[#1a3a1a]">
+      <div className="w-full max-w-md mx-4">
+        {/* Logo / Título */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7B2D8B] to-[#6BBF3F] flex items-center justify-center">
+              <span className="text-white font-black text-lg">PF</span>
+            </div>
+            <span className="text-2xl font-black text-white">Projetista Frigorífico</span>
+          </div>
+          <p className="text-white/50 text-sm">Dimensionamento de câmaras frigoríficas</p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Abas */}
+          <div className="flex">
+            <button
+              onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); }}
+              className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'entrar' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => { setAba('cadastro'); setErro(''); setSucesso(''); }}
+              className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'cadastro' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              Criar Conta
+            </button>
+          </div>
+
+          {/* Formulário */}
+          <div className="p-8">
+            {sucesso && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                {sucesso}
+              </div>
+            )}
+            {erro && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {erro}
+              </div>
+            )}
+
+            <form onSubmit={aba === 'entrar' ? handleLogin : handleCadastro} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Usuário</label>
+                <input
+                  type="text"
+                  name="username"
+                  value={form.username}
+                  onChange={handleChange}
+                  required
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                  placeholder="seu_usuario"
+                />
+              </div>
+
+              {aba === 'cadastro' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                    placeholder="voce@email.com"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
+                <input
+                  type="password"
+                  name="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                  placeholder="mínimo 6 caracteres"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#7B2D8B] hover:bg-purple-800 disabled:opacity-60 text-white font-bold py-3 rounded-lg text-sm transition-colors mt-2"
+              >
+                {loading ? 'Aguarde...' : aba === 'entrar' ? 'Entrar' : 'Criar Conta'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

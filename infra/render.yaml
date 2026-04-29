@@ -3,7 +3,7 @@ services:
     name: projetista-v2-api
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_ENV
@@ -13,7 +13,9 @@ services:
           name: projetista-v2-db
           property: connectionString
       - key: CORS_ORIGINS
-        sync: false
+        value: '["https://projetista-v2-frontend.vercel.app"]'
+      - key: SECRET_KEY
+        generateValue: true
 
 databases:
   - name: projetista-v2-db

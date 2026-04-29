@@ -38,3 +38,5 @@ build/
 
 # Local tooling
 tools/
+.claude/
+.junie/
