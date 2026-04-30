@@ -25,7 +25,7 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
     setLoading(true);
     setErro('');
     try {
-      const response = await api.post('/api/v1/calcular-tubulacao/', {
+      const response = await api.post('/api/v1/tubulacao', {
         capacidade_real: equipamentoSelecionado.capacidade_real || 2000,
         fluido: equipamentoSelecionado.fluido || 'R22',
         temp_evap: equipamentoSelecionado.temp_evap || -10,

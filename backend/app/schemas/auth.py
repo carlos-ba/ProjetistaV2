@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from uuid import UUID
+
+from pydantic import BaseModel, field_validator
 
 
 class UserCreate(BaseModel):
@@ -41,9 +43,17 @@ class TokenRefreshResponse(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: str
+    id: UUID
     username: str
     email: str
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class MessageResponse(BaseModel):
+    detail: str
+
+
+class HealthResponse(BaseModel):
+    status: str

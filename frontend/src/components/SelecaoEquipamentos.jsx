@@ -49,7 +49,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFina
     setQuantidades({}); // Limpa quantidades ao buscar
 
     try {
-      const response = await api.post('/api/v1/selecao-inteligente/', {
+      const response = await api.post('/api/v1/selecao', {
         carga_termica_total: cargaReferencia,
         temp_evaporacao: evapVal,
         temp_condensacao: cond,

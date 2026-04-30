@@ -110,7 +110,7 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
       
       try {
         setLoading(true);
-        const resp = await api.post('/api/v1/processar-voz/', { texto });
+        const resp = await api.post('/api/v1/calculos/processar-voz/', { texto });
         const dados = resp.data.dados_extraidos;
 
         if (dados) {
@@ -154,7 +154,7 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     setLoading(true);
     setErro('');
     try {
-      const response = await api.post('/api/v1/calcular-gabinete/', {
+      const response = await api.post('/api/v1/gabinete', {
         comprimento: c,
         largura: l,
         altura: a,
@@ -182,7 +182,7 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     setLoadingCAD(true);
     setErro('');
     try {
-      const response = await api.post('/api/v1/gerar-dxf-gabinete/', {
+      const response = await api.post('/api/v1/gabinete/dxf/', {
         comprimento, largura, altura, 
         largura_painel: parseFloat(larguraPainel) / 1000.0,
         espessura

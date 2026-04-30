@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.database.session import get_db
 from app.models.usuario import Usuario
-from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse
+from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
 
 _bearer = HTTPBearer()
 
@@ -83,7 +83,7 @@ async def renovar_token(refresh_token: str, db: AsyncSession) -> TokenRefreshRes
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
-) -> Usuario:
+) -> UserOut:
     try:
         payload = decode_token(credentials.credentials)
         if payload.get("type") != "access":
@@ -101,4 +101,4 @@ async def get_current_user(
     usuario = result.scalar_one_or_none()
     if not usuario or not usuario.is_active:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
-    return usuario
+    return UserOut.model_validate(usuario)

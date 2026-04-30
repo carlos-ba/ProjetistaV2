@@ -21,7 +21,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
     setLoading(true);
     setErro('');
     try {
-      const response = await api.post('/api/v1/selecionar-componentes-fluxo/', {
+      const response = await api.post('/api/v1/componentes', {
         capacidade_kcalh: cargaAlvo,
         fluido: fluido,
         temp_evap: tempEvap

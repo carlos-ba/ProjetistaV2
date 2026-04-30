@@ -28,8 +28,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
   useEffect(() => {
     const carregarCatalogos = async () => {
       try {
-        const respMat = await api.get('/api/v1/materiais/');
-        const respEq = await api.get('/api/v1/equipamentos/');
+        const respMat = await api.get('/api/v1/catalogo/materiais');
+        const respEq = await api.get('/api/v1/catalogo/equipamentos');
         setListaMateriais(Array.isArray(respMat.data) ? respMat.data : respMat.data.results || []);
         setListaEquipamentos(Array.isArray(respEq.data) ? respEq.data : respEq.data.results || []);
       } catch (err) {
@@ -86,7 +86,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
         ]
       };
       
-      const response = await api.post('/api/v1/gerar-orcamento/', payload);
+      const response = await api.post('/api/v1/orcamento', payload);
       setOrcamento(response.data);
     } catch (err) {
       setErro("Erro ao gerar orçamento.");

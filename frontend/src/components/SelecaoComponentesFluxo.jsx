@@ -19,7 +19,7 @@ const SelecaoComponentesFluxo = ({ equipamentoSelecionado, aoFinalizar }) => {
     setFinalizado(false);
 
     try {
-      const response = await api.post('/api/v1/selecionar-componentes-fluxo/', {
+      const response = await api.post('/api/v1/componentes', {
         capacidade_kcalh: equipamentoSelecionado.capacidade_real,
         fluido: equipamentoSelecionado.fluido,
         temp_evap: equipamentoSelecionado.temp_evap

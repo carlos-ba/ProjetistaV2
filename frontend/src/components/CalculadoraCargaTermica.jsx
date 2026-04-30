@@ -58,7 +58,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
   useEffect(() => {
     const carregarProdutos = async () => {
       try {
-        const res = await api.get('/api/v1/perfis-produtos/');
+        const res = await api.get('/api/v1/catalogo/perfis-produto');
         const items = res.data?.results ?? res.data ?? [];
         setProdutos(items);
         
@@ -134,7 +134,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
     };
 
     try {
-      const response = await api.post('/api/v1/calcular-carga-termica/', payload);
+      const response = await api.post('/api/v1/carga-termica', payload);
       setResultado(response.data);
       setStatusCalculo('pronto');
       if (aoFinalizar) aoFinalizar(response.data.capacidade_requerida_equipamento_kcalh);

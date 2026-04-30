@@ -203,7 +203,7 @@ function AppContent() {
       if (!nome) return;
       setSalvando(true);
       try {
-        const resp = await api.post('/api/v1/projetos/', _montarPayload(nome));
+        const resp = await api.post('/api/v1/projetos', _montarPayload(nome));
         setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
         alert("Projeto salvo com sucesso!");
         if (mostrandoHistorico) abrirHistorico();
@@ -215,7 +215,7 @@ function AppContent() {
     // Projeto existente: atualiza com dados originais
     setSalvando(true);
     try {
-      await api.put(`/api/v1/projetos/${projetoAtual.id}/`, _montarPayload(projetoAtual.nome, projetoAtual.cliente));
+      await api.patch(`/api/v1/projetos/${projetoAtual.id}`, _montarPayload(projetoAtual.nome, projetoAtual.cliente));
       alert("Projeto atualizado com sucesso!");
       if (mostrandoHistorico) abrirHistorico();
     } catch { alert("Erro ao salvar o projeto."); }
@@ -232,7 +232,7 @@ function AppContent() {
     if (!nome) return;
     setSalvando(true);
     try {
-      const resp = await api.post('/api/v1/projetos/', _montarPayload(nome, projetoAtual?.cliente));
+      const resp = await api.post('/api/v1/projetos', _montarPayload(nome, projetoAtual?.cliente));
       setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
       alert(`Projeto salvo como "${nome}"!`);
       if (mostrandoHistorico) abrirHistorico();
@@ -242,7 +242,7 @@ function AppContent() {
 
   const abrirHistorico = async () => {
     try {
-      const resp = await api.get('/api/v1/projetos/');
+      const resp = await api.get('/api/v1/projetos');
       setListaProjetos(resp.data);
       setMostrandoHistorico(true);
     } catch (error) {

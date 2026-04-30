@@ -4,7 +4,7 @@ from uuid import UUID
 from typing import List
 
 from app.database.session import get_db
-from app.models.usuario import Usuario
+from app.schemas.auth import UserOut
 from app.schemas.projeto import Projeto, ProjetoCreate, ProjetoUpdate, ProjetoComCalculos
 from app.services import projetos as service_projetos
 from app.services.auth import get_current_user
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
 async def criar_projeto(
     payload: ProjetoCreate,
     db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UserOut = Depends(get_current_user),
 ):
     return await service_projetos.create_projeto(db, payload, owner_id=usuario.id)
 
@@ -26,7 +26,7 @@ async def listar_projetos(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UserOut = Depends(get_current_user),
 ):
     return await service_projetos.get_projetos(db, skip, limit, owner_id=usuario.id)
 
@@ -35,7 +35,7 @@ async def listar_projetos(
 async def obter_projeto(
     projeto_id: UUID,
     db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UserOut = Depends(get_current_user),
 ):
     db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
     if not db_projeto:
@@ -48,7 +48,7 @@ async def atualizar_projeto(
     projeto_id: UUID,
     payload: ProjetoUpdate,
     db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UserOut = Depends(get_current_user),
 ):
     db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
     if not db_projeto:
@@ -60,7 +60,7 @@ async def atualizar_projeto(
 async def deletar_projeto(
     projeto_id: UUID,
     db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UserOut = Depends(get_current_user),
 ):
     db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
     if not db_projeto:
