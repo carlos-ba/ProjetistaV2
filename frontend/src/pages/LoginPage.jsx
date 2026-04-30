@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../api';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -31,7 +31,7 @@ export default function LoginPage() {
     setSucesso('');
     setLoading(true);
     try {
-      await axios.post('/api/auth/register/', {
+      await api.post('/api/auth/register/', {
         username: form.username,
         email: form.email,
         password: form.password,

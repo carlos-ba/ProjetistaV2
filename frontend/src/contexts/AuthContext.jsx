@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const AuthContext = createContext(null);
 
@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (username, password) => {
-    const { data } = await axios.post('/api/auth/token/', { username, password });
+    const { data } = await api.post('/api/auth/token/', { username, password });
     localStorage.setItem('access_token', data.access);
     localStorage.setItem('refresh_token', data.refresh);
     const payload = JSON.parse(atob(data.access.split('.')[1]));

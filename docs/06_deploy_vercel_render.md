@@ -56,7 +56,7 @@ Padronizar um caminho simples e economico de producao para o SaaS:
 6. No Render, conectar o repositorio `carlos-ba/ProjetistaV2`.
 7. No Render, criar banco PostgreSQL gerenciado.
 8. No Render, criar Web Service para o backend com `Root Directory = backend`.
-9. Configurar no backend Render `Build Command` como `pip install -r requirements.txt`.
+9. Configurar no backend Render `Build Command` como `pip install -r requirements.txt && alembic upgrade head`.
 10. Configurar no backend Render `Start Command` como `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 11. Configurar variavel `APP_ENV=production` no backend Render.
 12. Configurar variavel `DATABASE_URL` com a connection string do Postgres Render.
@@ -64,7 +64,7 @@ Padronizar um caminho simples e economico de producao para o SaaS:
 14. Fazer primeiro deploy do backend e validar endpoint base (`/docs`).
 15. No Vercel, importar o repositorio `carlos-ba/ProjetistaV2`.
 16. Configurar `Root Directory` no Vercel como `frontend`.
-17. Configurar variavel `NEXT_PUBLIC_API_URL` no Vercel apontando para a URL publica do backend Render.
+17. Configurar variavel `VITE_API_BASE_URL` no Vercel apontando para a URL publica do backend Render.
 18. Fazer deploy do frontend no Vercel.
 19. Atualizar `CORS_ORIGINS` no Render com dominio final do frontend Vercel.
 20. Validar comunicacao frontend -> backend.

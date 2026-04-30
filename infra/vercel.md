@@ -2,12 +2,12 @@
 
 ## Projeto
 
-- Framework: definir quando o frontend for inicializado (React/Vite ou Next.js).
+- Framework: React/Vite.
 - Root Directory: `frontend`
 
 ## Variaveis de Ambiente
 
-- `NEXT_PUBLIC_API_URL`: URL publica da API no Render.
+- `VITE_API_BASE_URL`: URL publica da API no Render.
 
 ## Dominio
 
