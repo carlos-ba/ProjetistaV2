@@ -1,10 +1,15 @@
 $ErrorActionPreference = "Stop"
 
-$pythonPath = ".venv\\Scripts\\python.exe"
+$pythonPath = ".venv\Scripts\python.exe"
+$backendPath = "backend"
 
 if (-not (Test-Path $pythonPath)) {
-  Write-Error "Ambiente virtual nao encontrado. Execute scripts/setup_backend.ps1 primeiro."
+    Write-Error "Ambiente virtual nao encontrado. Execute scripts/setup_backend.ps1 primeiro."
 }
 
-Set-Location "backend"
-& "..\\$pythonPath" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+Write-Host "Iniciando backend em http://localhost:8000 ..." -ForegroundColor Cyan
+Write-Host "Swagger UI: http://localhost:8000/docs" -ForegroundColor Green
+Write-Host "(Ctrl+C para parar)`n"
+
+Set-Location $backendPath
+& "..\$pythonPath" run.py

@@ -11,16 +11,24 @@ import ComponentesFluxo from './components/ComponentesFluxo.jsx';
 import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
+import PainelInsights from './components/PainelInsights.jsx';
+import EtapaCard from './components/EtapaCard.jsx';
 
 
 function AppContent() {
   const { user, logout } = useAuth();
   const [dadosDoGabinete, setDadosDoGabinete] = useState(null);
   const [gabineteCalculado, setGabineteCalculado] = useState(false);
+  const gabineteCalculadoRef = React.useRef(false); // rastreia transição false→true
+  const [projetoKey, setProjetoKey] = useState(0); // força remount dos componentes ao novo projeto
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
   const [cargaCalculada, setCargaCalculada] = useState(null);
   const [itensOrcamento, setItensOrcamento] = useState({ materiais: [], equipamentos: [] });
+  const [itensAcessorios, setItensAcessorios] = useState([]);   // step 4 — para o painel lateral
+  const [itensTubulacao, setItensTubulacao]   = useState([]);   // step 5 — para o painel lateral
   const [passoAtual, setPassoAtual] = useState(1);
+  const [passoExpandido, setPassoExpandido] = useState(1);   // qual card está aberto para edição
+  const [passoSelecionado, setPassoSelecionado] = useState(1); // qual card está selecionado (detalhe à direita)
   const [salvando, setSalvando] = useState(false);
   const [projetoAtual, setProjetoAtual] = useState(null); // { id, nome, cliente } ou null se novo
   const [listaProjetos, setListaProjetos] = useState([]);
@@ -52,11 +60,16 @@ function AppContent() {
     });
 
     // Marca que o gabinete foi calculado (lista_corte vem só após clicar Calcular)
+    // Scroll apenas na transição false → true (não a cada edição)
     if (dadosCompletos.lista_corte) {
+      const eraFalse = !gabineteCalculadoRef.current;
+      gabineteCalculadoRef.current = true;
       setGabineteCalculado(true);
-      setTimeout(() => {
-        document.getElementById('passo-carga')?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      if (eraFalse) { setPassoExpandido(2); setPassoSelecionado(2); }
+    } else {
+      gabineteCalculadoRef.current = false;
+      setGabineteCalculado(false);
+      setPassoExpandido(1); setPassoSelecionado(1);
     }
 
     if (dadosCompletos.lista_materiais) {
@@ -72,79 +85,89 @@ function AppContent() {
       }));
     }
     
-    // Apenas muda o passo e rola se for a primeira vez ou se as dimensões mudarem significativamente
-    setPassoAtual(prev => {
-      if (prev < 2) {
-        setTimeout(() => { document.getElementById('passo-carga')?.scrollIntoView({ behavior: 'smooth' }); }, 100);
-        return 2;
-      }
-      return prev;
-    });
+    setPassoAtual(prev => (prev < 2 ? 2 : prev));
   }, []);
 
   // 2. Recebe da Carga Térmica (Módulo 2)
   const receberResultadoCarga = useCallback((valorKcal) => {
-    console.log("Carga calculada:", valorKcal);
     setCargaCalculada(valorKcal);
-    setPassoAtual(prev => {
-      if (prev < 3) {
-        setTimeout(() => { document.getElementById('passo-selecao')?.scrollIntoView({ behavior: 'smooth' }); }, 100);
-        return 3;
-      }
-      return prev;
-    });
+    setPassoAtual(prev => Math.max(prev, 3));
+    setPassoExpandido(3); setPassoSelecionado(3);
   }, []);
-  
-  // 3. Recebe da Seleção de Equipamentos (Módulo 3) - ACUMULATIVO
+
   const receberEquipamentosFinalizados = useCallback((equipamentos) => {
-    console.log("FINALIZANDO SELEÇÃO - Lote de equipamentos recebido no App:", equipamentos);
-    
-    setItensOrcamento(prev => ({
-      ...prev,
-      equipamentos: [...prev.equipamentos, ...equipamentos]
-    }));
-    
-    setPassoAtual(prev => {
-      if (prev < 4) {
-        setTimeout(() => { document.getElementById('passo-acessorios')?.scrollIntoView({ behavior: 'smooth' }); }, 100);
-        return 4;
-      }
-      return prev;
-    });
+    setItensOrcamento(prev => ({ ...prev, equipamentos: [...prev.equipamentos, ...equipamentos] }));
+    setPassoAtual(prev => Math.max(prev, 4));
+    setPassoExpandido(4); setPassoSelecionado(4);
   }, []);
 
-  // 4. Recebe dos Componentes de Fluxo (Módulo 4)
   const receberComponentesFluxo = useCallback((listaAcessorios) => {
-    console.log("Acessórios selecionados:", listaAcessorios);
-    setItensOrcamento(prev => ({
-      ...prev,
-      materiais: [...prev.materiais, ...listaAcessorios]
-    }));
-    setPassoAtual(prev => {
-      if (prev < 5) {
-        setTimeout(() => { document.getElementById('passo-tubulacao')?.scrollIntoView({ behavior: 'smooth' }); }, 100);
-        return 5;
-      }
-      return prev;
-    });
+    setItensOrcamento(prev => ({ ...prev, materiais: [...prev.materiais, ...listaAcessorios] }));
+    setItensAcessorios(listaAcessorios);   // guarda separado para o painel lateral
+    setPassoAtual(prev => Math.max(prev, 5));
+    setPassoExpandido(5); setPassoSelecionado(5);
   }, []);
 
-  // 5. Recebe da Tubulação (Módulo 5)
   const receberDadosTubulacao = useCallback((listaTubos) => {
-    console.log("Tubulação calculada:", listaTubos);
-    // Adiciona os tubos na lista de materiais
-    setItensOrcamento(prev => ({
-      ...prev,
-      materiais: [...prev.materiais, ...listaTubos]
-    }));
-    setPassoAtual(prev => {
-      if (prev < 6) {
-        setTimeout(() => { document.getElementById('passo-orcamento')?.scrollIntoView({ behavior: 'smooth' }); }, 100);
-        return 6;
-      }
-      return prev;
-    });
+    setItensOrcamento(prev => ({ ...prev, materiais: [...prev.materiais, ...listaTubos] }));
+    setItensTubulacao(listaTubos);         // guarda separado para o painel lateral
+    setPassoAtual(prev => Math.max(prev, 6));
+    setPassoExpandido(6); setPassoSelecionado(6);
   }, []);
+
+  // ── Wizard helpers ────────────────────────────────────────────────────
+  const etapaDisponivel = (n) => ({
+    1: true,
+    2: gabineteCalculado,
+    3: cargaCalculada != null,
+    4: itensOrcamento.equipamentos.length > 0,
+    5: passoAtual >= 5,
+    6: itensOrcamento.materiais.length > 0 || itensOrcamento.equipamentos.length > 0,
+  }[n] ?? false);
+
+  const etapaConcluida = (n) => ({
+    1: gabineteCalculado,
+    2: cargaCalculada != null,
+    3: itensOrcamento.equipamentos.length > 0,
+    4: passoAtual >= 5,
+    5: passoAtual >= 6,
+    6: false,
+  }[n] ?? false);
+
+  const statusEtapa = (n) => {
+    if (!etapaDisponivel(n)) return 'bloqueado';
+    if (etapaConcluida(n))   return 'concluido';
+    return 'disponivel'; // acessível mas ainda não concluída
+  };
+
+  // Clique no header → só seleciona (mostra detalhe à direita, NÃO abre para edição)
+  const selecionarEtapa = (n) => { if (etapaDisponivel(n)) setPassoSelecionado(n); };
+
+  // Clique em "Editar" → abre para edição e seleciona
+  const editarEtapa = (n) => {
+    if (etapaDisponivel(n)) {
+      setPassoExpandido(n);
+      setPassoSelecionado(n);
+    }
+  };
+
+  // Clique em "Descartar edição" → fecha sem perder dados, mantém selecionado
+  const fecharEtapa = () => setPassoExpandido(null);
+
+  // Summaries exibidos nos cards colapsados
+  const resumoEtapa = (n) => {
+    if (n === 1 && dadosDoGabinete)
+      return `${dadosDoGabinete.comprimento}×${dadosDoGabinete.largura}×${dadosDoGabinete.altura}m | ${dadosDoGabinete.nucleo} ${dadosDoGabinete.espessura}mm | ${dadosDoGabinete.temperatura_interna}°C`;
+    if (n === 2 && cargaCalculada)
+      return `${Number(cargaCalculada).toLocaleString('pt-BR')} kcal/h requeridos`;
+    if (n === 3 && itensOrcamento.equipamentos.length > 0)
+      return `${itensOrcamento.equipamentos.length} equipamento(s) selecionado(s)`;
+    if (n === 4 && passoAtual >= 5)
+      return 'Acessórios e componentes confirmados';
+    if (n === 5 && passoAtual >= 6)
+      return 'Tubulação dimensionada';
+    return null;
+  };
 
   const getUltimoEquipamento = () => {
     const lista = itensOrcamento.equipamentos;
@@ -170,13 +193,19 @@ function AppContent() {
 
   const novoProjeto = () => {
     if (!window.confirm("Iniciar novo projeto? Os dados não salvos serão perdidos.")) return;
+    // Reseta estados do App
     setDadosDoGabinete(null);
     setCargaCalculada(null);
     setItensOrcamento({ materiais: [], equipamentos: [] });
+    setItensAcessorios([]);
+    setItensTubulacao([]);
     setPassoAtual(1);
     setProjetoAtual(null);
     setGabineteCalculado(false);
     setDeltaTCalculado(null);
+    gabineteCalculadoRef.current = false;
+    setPassoExpandido(1); setPassoSelecionado(1); // volta ao primeiro card
+    setProjetoKey(k => k + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -299,6 +328,21 @@ function AppContent() {
           </div>
         </nav>
 
+        {/* Insights de Engenharia — sidebar esquerda */}
+        {dadosDoGabinete && (
+          <div className="px-4 pb-2">
+            <PainelInsights
+              dimensoes={{ comp: dadosDoGabinete.comprimento, larg: dadosDoGabinete.largura, alt: dadosDoGabinete.altura }}
+              temps={{ interna: dadosDoGabinete.temperatura_interna, externa: 35,
+                evap: deltaTCalculado != null ? parseFloat(dadosDoGabinete.temperatura_interna) - parseFloat(deltaTCalculado) : NaN }}
+              isolamento={{ esp: dadosDoGabinete.espessura, nuc: dadosDoGabinete.nucleo }}
+              cargaCalculada={cargaCalculada}
+              produto={null}
+              compacto={true}
+            />
+          </div>
+        )}
+
         <div className="p-4 border-t border-purple-900/50">
           <div className="p-4 rounded-xl" style={{ background: 'rgba(107,191,63,0.1)', border: '1px solid rgba(107,191,63,0.2)' }}>
             <p className="text-xs text-slate-400">Status do Servidor</p>
@@ -362,29 +406,38 @@ function AppContent() {
           <div className="px-8 pb-6 max-w-4xl mx-auto w-full">
             <div className="flex justify-between items-center relative">
               <div className="absolute h-1 bg-slate-200 left-0 right-0 top-1/2 -translate-y-1/2 z-0"></div>
-              {[1, 2, 3, 4, 5, 6].map(step => (
-                <div key={step} className="flex flex-col items-center z-10">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-all duration-500 ${
-                    step === passoAtual
-                      ? 'bg-[#7B2D8B] text-white border-purple-200 scale-110 shadow-lg shadow-purple-200'
-                      : step < passoAtual
-                        ? 'bg-[#6BBF3F] text-white border-green-100'
-                        : 'bg-white text-slate-400 border-slate-200'
-                  }`}>
-                    {step < passoAtual ? '✓' : step}
+              {[
+                [1,'Gabinete'], [2,'Carga'], [3,'Equipamento'],
+                [4,'Acessórios'], [5,'Tubulação'], [6,'Orçamento']
+              ].map(([step, label]) => {
+                const st        = statusEtapa(step);
+                const concluido = st === 'concluido';
+                const ativo     = passoExpandido === step;
+                const disponivel= st !== 'bloqueado';
+                return (
+                  <div
+                    key={step}
+                    className={`flex flex-col items-center z-10 ${disponivel ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                    onClick={() => abrirEtapa(step)}
+                    title={disponivel ? `Ir para ${label}` : `Complete a etapa ${step - 1} primeiro`}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-all duration-300 ${
+                      ativo
+                        ? 'bg-[#7B2D8B] text-white border-purple-200 scale-110 shadow-lg shadow-purple-200'
+                        : concluido
+                          ? 'bg-[#6BBF3F] text-white border-green-100 hover:scale-105'
+                          : 'bg-white text-slate-400 border-slate-200'
+                    }`}>
+                      {concluido && !ativo ? '✓' : step}
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase mt-1 absolute -bottom-5 whitespace-nowrap ${
+                      ativo ? 'text-[#7B2D8B]' : concluido ? 'text-emerald-600' : 'text-slate-400'
+                    }`}>
+                      {label}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold uppercase mt-1 absolute -bottom-5 whitespace-nowrap ${
-                    step === passoAtual ? 'text-[#7B2D8B]' : 'text-slate-400'
-                  }`}>
-                    {step === 1 && 'Gabinete'}
-                    {step === 2 && 'Carga'}
-                    {step === 3 && 'Equipamento'}
-                    {step === 4 && 'Acessórios'}
-                    {step === 5 && 'Tubulação'}
-                    {step === 6 && 'Orçamento'}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </header>
@@ -431,66 +484,97 @@ function AppContent() {
 
           {/* O Progress Tracker antigo foi removido daqui e movido para o header */}
 
-          <section id="v2-gabinete" className="scroll-mt-40 print:hidden">
-            <CalculadoraGabinete aoFinalizar={receberDadosGabinete} />
-          </section>
+          {/* ── WIZARD — 6 etapas colapsáveis ── */}
+          <div className="space-y-4 print:hidden">
 
-          {/* Módulos seguintes aparecem conforme o usuário avança no projeto */}
-          
-          {gabineteCalculado && (
-            <section id="passo-carga" className="animate-in fade-in duration-700 scroll-mt-40 print:hidden">
-               <CalculadoraCargaTermica dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
-            </section>
-          )}
+            {/* 1. Gabinete */}
+            <EtapaCard
+              numero={1} titulo="Configuração do Gabinete" icone="📏"
+              status={statusEtapa(1)} resumo={resumoEtapa(1)}
+              expandido={passoExpandido === 1}
+              selecionado={passoSelecionado === 1 && passoExpandido !== 1}
+              onSelecionar={() => selecionarEtapa(1)}
+              onEditar={() => editarEtapa(1)} onFechar={fecharEtapa}
+            >
+              <CalculadoraGabinete key={projetoKey} aoFinalizar={receberDadosGabinete} />
+            </EtapaCard>
 
-          {cargaCalculada && (
-            <section id="passo-selecao" className="animate-in fade-in duration-700 scroll-mt-40 print:hidden">
+            {/* 2. Carga Térmica */}
+            <EtapaCard
+              numero={2} titulo="Cálculo de Carga Térmica" icone="❄️"
+              status={statusEtapa(2)} resumo={resumoEtapa(2)}
+              expandido={passoExpandido === 2}
+              selecionado={passoSelecionado === 2 && passoExpandido !== 2}
+              onSelecionar={() => selecionarEtapa(2)}
+              onEditar={() => editarEtapa(2)} onFechar={fecharEtapa}
+            >
+              <CalculadoraCargaTermica dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
+            </EtapaCard>
+
+            {/* 3. Seleção de Equipamentos */}
+            <EtapaCard
+              numero={3} titulo="Seleção de Equipamentos" icone="⚙️"
+              status={statusEtapa(3)} resumo={resumoEtapa(3)}
+              expandido={passoExpandido === 3}
+              selecionado={passoSelecionado === 3 && passoExpandido !== 3}
+              onSelecionar={() => selecionarEtapa(3)}
+              onEditar={() => editarEtapa(3)} onFechar={fecharEtapa}
+            >
               <SelecaoEquipamentos
                 cargaInicial={cargaCalculada}
                 tempInterna={dadosDoGabinete?.temperatura_interna}
                 onDeltaTChange={setDeltaTCalculado}
                 aoFinalizar={receberEquipamentosFinalizados}
               />
-            </section>
-          )}
+            </EtapaCard>
 
-          {itensOrcamento.equipamentos.length > 0 && (
-            <section id="passo-acessorios" className="animate-in fade-in duration-700 scroll-mt-40 print:hidden">
-               <ComponentesFluxo 
-                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada} 
-                 fluido={getUltimoEquipamento()?.fluido || 'R404A'}
-                 tempEvap={getUltimoEquipamento()?.temp_evap || -10}
-                 aoFinalizar={receberComponentesFluxo} 
-               />
-            </section>
-          )}
+            {/* 4. Componentes e Acessórios */}
+            <EtapaCard
+              numero={4} titulo="Componentes e Acessórios" icone="🔧"
+              status={statusEtapa(4)} resumo={resumoEtapa(4)}
+              expandido={passoExpandido === 4}
+              selecionado={passoSelecionado === 4 && passoExpandido !== 4}
+              onSelecionar={() => selecionarEtapa(4)}
+              onEditar={() => editarEtapa(4)} onFechar={fecharEtapa}
+            >
+              <ComponentesFluxo
+                cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
+                fluido={getUltimoEquipamento()?.fluido || 'R404A'}
+                tempEvap={getUltimoEquipamento()?.temp_evap || -10}
+                aoFinalizar={receberComponentesFluxo}
+              />
+            </EtapaCard>
 
-          {passoAtual >= 5 && (
-            <section id="passo-tubulacao" className="animate-in fade-in duration-700 scroll-mt-40 print:hidden">
+            {/* 5. Tubulação */}
+            <EtapaCard
+              numero={5} titulo="Dimensionamento de Tubulação" icone="🔩"
+              status={statusEtapa(5)} resumo={resumoEtapa(5)}
+              expandido={passoExpandido === 5}
+              selecionado={passoSelecionado === 5 && passoExpandido !== 5}
+              onSelecionar={() => selecionarEtapa(5)}
+              onEditar={() => editarEtapa(5)} onFechar={fecharEtapa}
+            >
               <CalculadoraTubulacao equipamentoSelecionado={getUltimoEquipamento()} aoFinalizar={receberDadosTubulacao} />
-            </section>
-          )}
+            </EtapaCard>
 
-          {/* O orçamento aparece se houver qualquer item (materiais ou equipamentos) */}
-          {(itensOrcamento.materiais.length > 0 || itensOrcamento.equipamentos.length > 0) && (
-            <section id="passo-orcamento" className="animate-in fade-in duration-700 scroll-mt-40">
-              <GeradorOrcamento 
-                dadosAutomaticos={itensOrcamento} 
-                aoRemoverEquipamento={removerEquipamentoSugerido} 
+            {/* 6. Orçamento */}
+            <EtapaCard
+              numero={6} titulo="Gerador de Orçamento" icone="💰"
+              status={statusEtapa(6)} resumo={resumoEtapa(6)}
+              somenteLeitura
+              expandido={passoExpandido === 6}
+              selecionado={passoSelecionado === 6 && passoExpandido !== 6}
+              onSelecionar={() => selecionarEtapa(6)}
+              onEditar={() => editarEtapa(6)} onFechar={fecharEtapa}
+            >
+              <GeradorOrcamento
+                dadosAutomaticos={itensOrcamento}
+                aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
               />
-            </section>
-          )}
+            </EtapaCard>
 
-          {!dadosDoGabinete && (
-            <div className="p-12 bg-white rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center print:hidden">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-2xl mb-4">🧊</div>
-              <h3 className="text-slate-800 font-bold text-lg">Aguardando Início do Projeto</h3>
-              <p className="text-slate-500 max-w-xs mt-2">
-                Preencha os dados do gabinete acima e clique em calcular para desbloquear os próximos passos da engenharia.
-              </p>
-            </div>
-          )}
+          </div>
 
         </div>
       </main>
@@ -503,6 +587,9 @@ function AppContent() {
           itensOrcamento={itensOrcamento}
           passoAtual={passoAtual}
           deltaT={deltaTCalculado}
+          passoExpandido={passoSelecionado}
+          itensAcessorios={itensAcessorios}
+          itensTubulacao={itensTubulacao}
         />
       </aside>
     </div>
@@ -524,3 +611,5 @@ function App() {
 }
 
 export default App;
+
+

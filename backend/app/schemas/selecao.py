@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class SelecaoRequest(BaseModel):
     carga_termica_total: float
     temp_evaporacao: float = -10.0
-    temp_condensacao: float = 45.0
+    temp_ambiente: float = 32.0    # T.Amb do projeto — usado para filtrar o catálogo
     fluido: str = "R22"
     tipo: str = "Unidade Condensadora"
 

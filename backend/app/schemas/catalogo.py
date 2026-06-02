@@ -13,6 +13,7 @@ class PerfilProdutoTermicoOut(BaseModel):
     id: int
     nome: str
     tipo_id: int
+    tipo: TipoProdutoTermicoOut          # objeto completo com id e nome
     ponto_congelamento: Decimal
     calor_especifico_acima_congelamento: Decimal
     calor_latente_congelamento: Decimal
@@ -68,5 +69,22 @@ class EquipamentoOut(BaseModel):
     diametro_ventilador_mm: int
     vazao_ar_m3h: int
     flecha_ar_m: int
+
+    model_config = {"from_attributes": True}
+
+
+class PainelFrigorificoOut(BaseModel):
+    id: int
+    produto: str
+    fabricante_id: int
+    fabricante: FabricanteOut
+    nucleo: str
+    espessura_mm: int
+    largura_mm: int
+    comprimento_max_m: Decimal | None
+    auto_portancia_mm: int | None
+    peso_kg_m2: Decimal | None
+    u_global: Decimal
+    custo: Decimal
 
     model_config = {"from_attributes": True}

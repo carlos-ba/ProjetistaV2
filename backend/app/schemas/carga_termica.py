@@ -11,6 +11,13 @@ class CargaTermicaRequest(BaseModel):
     temp_interna: float
     tipo_piso: str = "painel"
     calcular_infiltracao: bool = True
+
+    # Método de infiltração: "simplificado" ou "psicrometrico"
+    metodo_infiltracao: str = "simplificado"
+    # Umidades relativas (usadas apenas no método psicrométrico)
+    ur_externa: float = 60.0   # % — umidade relativa do ar externo
+    ur_interna: float = 90.0   # % — umidade relativa do ar interno
+
     id_produto: int | None = None
     movimentacao_diaria_kg: float = 0.0
     temp_entrada_produto: float = 0.0
@@ -29,6 +36,7 @@ class CargaTermicaResponse(BaseModel):
     carga_conducao_kcalh: float
     info_construtiva: str
     carga_infiltracao_kcalh: float
+    info_infiltracao: str   # descreve o método e as entalpias usadas
     carga_produto_kcalh: float
     carga_respiracao_kcalh: float
     carga_iluminacao_kcalh: float

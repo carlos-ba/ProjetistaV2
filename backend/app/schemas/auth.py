@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, EmailStr
 
 
 class UserCreate(BaseModel):
     username: str
-    email: str
+    email: EmailStr
     password: str
 
     @field_validator("password")
@@ -32,6 +32,7 @@ class TokenResponse(BaseModel):
     access: str
     refresh: str
     token_type: str = "bearer"
+    email_verified: bool = False
 
 
 class TokenRefreshRequest(BaseModel):
@@ -47,6 +48,7 @@ class UserOut(BaseModel):
     username: str
     email: str
     is_active: bool
+    email_verified: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -57,3 +59,19 @@ class MessageResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    nova_senha: str
+
+    @field_validator("nova_senha")
+    @classmethod
+    def senha_minima(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Senha deve ter ao menos 6 caracteres.")
+        return v

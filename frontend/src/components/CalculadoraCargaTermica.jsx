@@ -37,6 +37,10 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
   const [tempEntrada, setTempEntrada] = useState(5);
   const [tempoResfriamento, setTempoResfriamento] = useState(24);
 
+  const [metodoInfiltracao, setMetodoInfiltracao] = useState('simplificado');
+  const [urExterna, setUrExterna] = useState(60);
+  const [urInterna, setUrInterna] = useState(90);
+
   const [iluminacao, setIluminacao] = useState(0);
   const [pessoas, setPessoas] = useState(0);
   const [motor, setMotor] = useState(0);
@@ -129,6 +133,9 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
       horas_outros_motores_dia: 18,
       tipo_piso: tipoPiso,
       calcular_infiltracao: true,
+      metodo_infiltracao: metodoInfiltracao,
+      ur_externa: parseFloat(urExterna) || 60,
+      ur_interna: parseFloat(urInterna) || 90,
       fator_seguranca_perc: 10,
       horas_funcionamento_motor: parseFloat(horasFuncionamento) || 18
     };
@@ -200,6 +207,62 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
             <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
               {espessura}mm / {nucleo} | Piso: {tipoPiso === 'painel' ? 'Painel' : tipoPiso === 'convencional' ? 'Isolado' : 'Sem Isol.'}
             </div>
+          </div>
+        </div>
+
+        {/* Seção de Infiltração */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+            💨 Infiltração por Abertura de Portas
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Método de Cálculo</label>
+              <select
+                value={metodoInfiltracao}
+                onChange={e => setMetodoInfiltracao(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+              >
+                <option value="simplificado">Simplificado (ASHRAE tabelado)</option>
+                <option value="psicrometrico">Psicrométrico (por temperatura e UR)</option>
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {metodoInfiltracao === 'simplificado'
+                  ? 'Entalpias fixas: ext=85 kJ/kg / int=9 kJ/kg'
+                  : 'Entalpias calculadas pela temperatura e umidade relativa reais'}
+              </p>
+            </div>
+
+            {metodoInfiltracao === 'psicrometrico' && (
+              <>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">UR Externa (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number" min="0" max="100"
+                      value={urExterna}
+                      onChange={e => setUrExterna(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-orange-300 bg-orange-50 text-orange-900 font-medium focus:ring-2 focus:ring-orange-400 outline-none"
+                    />
+                    <span className="absolute right-3 top-2.5 text-[10px] text-orange-400 font-bold">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Umidade do ar externo (típico BR: 60–80%)</p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">UR Interna (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number" min="0" max="100"
+                      value={urInterna}
+                      onChange={e => setUrInterna(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 font-medium focus:ring-2 focus:ring-blue-400 outline-none"
+                    />
+                    <span className="absolute right-3 top-2.5 text-[10px] text-blue-400 font-bold">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Umidade interna da câmara (típico: 85–95%)</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -347,9 +410,14 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
                   <span className="font-bold text-slate-900">{resultado.carga_conducao_kcalh} kcal/h</span>
                 </li>
                 {resultado.carga_infiltracao_kcalh > 0 && (
-                  <li className="flex justify-between items-center text-slate-600">
-                    <span>Infiltração por Portas:</span>
-                    <span className="font-bold text-slate-900">{resultado.carga_infiltracao_kcalh} kcal/h</span>
+                  <li className="flex flex-col gap-0.5">
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>Infiltração por Portas:</span>
+                      <span className="font-bold text-slate-900">{resultado.carga_infiltracao_kcalh} kcal/h</span>
+                    </div>
+                    {resultado.info_infiltracao && (
+                      <p className="text-[10px] text-slate-400 italic pl-1">{resultado.info_infiltracao}</p>
+                    )}
                   </li>
                 )}
                 <li className="flex justify-between items-center text-slate-600">

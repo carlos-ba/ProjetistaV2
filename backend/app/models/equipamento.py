@@ -34,7 +34,7 @@ class PerformanceEquipamento(Base):
     __tablename__ = "performance_equipamento"
     __table_args__ = (
         UniqueConstraint(
-            "equipamento_id", "fluido", "temp_condensacao", "temp_evaporacao", "delta_t",
+            "equipamento_id", "fluido", "temp_ambiente", "temp_evaporacao", "delta_t",
             name="uq_performance_equipamento"
         ),
     )
@@ -42,10 +42,10 @@ class PerformanceEquipamento(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     equipamento_id: Mapped[int] = mapped_column(ForeignKey("equipamento.id", ondelete="CASCADE"), nullable=False)
     fluido: Mapped[str] = mapped_column(String(20), nullable=False)
-    temp_condensacao: Mapped[int] = mapped_column(Integer, default=45)
+    temp_ambiente: Mapped[int] = mapped_column(Integer, default=32)   # °C — T.Amb do catálogo do fabricante
     temp_evaporacao: Mapped[int] = mapped_column(Integer, nullable=False)
     delta_t: Mapped[Decimal] = mapped_column(Numeric(4, 1), default=0)
-    capacidade: Mapped[int] = mapped_column(Integer, nullable=False)
-    consumo_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    capacidade: Mapped[int] = mapped_column(Integer, nullable=False)          # kcal/h
+    consumo_kw: Mapped[Decimal | None] = mapped_column(Numeric(8, 3), nullable=True)  # kW
 
     equipamento: Mapped["Equipamento"] = relationship(back_populates="performance")

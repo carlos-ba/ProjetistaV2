@@ -175,7 +175,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFina
             <label className="text-[10px] font-bold text-slate-500 uppercase">Tipo de Equipamento</label>
             <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
               <option value="Unidade Condensadora">U. Condensadora</option>
-              <option value="Evaporador">Evaporador</option>
+              <option value="Evaporadora">Evaporadora</option>
             </select>
           </div>
         </div>

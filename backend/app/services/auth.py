@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import secrets
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -11,33 +13,85 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.database.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
+from app.services.email import enviar_verificacao_email, enviar_reset_senha
 
 _bearer = HTTPBearer()
 
 
 async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
-    existing = await db.execute(
-        select(Usuario).where(Usuario.username == payload.username)
-    )
+    existing = await db.execute(select(Usuario).where(Usuario.username == payload.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={"username": ["Este usuário já existe."]})
 
-    existing_email = await db.execute(
-        select(Usuario).where(Usuario.email == payload.email)
-    )
+    existing_email = await db.execute(select(Usuario).where(Usuario.email == payload.email))
     if existing_email.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={"email": ["Este e-mail já está cadastrado."]})
+
+    token_verificacao = secrets.token_urlsafe(32)
 
     usuario = Usuario(
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
+        email_verified=False,
+        email_verification_token=token_verificacao,
     )
     db.add(usuario)
     await db.flush()
     await db.refresh(usuario)
     await db.commit()
+
+    # Envia email de verificação (falha silenciosa se email não configurado)
+    try:
+        await enviar_verificacao_email(usuario.email, token_verificacao)
+    except Exception:
+        pass
+
     return usuario
+
+
+async def verificar_email(token: str, db: AsyncSession) -> None:
+    result = await db.execute(
+        select(Usuario).where(Usuario.email_verification_token == token)
+    )
+    usuario = result.scalar_one_or_none()
+    if not usuario:
+        raise HTTPException(status_code=400, detail="Token de verificação inválido ou expirado.")
+
+    usuario.email_verified = True
+    usuario.email_verification_token = None
+    await db.commit()
+
+
+async def solicitar_reset_senha(email: str, db: AsyncSession) -> None:
+    result = await db.execute(select(Usuario).where(Usuario.email == email))
+    usuario = result.scalar_one_or_none()
+
+    # Resposta genérica: não revelar se o email existe ou não
+    if not usuario:
+        return
+
+    token_reset = secrets.token_urlsafe(32)
+    usuario.password_reset_token = token_reset
+    await db.commit()
+
+    try:
+        await enviar_reset_senha(usuario.email, token_reset)
+    except Exception:
+        pass
+
+
+async def redefinir_senha(token: str, nova_senha: str, db: AsyncSession) -> None:
+    result = await db.execute(
+        select(Usuario).where(Usuario.password_reset_token == token)
+    )
+    usuario = result.scalar_one_or_none()
+    if not usuario:
+        raise HTTPException(status_code=400, detail="Token de redefinição inválido ou expirado.")
+
+    usuario.hashed_password = hash_password(nova_senha)
+    usuario.password_reset_token = None
+    await db.commit()
 
 
 async def autenticar_usuario(username: str, password: str, db: AsyncSession) -> TokenResponse:
@@ -56,6 +110,7 @@ async def autenticar_usuario(username: str, password: str, db: AsyncSession) -> 
     return TokenResponse(
         access=create_access_token(usuario.username, user_id),
         refresh=create_refresh_token(user_id),
+        email_verified=usuario.email_verified,
     )
 
 
