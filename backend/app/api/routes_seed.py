@@ -202,6 +202,76 @@ async def seed_perf_t2(token: str, db: AsyncSession = Depends(get_db)):
             "total_performance_componente": total}
 
 
+@router.get("/auditoria")
+async def auditoria(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Relatório de integridade do banco de produção.
+    Mostra contagens por tabela, componentes sem performance e equipamentos sem performance.
+    Usar após qualquer importação local para verificar se produção está sincronizada.
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    resultado = {}
+
+    # ── Contagens gerais ──────────────────────────────────────────────────
+    tabelas = [
+        "categoria", "fabricante",
+        "equipamento", "performance_equipamento",
+        "componente_tecnico", "performance_componente",
+        "painel_frigorifico", "isolamento_tubulacao", "porta_frigoriifica",
+        "perfil_produto_termico",
+    ]
+    contagens = {}
+    for t in tabelas:
+        r = await db.execute(text(f"SELECT COUNT(*) FROM {t}"))
+        contagens[t] = r.scalar()
+    resultado["contagens"] = contagens
+
+    # ── Componentes sem performance (problema de integridade) ─────────────
+    r = await db.execute(text("""
+        SELECT ct.modelo, cat.nome as categoria
+        FROM componente_tecnico ct
+        JOIN categoria cat ON cat.id = ct.categoria_id
+        LEFT JOIN performance_componente pc ON pc.componente_id = ct.id
+        WHERE pc.id IS NULL
+        ORDER BY cat.nome, ct.modelo
+    """))
+    sem_perf = [{"modelo": row[0], "categoria": row[1]} for row in r.fetchall()]
+    resultado["componentes_sem_performance"] = sem_perf
+    resultado["componentes_sem_performance_total"] = len(sem_perf)
+
+    # ── Equipamentos sem performance ──────────────────────────────────────
+    r = await db.execute(text("""
+        SELECT e.modelo, cat.nome as categoria
+        FROM equipamento e
+        JOIN categoria cat ON cat.id = e.categoria_id
+        LEFT JOIN performance_equipamento pe ON pe.equipamento_id = e.id
+        WHERE pe.id IS NULL
+        ORDER BY cat.nome, e.modelo
+    """))
+    eq_sem_perf = [{"modelo": row[0], "categoria": row[1]} for row in r.fetchall()]
+    resultado["equipamentos_sem_performance"] = eq_sem_perf
+    resultado["equipamentos_sem_performance_total"] = len(eq_sem_perf)
+
+    # ── Performances por componente (detecta distribuição desigual) ───────
+    r = await db.execute(text("""
+        SELECT ct.modelo, COUNT(pc.id) as total_performances
+        FROM componente_tecnico ct
+        LEFT JOIN performance_componente pc ON pc.componente_id = ct.id
+        GROUP BY ct.modelo
+        ORDER BY ct.modelo
+    """))
+    perf_por_comp = {row[0]: row[1] for row in r.fetchall()}
+    resultado["performances_por_componente"] = perf_por_comp
+
+    # ── Status geral ──────────────────────────────────────────────────────
+    ok = (len(sem_perf) == 0 and len(eq_sem_perf) == 0)
+    resultado["status"] = "OK" if ok else "ATENCAO — itens sem performance detectados"
+
+    return resultado
+
+
 @router.post("/executar")
 async def executar_seed(token: str, db: AsyncSession = Depends(get_db)):
     """
