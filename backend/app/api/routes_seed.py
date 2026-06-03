@@ -126,6 +126,46 @@ async def seed_catalogo(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "inseridos": inseridos, "totais": totais}
 
 
+@router.post("/delta")
+async def seed_delta(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Insere dados faltantes (componentes, painéis, isolamentos, portas).
+    Usa ON CONFLICT DO NOTHING — seguro rodar múltiplas vezes.
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    import os
+    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            "seed_delta.sql")
+    if not os.path.exists(sql_path):
+        raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {sql_path}")
+
+    with open(sql_path, encoding="utf-8") as f:
+        sql_content = f.read()
+
+    inseridos = 0
+    erros = 0
+    for line in sql_content.splitlines():
+        line = line.strip()
+        if line.startswith("INSERT INTO"):
+            try:
+                await db.execute(text(line))
+                inseridos += 1
+            except Exception:
+                erros += 1
+
+    await db.commit()
+
+    totais = {}
+    for tabela in ["componente_tecnico", "performance_componente",
+                   "painel_frigorifico", "isolamento_tubulacao", "porta_frigoriifica"]:
+        r = await db.execute(text(f"SELECT COUNT(*) FROM {tabela}"))
+        totais[tabela] = r.scalar()
+
+    return {"status": "sucesso", "inseridos": inseridos, "erros": erros, "totais": totais}
+
+
 @router.post("/executar")
 async def executar_seed(token: str, db: AsyncSession = Depends(get_db)):
     """
