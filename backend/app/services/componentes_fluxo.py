@@ -17,6 +17,7 @@ _CATEGORIAS_POR_TEMP_EVAP = [
 # Categorias selecionadas apenas por capacidade (temperatura é referência, não filtro rígido)
 _CATEGORIAS_POR_CAPACIDADE = [
     "Separador de Líquido",
+    "Separador de Óleo",
 ]
 
 
