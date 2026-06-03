@@ -20,7 +20,7 @@ const CATEGORIAS_MANUAL = [
 
 const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', conexao: '', capacidade: '', custo: '' });
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, aoFinalizar }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
   const [modo, setModo] = useState('automatico'); // 'automatico' | 'engenharia'
@@ -39,8 +39,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
   const [segurancaEng,  setSegurancaEng]  = useState(
     Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
   );
-  const [tempAmb, setTempAmb] = useState(32); // Temperatura ambiente padrão Brasil
-  const tempCond = tempAmb + 10;               // T.Cond = T.Amb + 10°C (padrão de mercado)
+  // T.Amb vem do Card 2 (Carga Térmica) — ajustável pelo técnico se necessário
+  const [tempAmb, setTempAmb] = useState(tempAmbProp);
+  const tempCond = tempAmb + 10; // T.Cond = T.Amb + 10°C (padrão de mercado)
+
+  // Sincroniza se o prop mudar (ex: usuário recalcula a carga)
+  React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
 
   const buscarComponentes = async () => {
     setLoading(true); setErro('');

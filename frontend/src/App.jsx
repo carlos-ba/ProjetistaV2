@@ -28,6 +28,7 @@ function AppContent() {
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
   const [cargaCalculada, setCargaCalculada] = useState(null);
   const [itensOrcamento, setItensOrcamento] = useState({ materiais: [], equipamentos: [] });
+  const [tempExternaCalculo, setTempExternaCalculo] = useState(35); // T.Amb do Card 2
   const [itensGabinete,   setItensGabinete]   = useState([]);   // step 1 — lista de corte de painéis
   const [itensAcessorios, setItensAcessorios] = useState([]);   // step 4 — componentes de fluxo
   const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 5 — tubulação
@@ -102,8 +103,9 @@ function AppContent() {
   }, []);
 
   // 2. Recebe da Carga Térmica (Módulo 2)
-  const receberResultadoCarga = useCallback((valorKcal) => {
+  const receberResultadoCarga = useCallback((valorKcal, tempExt) => {
     setCargaCalculada(valorKcal);
+    if (tempExt) setTempExternaCalculo(tempExt); // guarda T.Amb do Card 2
     setPassoAtual(prev => Math.max(prev, 3));
     setPassoSelecionado(3);
     setProximaEtapa({ numero: 3, label: 'Seleção de Equipamentos' });
@@ -571,6 +573,7 @@ function AppContent() {
                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
                 fluido={getUltimoEquipamento()?.fluido || 'R404A'}
                 tempEvap={getUltimoEquipamento()?.temp_evap || -10}
+                tempAmb={tempExternaCalculo}
                 aoFinalizar={receberComponentesFluxo}
               />
             </EtapaCard>

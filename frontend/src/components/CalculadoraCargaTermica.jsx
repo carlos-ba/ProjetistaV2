@@ -144,7 +144,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
       const response = await api.post('/api/v1/carga-termica', payload);
       setResultado(response.data);
       setStatusCalculo('pronto');
-      if (aoFinalizar) aoFinalizar(response.data.capacidade_requerida_equipamento_kcalh);
+      if (aoFinalizar) aoFinalizar(response.data.capacidade_requerida_equipamento_kcalh, parseFloat(tempExterna));
     } catch (error) {
       console.error("Erro no cálculo:", error);
       setErro(error.response?.data?.erro || 'Erro ao calcular carga térmica.');
