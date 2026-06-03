@@ -98,6 +98,24 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   };
 
   const COOLSELECTOR_URL = `https://coolselectoronline.danfoss.com/`;
+  const cargaKw = (cargaAlvo / 860).toFixed(2); // conversão kcal/h → kW
+
+  const abrirCoolSelectorLadoALado = () => {
+    const larguraTela  = window.screen.width;
+    const alturaTela   = window.screen.height;
+    const metade       = Math.floor(larguraTela / 2);
+
+    // Redimensiona a janela atual para a metade esquerda
+    window.moveTo(0, 0);
+    window.resizeTo(metade, alturaTela);
+
+    // Abre o CoolSelector na metade direita
+    window.open(
+      COOLSELECTOR_URL,
+      'CoolSelector',
+      `width=${metade},height=${alturaTela},left=${metade},top=0,resizable=yes,scrollbars=yes`
+    );
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
@@ -254,10 +272,14 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   Parâmetros do projeto — use no CoolSelector:
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center mb-3">
-                  <div className="bg-blue-50 rounded-lg px-2 py-2">
-                    <p className="text-[9px] text-blue-400 uppercase font-bold">Capacidade</p>
-                    <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')}</p>
-                    <p className="text-[9px] text-blue-400">kcal/h</p>
+                  {/* Capacidade com dual display kcal/h e kW */}
+                  <div className="bg-blue-50 rounded-lg px-2 py-2 border-2 border-blue-300 col-span-2 md:col-span-1">
+                    <p className="text-[9px] text-blue-500 uppercase font-bold">Capacidade</p>
+                    <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')} kcal/h</p>
+                    <div className="mt-1 bg-orange-100 rounded px-2 py-0.5 border border-orange-300">
+                      <p className="text-[10px] font-black text-orange-700">→ {cargaKw} kW</p>
+                      <p className="text-[8px] text-orange-500 font-bold">⚠️ usar kW no CoolSelector</p>
+                    </div>
                   </div>
                   <div className="bg-blue-50 rounded-lg px-2 py-2">
                     <p className="text-[9px] text-blue-400 uppercase font-bold">Fluido</p>
@@ -270,7 +292,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   <div className="bg-emerald-50 rounded-lg px-2 py-2 border border-emerald-200">
                     <p className="text-[9px] text-emerald-500 uppercase font-bold">T. Condensação</p>
                     <p className="text-sm font-black text-emerald-800">{tempCond}°C</p>
-                    <p className="text-[9px] text-emerald-400">T.Amb+10°C</p>
+                    <p className="text-[9px] text-emerald-400">T.Amb {tempAmb}°C+10</p>
                   </div>
                 </div>
                 {/* Campo T.Amb ajustável */}
@@ -285,12 +307,29 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </div>
               </div>
 
-              {/* Botão abrir CoolSelector */}
-              <a href={COOLSELECTOR_URL} target="_blank" rel="noopener noreferrer"
-                className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200">
-                🚀 ABRIR COOLSELECTOR®2 ONLINE
-                <span className="text-[10px] text-blue-200">— abre em nova aba</span>
-              </a>
+              {/* Aviso unidade kW */}
+              <div className="mt-3 bg-orange-50 border border-orange-300 rounded-lg px-4 py-2 flex items-center gap-3">
+                <span className="text-orange-500 text-lg flex-shrink-0">⚠️</span>
+                <p className="text-xs text-orange-700 font-medium">
+                  <strong>Atenção:</strong> O CoolSelector usa <strong>kW</strong> como unidade de capacidade.
+                  Use <strong className="text-orange-800">{cargaKw} kW</strong> ao invés de {cargaAlvo?.toLocaleString('pt-BR')} kcal/h.
+                </p>
+              </div>
+
+              {/* Botões de abertura */}
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <a href={COOLSELECTOR_URL} target="_blank" rel="noopener noreferrer"
+                  className="py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
+                  🔗 Abrir em nova aba
+                </a>
+                <button
+                  onClick={abrirCoolSelectorLadoALado}
+                  className="py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                >
+                  ⬛⬛ Abrir lado a lado
+                  <span className="text-[10px] text-blue-300 font-normal">— divide o monitor</span>
+                </button>
+              </div>
 
               {/* Guia passo a passo */}
               <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -304,7 +343,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     { n:3, txt: `Informe o fluido: ${fluido}` },
                     { n:4, txt: `Informe a temperatura de evaporação: ${tempEvap}°C` },
                     { n:5, txt: `Informe a temperatura de condensação: ${tempCond}°C (T.Amb ${tempAmb}°C + 10°C)` },
-                    { n:6, txt: `Informe a capacidade: ${cargaAlvo?.toLocaleString('pt-BR')} kcal/h` },
+                    { n:6, txt: `Informe a capacidade: ${cargaKw} kW (equivale a ${cargaAlvo?.toLocaleString('pt-BR')} kcal/h — o CoolSelector usa kW)` },
                     { n:7, txt: 'Clique em "Calcular" — o sistema exibirá os modelos recomendados' },
                     { n:8, txt: 'Anote o modelo selecionado e registre abaixo' },
                   ].map(p => (
