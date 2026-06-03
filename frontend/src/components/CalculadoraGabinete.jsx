@@ -114,7 +114,7 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
   useEffect(() => {
     if (!espessuraSelecionada) { setLarguras([]); setLarguraSelecionada(''); return; }
     const filtrados = paineisFabricante.filter(
-      p => p.nucleo === nucleoSelecionado && p.espessura_mm === parseInt(espessuraSelecionada)
+      p => p.nucleo === nucleoSelecionado && Number(p.espessura_mm) === Number(espessuraSelecionada)
     );
     const ls = [...new Set(filtrados.map(p => p.largura_mm))].sort((a, b) => a - b);
     setLarguras(ls);
@@ -128,7 +128,7 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     const p = paineisFabricante.find(
       p => p.nucleo === nucleoSelecionado &&
            p.espessura_mm === parseInt(espessuraSelecionada) &&
-           p.largura_mm   === parseInt(larguraSelecionada)
+           Number(p.largura_mm) === Number(larguraSelecionada)
     );
     setPainelSelecionado(p || null);
   }, [larguraSelecionada, espessuraSelecionada, nucleoSelecionado, paineisFabricante]);
