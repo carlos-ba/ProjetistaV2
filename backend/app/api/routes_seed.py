@@ -204,36 +204,110 @@ async def seed_perf_t2(token: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/sep-oleo")
 async def seed_sep_oleo(token: str, db: AsyncSession = Depends(get_db)):
-    """Insere separadores de óleo RAC Brasil (10 modelos, 140 performances)."""
+    """Insere separadores de óleo RAC Brasil (10 modelos, 140 performances). Idempotente."""
     if token != settings.SECRET_KEY:
         raise HTTPException(status_code=403, detail="Token inválido.")
 
-    import os
-    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                            "seed_sep_oleo.sql")
-    if not os.path.exists(sql_path):
-        raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {sql_path}")
+    from app.models.componente import ComponenteTecnico, PerformanceComponente
+    from app.models.catalogo import Categoria, Fabricante
+    from sqlalchemy import select as sa_select
 
-    with open(sql_path, encoding="utf-8") as f:
-        lines = [l.strip() for l in f if l.strip().startswith("INSERT") or l.strip().startswith("SELECT")]
+    CATEGORIA = "Separador de Óleo"
+    T_COND = 35
 
-    inseridos = 0; erros = 0
-    for line in lines:
-        try:
-            await db.execute(text(line))
-            inseridos += 1
-        except Exception:
-            erros += 1
+    CATALOGO = [
+        {"modelo": 'SOF 1/2"S',   "codigo": "050-101", "conexao": '1/2"',     "tipo": "Solda",
+         "R404A": {-40:7140,-30:7397,-20:7653,-10:7910,5:8420},
+         "R134a": {-30:4550,-20:4765,-10:4980,5:5500}},
+        {"modelo": 'SOF 1/2"R',   "codigo": "050-102", "conexao": '1/2" SAE', "tipo": "Rosca",
+         "R404A": {-40:7140,-30:7397,-20:7653,-10:7910,5:8420},
+         "R134a": {-30:4550,-20:4765,-10:4980,5:5500}},
+        {"modelo": 'SOF 5/8"S',   "codigo": "050-103", "conexao": '5/8"',     "tipo": "Solda",
+         "R404A": {-40:14440,-30:14843,-20:15247,-10:15650,5:16850},
+         "R134a": {-30:9110,-20:9370,-10:9630,5:11000}},
+        {"modelo": 'SOF 5/8"R',   "codigo": "050-104", "conexao": '5/8" SAE', "tipo": "Rosca",
+         "R404A": {-40:14440,-30:14843,-20:15247,-10:15650,5:16850},
+         "R134a": {-30:9110,-20:9370,-10:9630,5:11000}},
+        {"modelo": 'SOF 3/4"R',   "codigo": "050-125", "conexao": '3/4" SAE', "tipo": "Rosca",
+         "R404A": {-40:16860,-30:18120,-20:19380,-10:20640,5:22450},
+         "R134a": {-30:12040,-20:12640,-10:13240,5:14790}},
+        {"modelo": 'SOF 7/8"S',   "codigo": "050-105", "conexao": '7/8"',     "tipo": "Solda",
+         "R404A": {-40:21590,-30:22247,-20:22903,-10:23560,5:25370},
+         "R134a": {-30:13500,-20:14060,-10:14620,5:16590}},
+        {"modelo": 'SOF 1.1/8"S', "codigo": "050-106", "conexao": '1.1/8"',   "tipo": "Solda",
+         "R404A": {-40:28720,-30:29580,-20:30440,-10:31300,5:33880},
+         "R134a": {-30:18230,-20:19435,-10:20640,5:22100}},
+        {"modelo": 'SOF 1.3/8"S', "codigo": "050-107", "conexao": '1.3/8"',   "tipo": "Solda",
+         "R404A": {-40:32670,-30:33760,-20:34850,-10:35940,5:38950},
+         "R134a": {-30:20980,-20:22355,-10:23730,5:25370}},
+        {"modelo": 'SOF 1.5/8"S', "codigo": "050-114", "conexao": '1.5/8"',   "tipo": "Solda",
+         "R404A": {-40:48420,-30:50053,-20:51687,-10:53320,5:56160},
+         "R134a": {-30:32340,-20:33930,-10:35520,5:39300}},
+        {"modelo": 'SOF 2.1/8"S', "codigo": "050-109", "conexao": '2.1/8"',   "tipo": "Solda",
+         "R404A": {-40:75770,-30:78380,-20:80990,-10:83600,5:94600},
+         "R134a": {-30:57450,-20:60330,-10:63210,5:69580}},
+    ]
+
+    # Categoria
+    res = await db.execute(sa_select(Categoria).where(Categoria.nome == CATEGORIA))
+    cat = res.scalar_one_or_none()
+    if not cat:
+        cat = Categoria(nome=CATEGORIA)
+        db.add(cat); await db.flush()
+
+    # Fabricante
+    res = await db.execute(sa_select(Fabricante).where(Fabricante.nome == "RAC"))
+    fab = res.scalar_one_or_none()
+    if not fab:
+        fab = Fabricante(nome="RAC")
+        db.add(fab); await db.flush()
+
+    comp_novos = 0; perf_ins = 0; perf_upd = 0
+
+    for item in CATALOGO:
+        cap_max = float(max(item["R404A"].values()))
+        res = await db.execute(sa_select(ComponenteTecnico).where(
+            ComponenteTecnico.modelo == item["modelo"],
+            ComponenteTecnico.categoria_id == cat.id))
+        comp = res.scalar_one_or_none()
+        if not comp:
+            comp = ComponenteTecnico(
+                modelo=item["modelo"], codigo_fabricante=item["codigo"],
+                categoria_id=cat.id, fabricante_id=fab.id,
+                conexao_entrada=item["conexao"], conexao_saida=item["conexao"],
+                capacidade_nominal=cap_max,
+                dados_especificos={"tipo_conexao": item["tipo"], "t_cond_base": T_COND},
+                custo=0)
+            db.add(comp); await db.flush()
+            comp_novos += 1
+
+        for fluido, perfs in [("R404A", item["R404A"]), ("R22", item["R404A"]), ("R134a", item["R134a"])]:
+            for t_evap, cap in perfs.items():
+                res = await db.execute(sa_select(PerformanceComponente).where(
+                    PerformanceComponente.componente_id == comp.id,
+                    PerformanceComponente.fluido == fluido,
+                    PerformanceComponente.temp_evaporacao == t_evap,
+                    PerformanceComponente.temp_condensacao == T_COND))
+                ex = res.scalar_one_or_none()
+                if ex:
+                    ex.capacidade_kcalh = float(cap); perf_upd += 1
+                else:
+                    db.add(PerformanceComponente(
+                        componente_id=comp.id, fluido=fluido,
+                        temp_evaporacao=t_evap, temp_condensacao=T_COND,
+                        capacidade_kcalh=float(cap), capacidade_min_kcalh=0.0))
+                    perf_ins += 1
 
     await db.commit()
 
-    r = await db.execute(text("SELECT COUNT(*) FROM componente_tecnico ct JOIN categoria cat ON cat.id=ct.categoria_id WHERE cat.nome='Separador de Óleo'"))
-    total_comp = r.scalar()
-    r2 = await db.execute(text("SELECT COUNT(*) FROM performance_componente pc JOIN componente_tecnico ct ON ct.id=pc.componente_id JOIN categoria cat ON cat.id=ct.categoria_id WHERE cat.nome='Separador de Óleo'"))
-    total_perf = r2.scalar()
+    res = await db.execute(sa_select(Categoria).where(Categoria.nome == CATEGORIA))
+    cat = res.scalar_one_or_none()
+    r = await db.execute(text(f"SELECT COUNT(*) FROM componente_tecnico WHERE categoria_id={cat.id}"))
+    r2 = await db.execute(text(f"SELECT COUNT(*) FROM performance_componente pc JOIN componente_tecnico ct ON ct.id=pc.componente_id WHERE ct.categoria_id={cat.id}"))
 
-    return {"status": "sucesso", "inseridos": inseridos, "erros": erros,
-            "separadores_oleo": total_comp, "performances": total_perf}
+    return {"status": "sucesso", "componentes_novos": comp_novos,
+            "performances_inseridas": perf_ins, "performances_atualizadas": perf_upd,
+            "total_componentes": r.scalar(), "total_performances": r2.scalar()}
 
 
 @router.get("/auditoria")
