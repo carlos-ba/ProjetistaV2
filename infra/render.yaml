@@ -3,7 +3,7 @@ services:
     name: projetista-v2-backend
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    buildCommand: pip install -r requirements.txt && alembic upgrade head && python seed_producao.py
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_ENV
