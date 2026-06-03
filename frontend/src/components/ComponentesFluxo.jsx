@@ -60,7 +60,21 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // Busca componentes em ambos os modos (separador de líquido é sempre automático)
   useEffect(() => {
-    if (cargaAlvo > 0) buscarComponentes();
+    let cancelado = false;
+    if (cargaAlvo > 0) {
+      setLoading(true); setErro('');
+      api.post('/api/v1/componentes', { capacidade_kcalh: cargaAlvo, fluido, temp_evap: tempEvap })
+        .then(res => {
+          if (cancelado) return;
+          setComponentes(res.data);
+          const initial = {};
+          res.data.forEach(c => { initial[c.categoria] = true; });
+          setSelecionados(initial);
+        })
+        .catch(() => { if (!cancelado) setErro('Erro ao buscar componentes de fluxo.'); })
+        .finally(() => { if (!cancelado) setLoading(false); });
+    }
+    return () => { cancelado = true; }; // evita setState em componente desmontado
   }, [cargaAlvo, fluido, tempEvap]);
 
   // Separador de líquido selecionado automaticamente (usado em ambos os modos)
