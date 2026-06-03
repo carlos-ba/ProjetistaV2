@@ -39,6 +39,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
   const [segurancaEng,  setSegurancaEng]  = useState(
     Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
   );
+  const [tempAmb, setTempAmb] = useState(32); // Temperatura ambiente padrão Brasil
+  const tempCond = tempAmb + 10;               // T.Cond = T.Amb + 10°C (padrão de mercado)
 
   const buscarComponentes = async () => {
     setLoading(true); setErro('');
@@ -242,36 +244,76 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
                 </div>
               </div>
 
-              {/* Parâmetros sugeridos */}
+              {/* Parâmetros do projeto */}
               <div className="mt-4 bg-white rounded-lg border border-blue-100 p-3">
                 <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">
-                  Parâmetros do seu projeto para usar no CoolSelector:
+                  Parâmetros do projeto — use no CoolSelector:
                 </p>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center mb-3">
+                  <div className="bg-blue-50 rounded-lg px-2 py-2">
                     <p className="text-[9px] text-blue-400 uppercase font-bold">Capacidade</p>
-                    <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')} kcal/h</p>
+                    <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')}</p>
+                    <p className="text-[9px] text-blue-400">kcal/h</p>
                   </div>
-                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                  <div className="bg-blue-50 rounded-lg px-2 py-2">
                     <p className="text-[9px] text-blue-400 uppercase font-bold">Fluido</p>
                     <p className="text-sm font-black text-blue-800">{fluido}</p>
                   </div>
-                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                  <div className="bg-blue-50 rounded-lg px-2 py-2">
                     <p className="text-[9px] text-blue-400 uppercase font-bold">T. Evaporação</p>
                     <p className="text-sm font-black text-blue-800">{tempEvap}°C</p>
                   </div>
+                  <div className="bg-emerald-50 rounded-lg px-2 py-2 border border-emerald-200">
+                    <p className="text-[9px] text-emerald-500 uppercase font-bold">T. Condensação</p>
+                    <p className="text-sm font-black text-emerald-800">{tempCond}°C</p>
+                    <p className="text-[9px] text-emerald-400">T.Amb+10°C</p>
+                  </div>
+                </div>
+                {/* Campo T.Amb ajustável */}
+                <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                  <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">T. Ambiente:</span>
+                  <input
+                    type="number" value={tempAmb}
+                    onChange={e => setTempAmb(parseInt(e.target.value) || 32)}
+                    className="w-16 px-2 py-1 rounded border border-slate-300 text-center text-sm font-bold outline-none"
+                  />
+                  <span className="text-[10px] text-slate-400">°C → T.Cond = {tempAmb} + 10 = <strong>{tempCond}°C</strong></span>
                 </div>
               </div>
 
-              <a
-                href={COOLSELECTOR_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
-              >
+              {/* Botão abrir CoolSelector */}
+              <a href={COOLSELECTOR_URL} target="_blank" rel="noopener noreferrer"
+                className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200">
                 🚀 ABRIR COOLSELECTOR®2 ONLINE
                 <span className="text-[10px] text-blue-200">— abre em nova aba</span>
               </a>
+
+              {/* Guia passo a passo */}
+              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  📖 Como selecionar no CoolSelector — passo a passo
+                </p>
+                <ol className="space-y-2">
+                  {[
+                    { n:1, txt: 'Aguarde o CoolSelector carregar. Clique no menu superior em "Language" → "Portuguese (Brazil)" para mudar o idioma' },
+                    { n:2, txt: 'No menu lateral esquerdo, clique em "Válvulas" → "Válvulas de Expansão Termostática (VET)"' },
+                    { n:3, txt: `Informe o fluido: ${fluido}` },
+                    { n:4, txt: `Informe a temperatura de evaporação: ${tempEvap}°C` },
+                    { n:5, txt: `Informe a temperatura de condensação: ${tempCond}°C (T.Amb ${tempAmb}°C + 10°C)` },
+                    { n:6, txt: `Informe a capacidade: ${cargaAlvo?.toLocaleString('pt-BR')} kcal/h` },
+                    { n:7, txt: 'Clique em "Calcular" — o sistema exibirá os modelos recomendados' },
+                    { n:8, txt: 'Anote o modelo selecionado e registre abaixo' },
+                  ].map(p => (
+                    <li key={p.n} className="flex gap-3 text-xs text-amber-800">
+                      <span className="w-5 h-5 rounded-full bg-amber-400 text-white font-black flex items-center justify-center flex-shrink-0 text-[10px]">{p.n}</span>
+                      <span>{p.txt}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-3 text-[10px] text-amber-500 italic">
+                  ⚠️ O CoolSelector é um aplicativo remoto — não é possível pré-preencher os campos automaticamente. O guia acima facilita a navegação.
+                </p>
+              </div>
             </div>
 
             {/* Registro manual dos componentes selecionados */}
