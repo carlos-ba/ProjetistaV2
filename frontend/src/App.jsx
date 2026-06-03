@@ -464,6 +464,13 @@ function AppContent() {
           </div>
         )}
 
+        {/* Versão */}
+        <div className="px-4 py-3 border-t border-border mt-auto">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Versão</p>
+          <p className="text-[11px] font-black text-foreground">v2.1 — Jun 2026</p>
+          <p className="text-[9px] text-muted-foreground mt-0.5">Tubulação ASHRAE · Modo Eng.</p>
+        </div>
+
       </aside>
 
       {/* ── Área Principal ── */}
