@@ -16,6 +16,10 @@ services:
         value: '["https://projetista-v2-frontend.vercel.app"]'
       - key: SECRET_KEY
         generateValue: true
+      - key: FRONTEND_URL
+        value: https://projetista-v2-frontend.vercel.app
+      # Email — configurar manualmente no painel Render após deploy
+      # MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM, MAIL_SERVER, MAIL_PORT
 
 databases:
   - name: projetista-v2-db
