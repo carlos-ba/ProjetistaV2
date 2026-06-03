@@ -20,6 +20,7 @@ from app.api.routes_tubulacao import router as tubulacao_router
 from app.api.routes_orcamento import router as orcamento_router
 from app.api.routes_componentes import router as componentes_router
 from app.api.routes_catalogo import router as catalogo_router
+from app.api.routes_seed import router as seed_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -46,3 +47,4 @@ app.include_router(tubulacao_router)
 app.include_router(orcamento_router)
 app.include_router(componentes_router)
 app.include_router(catalogo_router)
+app.include_router(seed_router)
