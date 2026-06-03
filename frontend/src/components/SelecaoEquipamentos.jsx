@@ -89,11 +89,12 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFina
       qtde: qtd,
       detalhe: `${item.capacidade_real} kcal/h`,
       capacidade_real: item.capacidade_real,
-      vazao_ar: item.vazao_ar, // Preserva a vazão para o painel lateral
+      vazao_ar: item.vazao_ar,
       fluido: fluido,
       temp_evap: evap,
       modelo: item.modelo,
-      id: item.id
+      id: item.id,
+      categoria: tipo,   // ex: "Unidade Condensadora", "Evaporadora"
     };
     setSelecionados([...selecionados, novoItem]);
     setResultados([]); // Limpa a busca para permitir nova seleção (ex: trocar de UC para Evap)

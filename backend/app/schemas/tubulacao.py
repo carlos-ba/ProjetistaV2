@@ -8,8 +8,11 @@ class TubulacaoRequest(BaseModel):
     alta_eficiencia: bool = True
     fluido: str = "R22"
     delta_t_selecionado: float = 6.0
-    padrao_isolamento: str = "H"       # D | F | H | M | R | T
-    isolar_liquido: bool = False        # incluir isolamento na linha de líquido
+    padrao_isolamento: str = "H"
+    isolar_liquido: bool = False
+    # Conexões
+    num_curvas_90: int | None = None    # None = automático por distância
+    incluir_sifao: bool = True          # sifão + contra-sifão na sucção (saída evap)
 
 
 class ItemTubulacao(BaseModel):
@@ -25,7 +28,9 @@ class TubulacaoResponse(BaseModel):
     distancia_considerada: float
     temp_evap_calculada: float
     padrao_isolamento_usado: str
-    sugestao_padrao: str               # padrão sugerido pela regra técnica
+    sugestao_padrao: str
+    curvas_90_usadas: int              # qtde de curvas 90° (auto ou informado)
+    origem_curvas: str                 # "automático" ou "informado pelo técnico"
     lista_materiais: list[ItemTubulacao]
 
 

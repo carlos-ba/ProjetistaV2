@@ -7,46 +7,70 @@ from sqlalchemy import select
 from app.schemas.tubulacao import TubulacaoRequest, TubulacaoResponse, ItemTubulacao
 from app.models.isolamento import IsolamentoTubulacao
 
-# ── Tabelas de capacidade por bitola ──────────────────────────────────────
-_TABELA_LIQUIDO: dict[str, int] = {
-    '1/4"': 2500,    '3/8"': 8000,    '1/2"': 15000,   '5/8"': 25000,
-    '7/8"': 45000,   '1.1/8"': 70000, '1.3/8"': 110000, '1.5/8"': 160000,
-    '2.1/8"': 280000,'2.5/8"': 450000,'3.1/8"': 650000, '3.5/8"': 850000,
-    '4.1/8"': 1200000,
+# ═══════════════════════════════════════════════════════════════════════════
+# TABELAS ASHRAE — Capacidade máxima da LINHA DE SUCÇÃO em kcal/h
+# Referência: ASHRAE Refrigeration Handbook, Chapter 1 — Halocarbon Systems
+# Critério: queda de pressão equivalente a 1°C por 100m de comprimento equivalente
+# Base: 30m de comprimento equivalente (aplicar fator_distancia para outros comprimentos)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Ordenação das bitolas (crescente por capacidade — não alterar a ordem)
+_BITOLAS_SUCCAO = [
+    '3/8"', '1/2"', '5/8"', '3/4"', '7/8"',
+    '1.1/8"', '1.3/8"', '1.5/8"', '2.1/8"',
+]
+
+# Temperaturas de evaporação disponíveis nas tabelas (°C)
+_T_EVAP_PONTOS = [-40, -20, -10, 0, 5]
+
+# cap[fluido][T.Evap][bitola] = kcal/h máx para 30m equivalente
+_SUCCAO_CAP: dict[str, dict[int, dict[str, int]]] = {
+    "R22": {
+        -40: {'3/8"': 350,   '1/2"': 700,   '5/8"': 1300,  '3/4"': 2200,
+              '7/8"': 3300,  '1.1/8"': 6500, '1.3/8"': 10500,'1.5/8"': 16000, '2.1/8"': 32000},
+        -20: {'3/8"': 900,   '1/2"': 1700,  '5/8"': 3200,  '3/4"': 5400,
+              '7/8"': 8200,  '1.1/8"': 16000,'1.3/8"': 26000,'1.5/8"': 39500, '2.1/8"': 79500},
+        -10: {'3/8"': 1400,  '1/2"': 2700,  '5/8"': 5100,  '3/4"': 8600,
+              '7/8"': 13000, '1.1/8"': 25500,'1.3/8"': 41500,'1.5/8"': 63000, '2.1/8"': 127000},
+          0: {'3/8"': 2100,  '1/2"': 4100,  '5/8"': 7700,  '3/4"': 13000,
+              '7/8"': 19500, '1.1/8"': 38500,'1.3/8"': 62500,'1.5/8"': 95000, '2.1/8"': 191000},
+          5: {'3/8"': 2800,  '1/2"': 5500,  '5/8"': 10400, '3/4"': 17500,
+              '7/8"': 26500, '1.1/8"': 52000,'1.3/8"': 84500,'1.5/8"': 128000,'2.1/8"': 258000},
+    },
+    "R404A": {
+        -40: {'3/8"': 420,   '1/2"': 800,   '5/8"': 1500,  '3/4"': 2600,
+              '7/8"': 3900,  '1.1/8"': 7700, '1.3/8"': 12500,'1.5/8"': 19000, '2.1/8"': 38000},
+        -20: {'3/8"': 1000,  '1/2"': 1950,  '5/8"': 3700,  '3/4"': 6300,
+              '7/8"': 9500,  '1.1/8"': 18800,'1.3/8"': 30500,'1.5/8"': 46200, '2.1/8"': 93000},
+        -10: {'3/8"': 1550,  '1/2"': 3000,  '5/8"': 5700,  '3/4"': 9700,
+              '7/8"': 14600, '1.1/8"': 28900,'1.3/8"': 47000,'1.5/8"': 71200, '2.1/8"': 143000},
+          0: {'3/8"': 2300,  '1/2"': 4450,  '5/8"': 8400,  '3/4"': 14300,
+              '7/8"': 21600, '1.1/8"': 42700,'1.3/8"': 69500,'1.5/8"': 105000,'2.1/8"': 212000},
+          5: {'3/8"': 3100,  '1/2"': 6000,  '5/8"': 11400, '3/4"': 19400,
+              '7/8"': 29300, '1.1/8"': 57900,'1.3/8"': 94000,'1.5/8"': 143000,'2.1/8"': 287000},
+    },
 }
 
-_TABELA_SUCCAO_MEDIA: dict[str, int] = {
-    '3/8"': 1200,    '1/2"': 2500,    '5/8"': 4500,    '3/4"': 7000,
-    '7/8"': 11000,   '1.1/8"': 18000, '1.3/8"': 28000, '1.5/8"': 38000,
-    '2.1/8"': 60000, '2.5/8"': 110000,'3.1/8"': 180000,'3.5/8"': 260000,
-    '4.1/8"': 380000,
-}
+# ── Linha de Líquido (capacidade pouco dependente de temperatura) ──────────
+_BITOLAS_LIQUIDO = ['1/4"', '3/8"', '1/2"', '5/8"', '7/8"', '1.1/8"', '1.3/8"', '1.5/8"', '2.1/8"']
 
-_TABELA_SUCCAO_BAIXA: dict[str, int] = {
-    '1/2"': 1500,    '5/8"': 3000,    '3/4"': 4500,    '7/8"': 7500,
-    '1.1/8"': 12000, '1.3/8"': 20000, '1.5/8"': 28000, '2.1/8"': 45000,
-    '2.5/8"': 85000, '3.1/8"': 130000,'3.5/8"': 190000,'4.1/8"': 280000,
+_LIQUIDO_CAP: dict[str, dict[str, int]] = {
+    "R22":   {'1/4"': 2500,  '3/8"': 7500,  '1/2"': 15000, '5/8"': 26000,
+              '7/8"': 55000, '1.1/8"': 100000,'1.3/8"': 160000,'1.5/8"': 240000,'2.1/8"': 420000},
+    "R404A": {'1/4"': 2800,  '3/8"': 8000,  '1/2"': 16000, '5/8"': 28000,
+              '7/8"': 60000, '1.1/8"': 110000,'1.3/8"': 175000,'1.5/8"': 265000,'2.1/8"': 460000},
 }
+# Fluidos sem tabela própria → usa R22 como fallback conservador
+_FLUIDO_FALLBACK = "R22"
 
 # ── Conversão bitola imperial → diâmetro externo Cu em mm ─────────────────
 _BITOLA_PARA_MM: dict[str, float] = {
-    '1/4"':   6.0,
-    '3/8"':  10.0,
-    '1/2"':  12.0,
-    '5/8"':  15.0,
-    '3/4"':  18.0,
-    '7/8"':  22.0,
-    '1.1/8"': 28.0,
-    '1.3/8"': 35.0,
-    '1.5/8"': 42.0,
-    '2.1/8"': 54.0,
-    '2.5/8"': 64.0,
-    '3.1/8"': 76.2,
-    '3.5/8"': 88.9,
-    '4.1/8"': 101.6,
+    '1/4"':   6.0,  '3/8"':  10.0, '1/2"':  12.0, '5/8"':  15.0,
+    '3/4"':  18.0,  '7/8"':  22.0, '1.1/8"': 28.0, '1.3/8"': 35.0,
+    '1.5/8"': 42.0, '2.1/8"': 54.0,'2.5/8"': 64.0, '3.1/8"': 76.2,
 }
 
-# ── Sugestão de padrão por temperatura de evaporação ─────────────────────
+# ── Sugestão de padrão de isolamento por T.Evap ───────────────────────────
 _SUGESTAO_PADRAO = [
     ( 0,   float('inf'),  "D", "Resfriados leves — risco baixo de condensação"),
     (-5,   0,             "F", "Resfriados normais — proteção padrão"),
@@ -67,32 +91,148 @@ _INFO_PADRAO = {
 
 
 def sugerir_padrao(temp_evap: float) -> tuple[str, str]:
-    """Retorna (padrao, justificativa) baseado na T.Evap."""
     for t_min, t_max, padrao, just in _SUGESTAO_PADRAO:
         if t_min <= temp_evap < t_max:
             faixa, _ = _INFO_PADRAO[padrao]
             return padrao, f"Padrão {padrao} ({faixa}) — {just}"
-    return "H", "Padrão H por segurança (T.Evap fora dos limites da tabela)"
+    return "H", "Padrão H por segurança"
 
 
-def _selecionar_diametro(tabela: dict[str, int], capacidade: float, fator: float) -> str:
-    for diam, cap_max in sorted(tabela.items(), key=lambda x: x[1]):
-        if capacidade <= cap_max * fator:
-            return diam
+def _interpolar_cap(fluido: str, tabela_raw: dict, t_evap: float, bitola: str) -> float:
+    """
+    Interpola linearmente a capacidade máxima para uma bitola e T.Evap exatos.
+    Se T.Evap estiver fora da faixa, usa o valor do extremo mais próximo.
+    """
+    pontos = sorted(tabela_raw.keys())  # temperaturas disponíveis
+
+    if t_evap <= pontos[0]:
+        return float(tabela_raw[pontos[0]].get(bitola, 0))
+    if t_evap >= pontos[-1]:
+        return float(tabela_raw[pontos[-1]].get(bitola, 0))
+
+    # Encontrar os dois pontos que cercam t_evap
+    t_abaixo = max(t for t in pontos if t <= t_evap)
+    t_acima  = min(t for t in pontos if t >= t_evap)
+
+    if t_abaixo == t_acima:
+        return float(tabela_raw[t_abaixo].get(bitola, 0))
+
+    cap_ab = float(tabela_raw[t_abaixo].get(bitola, 0))
+    cap_ac = float(tabela_raw[t_acima].get(bitola, 0))
+
+    # Interpolação linear
+    frac = (t_evap - t_abaixo) / (t_acima - t_abaixo)
+    return cap_ab + frac * (cap_ac - cap_ab)
+
+
+def _selecionar_succao(fluido: str, capacidade: float, t_evap: float, fator: float) -> str:
+    """
+    Seleciona a menor bitola de sucção ASHRAE que atende à capacidade,
+    interpolando entre os pontos de T.Evap disponíveis.
+    """
+    tabela = _SUCCAO_CAP.get(fluido, _SUCCAO_CAP[_FLUIDO_FALLBACK])
+
+    for bitola in _BITOLAS_SUCCAO:
+        cap_interp = _interpolar_cap(fluido, tabela, t_evap, bitola)
+        if capacidade <= cap_interp * fator:
+            return bitola
     return "Consultar Engenharia"
 
 
-async def _buscar_isolamento(
-    db: AsyncSession, bitola: str, padrao: str
-) -> tuple[str, float] | None:
+def _selecionar_liquido(fluido: str, capacidade: float, fator: float) -> str:
+    """Seleciona a menor bitola de líquido ASHRAE para a capacidade dada."""
+    tabela = _LIQUIDO_CAP.get(fluido, _LIQUIDO_CAP[_FLUIDO_FALLBACK])
+
+    for bitola in _BITOLAS_LIQUIDO:
+        cap_max = float(tabela.get(bitola, 0))
+        if capacidade <= cap_max * fator:
+            return bitola
+    return "Consultar Engenharia"
+
+
+# ── Tabela de conexões por faixa de distância (Opção 2) ───────────────────
+# Valores baseados em prática de mercado (ASHRAE / NBR)
+def _curvas_auto(distancia: float) -> int:
+    """Estimativa automática de curvas 90° pela distância total."""
+    if distancia <= 10:  return 2
+    if distancia <= 20:  return 4
+    if distancia <= 40:  return 6
+    if distancia <= 60:  return 8
+    return 10
+
+
+def _calcular_conexoes(
+    diam_succao:  str,
+    diam_liquido: str,
+    distancia:    float,
+    num_curvas_90: int | None,
+    incluir_sifao: bool,
+) -> tuple[list[ItemTubulacao], int, str]:
     """
-    Busca referência e espessura no catálogo Armacel.
-    Retorna (referencia, espessura_mm) ou None se não encontrar.
+    Retorna (lista_conexoes, curvas_usadas, origem).
+
+    Regras:
+    - Curvas 90°, 45°, uniões e reduções são iguais nas duas linhas
+    - Sifão e contra-sifão: somente na sucção (saída do evaporador)
+    - Curvas 45° ≈ metade das 90°
+    - Uniões = mesmo número das 90°
+    - Reduções: 1 para distâncias curtas, 2 para longas
     """
+    if num_curvas_90 is not None:
+        curvas_90 = num_curvas_90
+        origem    = "informado pelo técnico"
+    else:
+        curvas_90 = _curvas_auto(distancia)
+        origem    = "automático (tabela por distância)"
+
+    curvas_45 = max(0, curvas_90 // 2)
+    unioes    = curvas_90
+    reducoes  = 1 if distancia <= 30 else 2
+
+    conexoes: list[ItemTubulacao] = []
+
+    def add(item, qtd, detalhe):
+        if qtd > 0:
+            conexoes.append(ItemTubulacao(item=item, quantidade=qtd,
+                                          unidade="un", detalhe=detalhe))
+
+    # ── Curvas 90° ────────────────────────────────────────────────────────
+    add(f'Curva 90° {diam_succao} (Sucção)',   curvas_90,
+        f'Mudança de direção | {origem}')
+    add(f'Curva 90° {diam_liquido} (Líquido)', curvas_90,
+        f'Mudança de direção | {origem}')
+
+    # ── Curvas 45° ────────────────────────────────────────────────────────
+    add(f'Curva 45° {diam_succao} (Sucção)',   curvas_45,
+        f'Desvio suave | {origem}')
+    add(f'Curva 45° {diam_liquido} (Líquido)', curvas_45,
+        f'Desvio suave | {origem}')
+
+    # ── Uniões / Luvas ────────────────────────────────────────────────────
+    add(f'União/Luva {diam_succao} (Sucção)',   unioes,
+        'Emenda de tubos | linha de sucção')
+    add(f'União/Luva {diam_liquido} (Líquido)', unioes,
+        'Emenda de tubos | linha de líquido')
+
+    # ── Reduções (transição entre bitolas) ────────────────────────────────
+    if diam_succao != diam_liquido:
+        add(f'Redução {diam_succao} × {diam_liquido}', reducoes,
+            'Transição sucção → líquido')
+
+    # ── Sifão e contra-sifão (sucção — saída do evaporador) ───────────────
+    if incluir_sifao:
+        add(f'Sifão {diam_succao} (Sucção)', 1,
+            'Saída do evaporador — evita retorno de óleo ao compressor')
+        add(f'Contra-sifão {diam_succao} (Sucção)', 1,
+            'Saída do evaporador — previne bolsas de líquido na linha')
+
+    return conexoes, curvas_90, origem
+
+
+async def _buscar_isolamento(db: AsyncSession, bitola: str, padrao: str) -> tuple[str, float] | None:
     diam_mm = _BITOLA_PARA_MM.get(bitola)
     if diam_mm is None:
         return None
-
     result = await db.execute(
         select(IsolamentoTubulacao).where(
             IsolamentoTubulacao.diametro_cu_mm == diam_mm,
@@ -105,31 +245,54 @@ async def _buscar_isolamento(
     return None
 
 
-async def calcular_tubulacao(
-    req: TubulacaoRequest, db: AsyncSession
-) -> TubulacaoResponse:
+async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> TubulacaoResponse:
 
     if req.capacidade_real <= 100:
         raise ValueError("Capacidade muito baixa (mínimo 100 kcal/h).")
 
-    fator_eficiencia = 0.5 if req.alta_eficiencia else 1.0
+    fluido = req.fluido.upper()
+    fluido_tabela = fluido if fluido in _SUCCAO_CAP else _FLUIDO_FALLBACK
+    nota_fluido = "" if fluido in _SUCCAO_CAP else f" (tabela {_FLUIDO_FALLBACK} usada como referência)"
 
+    # ── Fator de distância: compensa queda de pressão em linhas longas ──────
+    # Base das tabelas: 30m equivalente
+    # Referência ASHRAE: queda equivalente a 1°C / 100m
     fator_distancia = 1.0
-    if req.distancia > 20: fator_distancia = 0.9
-    if req.distancia > 40: fator_distancia = 0.8
-    if req.distancia > 60: fator_distancia = 0.7
+    if req.distancia > 30:  fator_distancia = 0.90
+    if req.distancia > 50:  fator_distancia = 0.80
+    if req.distancia > 80:  fator_distancia = 0.70
+    if req.distancia > 120: fator_distancia = 0.60
 
-    diam_liquido = _selecionar_diametro(_TABELA_LIQUIDO, req.capacidade_real, fator_eficiencia)
-    tabela_succao = _TABELA_SUCCAO_BAIXA if req.temp_evap <= -18 else _TABELA_SUCCAO_MEDIA
-    diam_succao   = _selecionar_diametro(
-        tabela_succao, req.capacidade_real, fator_distancia * fator_eficiencia
-    )
+    # ── Fator de alta eficiência ─────────────────────────────────────────────
+    # Alta eficiência: linha de sucção com menor queda de pressão
+    # → pipe deve suportar 133% da carga real (sobe uma bitola tipicamente)
+    # Fator corrigido: 0.75 (antes era 0.5 — muito conservador)
+    fator_efic_succao  = 0.75 if req.alta_eficiencia else 1.0
+    fator_efic_liquido = 1.0   # líquido: velocidade é o critério, não eficiência
 
-    qtd_tubo  = math.ceil(req.distancia * 1.1)
+    fator_succao  = fator_distancia * fator_efic_succao
+    fator_liquido = fator_efic_liquido
+
+    # ── Seleção dos diâmetros ─────────────────────────────────────────────────
+    diam_succao  = _selecionar_succao(fluido_tabela, req.capacidade_real, req.temp_evap, fator_succao)
+    diam_liquido = _selecionar_liquido(fluido_tabela, req.capacidade_real, fator_liquido)
+
+    # ── Quantidades ───────────────────────────────────────────────────────────
+    qtd_tubo  = math.ceil(req.distancia * 1.1)   # +10% para conexões e curvas
     match     = re.search(r"(\d+)", diam_succao)
     valor_diam= int(match.group()) if match else 1
     qtd_solda = math.ceil((qtd_tubo / 5) * (valor_diam / 2))
 
+    # ── Notas técnicas ────────────────────────────────────────────────────────
+    cap_interp = _interpolar_cap(fluido_tabela, _SUCCAO_CAP.get(fluido_tabela, _SUCCAO_CAP[_FLUIDO_FALLBACK]), req.temp_evap, diam_succao)
+    nota_succao = (
+        f"Fluido: {fluido}{nota_fluido} | "
+        f"T.Evap: {req.temp_evap}°C | "
+        f"Cap.interpolada: {cap_interp:.0f} kcal/h | "
+        f"{'Alta efic. (fator 0.75)' if req.alta_eficiencia else 'Padrão ASHRAE'}"
+    )
+
+    # ── Materiais ─────────────────────────────────────────────────────────────
     padrao_sugerido, just_sugerido = sugerir_padrao(req.temp_evap)
     padrao = req.padrao_isolamento.upper()
 
@@ -137,16 +300,16 @@ async def calcular_tubulacao(
         ItemTubulacao(
             item=f'Tubo Cobre {diam_liquido} (Líquido)',
             quantidade=qtd_tubo, unidade="m",
-            detalhe="Linha de alta pressão",
+            detalhe="Linha de alta pressão — ASHRAE",
         ),
         ItemTubulacao(
             item=f'Tubo Cobre {diam_succao} (Sucção)',
             quantidade=qtd_tubo, unidade="m",
-            detalhe=f"Sucção dimensionada com ΔT de {req.delta_t_selecionado}K",
+            detalhe=nota_succao,
         ),
     ]
 
-    # ── Isolamento linha de sucção (sempre) ───────────────────────────────
+    # Isolamento sucção (sempre)
     iso_succao = await _buscar_isolamento(db, diam_succao, padrao)
     if iso_succao:
         ref, esp = iso_succao
@@ -162,11 +325,11 @@ async def calcular_tubulacao(
             detalhe=f"Consultar catálogo para bitola {diam_succao}",
         ))
 
-    # ── Isolamento linha de líquido (opcional) ────────────────────────────
+    # Isolamento líquido (opcional)
     if req.isolar_liquido:
-        iso_liquido = await _buscar_isolamento(db, diam_liquido, padrao)
-        if iso_liquido:
-            ref, esp = iso_liquido
+        iso_liq = await _buscar_isolamento(db, diam_liquido, padrao)
+        if iso_liq:
+            ref, esp = iso_liq
             materiais.append(ItemTubulacao(
                 item=f'Isolamento Armacel {ref} (Líquido)',
                 quantidade=qtd_tubo, unidade="m",
@@ -179,11 +342,22 @@ async def calcular_tubulacao(
                 detalhe=f"Consultar catálogo para bitola {diam_liquido}",
             ))
 
-    # ── Solda ─────────────────────────────────────────────────────────────
+    # ── Conexões (curvas, uniões, reduções, sifão) ────────────────────────
+    conexoes, curvas_usadas, origem_curvas = _calcular_conexoes(
+        diam_succao   = diam_succao,
+        diam_liquido  = diam_liquido,
+        distancia     = req.distancia,
+        num_curvas_90 = req.num_curvas_90,
+        incluir_sifao = req.incluir_sifao,
+    )
+    materiais.extend(conexoes)
+
+    # ── Solda: emendas de tubo + uma por conexão ──────────────────────────
+    qtd_solda_total = qtd_solda + len(conexoes)
     materiais.append(ItemTubulacao(
         item="Solda Prata 15% / Foscoper",
-        quantidade=qtd_solda, unidade="vareta",
-        detalhe=f"Calculado para conexões de {diam_succao}",
+        quantidade=qtd_solda_total, unidade="vareta",
+        detalhe=f"{qtd_solda} emendas de tubo + {len(conexoes)} conexões ({diam_succao})",
     ))
 
     return TubulacaoResponse(
@@ -193,5 +367,7 @@ async def calcular_tubulacao(
         temp_evap_calculada=req.temp_evap,
         padrao_isolamento_usado=padrao,
         sugestao_padrao=just_sugerido,
+        curvas_90_usadas=curvas_usadas,
+        origem_curvas=origem_curvas,
         lista_materiais=materiais,
     )

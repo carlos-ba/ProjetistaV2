@@ -10,6 +10,7 @@ from app.models.catalogo import (
 from app.models.equipamento import Equipamento
 from app.models.material import Material
 from app.models.painel import PainelFrigorifico
+from app.models.porta import PortaFrigoriifica
 
 
 async def listar_perfis_produto(db: AsyncSession):
@@ -81,4 +82,23 @@ async def listar_fabricantes_paineis(db: AsyncSession) -> list[Fabricante]:
         ))
         .order_by(Fabricante.nome)
     )
+    return result.scalars().all()
+
+
+async def listar_portas(
+    db: AsyncSession,
+    classificacao: str | None = None,
+    tipo: str | None = None,
+) -> list[PortaFrigoriifica]:
+    """Lista portas frigoríficas com filtros opcionais."""
+    stmt = (
+        select(PortaFrigoriifica)
+        .options(selectinload(PortaFrigoriifica.fabricante))
+        .order_by(PortaFrigoriifica.classificacao, PortaFrigoriifica.largura_mm)
+    )
+    if classificacao:
+        stmt = stmt.where(PortaFrigoriifica.classificacao == classificacao.lower())
+    if tipo:
+        stmt = stmt.where(PortaFrigoriifica.tipo == tipo.lower())
+    result = await db.execute(stmt)
     return result.scalars().all()

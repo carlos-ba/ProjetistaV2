@@ -23,8 +23,12 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
   const [larguraSelecionada, setLarguraSelecionada] = useState('');
   const [painelSelecionado, setPainelSelecionado] = useState(null);  // objeto completo
 
+  // ── Portas frigoríficas ───────────────────────────────────────────────
+  const [portasCatalogo, setPortasCatalogo]   = useState([]);
+  const [portasSelecionadas, setPortasSelecionadas] = useState([]); // [{porta, qtde}]
+
   const [resultado, setResultado] = useState(null);
-  const [statusCalculo, setStatusCalculo] = useState(null); // null | 'pronto' | 'modificado'
+  const [statusCalculo, setStatusCalculo] = useState(null);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -36,7 +40,42 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     api.get('/api/v1/catalogo/paineis/fabricantes')
       .then(r => setFabricantes(r.data))
       .catch(() => setFabricantes([]));
+    // Carrega todo o catálogo de portas
+    api.get('/api/v1/catalogo/portas')
+      .then(r => setPortasCatalogo(r.data))
+      .catch(() => setPortasCatalogo([]));
   }, []);
+
+  // Classificação sugerida baseada na temperatura interna
+  const classificacaoSugerida = () => {
+    const t = parseFloat(temperaturaInterna);
+    if (isNaN(t)) return null;
+    if (t < -25) return 'ultra-congelada';
+    if (t < -5)  return 'congelada';
+    return 'resfriados';
+  };
+
+  // Portas filtradas pela classificação sugerida
+  const portasFiltradas = portasCatalogo.filter(p => {
+    const cs = classificacaoSugerida();
+    return cs ? p.classificacao === cs : true;
+  });
+
+  const adicionarPorta = (porta) => {
+    setPortasSelecionadas(prev => {
+      const idx = prev.findIndex(p => p.porta.id === porta.id);
+      if (idx >= 0) return prev; // já adicionada
+      return [...prev, { porta, qtde: 1 }];
+    });
+  };
+
+  const removerPorta = (id) =>
+    setPortasSelecionadas(prev => prev.filter(p => p.porta.id !== id));
+
+  const updateQtdePorta = (id, qtde) =>
+    setPortasSelecionadas(prev =>
+      prev.map(p => p.porta.id === id ? { ...p, qtde: Math.max(1, parseInt(qtde) || 1) } : p)
+    );
 
   // ── Ao escolher fabricante: carregar painéis e extrair núcleos ────────
   useEffect(() => {
@@ -121,11 +160,51 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     return {
       ...base, ...resultado,
       lista_materiais: [
-        ...resultado.lista_corte.map(i => ({ id: null, item: i.item, quantidade: i.quantidade, detalhe: i.descricao, area_total: i.area_total })),
-        ...(resultado.materiais_extras || []).map(m => ({ id: null, item: m.item, qtd: m.qtd, detalhe: m.detalhe }))
+        ...resultado.lista_corte.map(i => {
+          // Especificação técnica completa do painel selecionado
+          const especPainel = painelSelecionado
+            ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | larg. ${painelSelecionado.largura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
+            : '';
+
+          return {
+            id: null,
+            item: i.item,
+            quantidade: i.quantidade,
+            unidade: 'un',
+            comprimento: i.comprimento,
+            area_total: i.area_total,
+            detalhe: [i.descricao, especPainel].filter(Boolean).join(' | '),
+          };
+        }),
+        ...(resultado.materiais_extras || []).map(m => {
+          const especPainel = painelSelecionado
+            ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
+            : '';
+          return {
+            id: null,
+            item: m.item,
+            qtd: m.qtd,
+            unidade: 'un',
+            detalhe: [m.detalhe, especPainel].filter(Boolean).join(' | '),
+          };
+        }),
+        // Portas frigoríficas selecionadas
+        ...portasSelecionadas.map(({ porta, qtde }) => ({
+          id:         porta.id,
+          item:       `Porta Frigorífica ${porta.largura_mm}×${porta.altura_mm}mm (${porta.tipo})`,
+          quantidade: qtde,
+          unidade:    'un',
+          detalhe:    [
+            porta.classificacao,
+            porta.abertura ? `abertura ${porta.abertura}` : null,
+            porta.batente  ? `batente ${porta.batente}`   : null,
+            porta.soleira  ? 'com soleira'                : 'sem soleira',
+            porta.espessura_mm ? `esp. ${porta.espessura_mm}mm` : null,
+          ].filter(Boolean).join(' | '),
+        })),
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasSelecionadas]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -334,6 +413,88 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
               <input type="number" value={espessuraConcreto} onChange={e => setEspessuraConcreto(e.target.value)}
                 placeholder="Ex: 10"
                 className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+          )}
+        </div>
+
+        {/* ── Seção de Portas Frigoríficas ── */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              🚪 Portas Frigoríficas
+            </h3>
+            {classificacaoSugerida() && (
+              <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-1 rounded-full uppercase">
+                Sugerido: {classificacaoSugerida()}
+              </span>
+            )}
+          </div>
+
+          {/* Catálogo de portas disponíveis */}
+          {portasFiltradas.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">
+              {portasCatalogo.length === 0
+                ? 'Nenhuma porta cadastrada no catálogo.'
+                : `Nenhuma porta para classificação "${classificacaoSugerida()}". Veja outras abaixo.`}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+              {portasCatalogo.map(porta => {
+                const jaSelecionada = portasSelecionadas.some(p => p.porta.id === porta.id);
+                const sugerida = porta.classificacao === classificacaoSugerida();
+                return (
+                  <button key={porta.id} onClick={() => !jaSelecionada && adicionarPorta(porta)}
+                    disabled={jaSelecionada}
+                    className={`flex items-center justify-between p-3 rounded-lg border text-left transition-all text-xs ${
+                      jaSelecionada
+                        ? 'border-emerald-300 bg-emerald-50 opacity-60 cursor-not-allowed'
+                        : sugerida
+                          ? 'border-blue-300 bg-blue-50 hover:border-blue-400 cursor-pointer'
+                          : 'border-slate-200 bg-white hover:border-slate-400 cursor-pointer'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold text-slate-700">
+                        {porta.largura_mm}×{porta.altura_mm}mm — {porta.tipo}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {porta.classificacao} | esp. {porta.espessura_mm}mm
+                        {porta.abertura && ` | ${porta.abertura}`}
+                        {porta.batente  && ` | ${porta.batente}`}
+                        {porta.soleira  ? ' | com soleira' : ''}
+                      </p>
+                    </div>
+                    <span className={`ml-2 flex-shrink-0 text-lg ${jaSelecionada ? 'text-emerald-500' : 'text-slate-300'}`}>
+                      {jaSelecionada ? '✓' : '+'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Portas selecionadas com quantidade */}
+          {portasSelecionadas.length > 0 && (
+            <div className="border-t border-slate-200 pt-3 space-y-2">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Portas no projeto</p>
+              {portasSelecionadas.map(({ porta, qtde }) => (
+                <div key={porta.id} className="flex items-center gap-3 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                  <div className="flex-1 text-xs">
+                    <span className="font-bold text-slate-700">
+                      {porta.largura_mm}×{porta.altura_mm}mm — {porta.tipo}
+                    </span>
+                    <span className="text-slate-400 ml-1">({porta.classificacao})</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <label className="text-[10px] text-slate-500">Qtde:</label>
+                    <input type="number" min="1" value={qtde}
+                      onChange={e => updateQtdePorta(porta.id, e.target.value)}
+                      className="w-14 px-2 py-1 rounded border border-slate-300 text-center text-xs outline-none" />
+                    <button onClick={() => removerPorta(porta.id)}
+                      className="text-slate-300 hover:text-red-400 transition-colors text-sm">✕</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

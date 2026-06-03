@@ -1,148 +1,174 @@
-/**
- * EtapaCard — Card colapsável para o wizard de dimensionamento.
- *
- * Importante: children são SEMPRE montados (nunca desmontados),
- * apenas escondidos via CSS. Isso preserva o estado interno do componente
- * ao fechar/reabrir sem perder dados.
- *
- * status:
- *   'concluido'  → etapa finalizada, mostra resumo colapsado (verde)
- *   'disponivel' → etapa acessível mas ainda não concluída (slate)
- *   'bloqueado'  → etapa anterior não concluída, não clicável (cinza)
- */
+import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { CheckCircle2, Lock, Pencil, X, ChevronDown, ChevronUp, ChevronRight } from "lucide-react"
+
 const EtapaCard = ({
   numero,
   titulo,
   icone,
-  status,        // 'concluido' | 'disponivel' | 'bloqueado'
-  resumo,        // string exibido quando concluido e colapsado
-  selecionado,   // boolean — card está selecionado (detalhe visível à direita)
-  expandido,     // boolean — card está aberto para edição
-  onSelecionar,  // () => void — clique no header: mostra detalhe, NÃO abre
-  onEditar,      // () => void — clique em "Editar": abre para edição
-  onFechar,      // () => void — clique em "Descartar edição": fecha sem perder dados
-  somenteLeitura,// boolean — card final (ex: Orçamento): sem botões Editar/Descartar
+  status,
+  resumo,
+  selecionado,
+  expandido,
+  onSelecionar,
+  onEditar,
+  onFechar,
+  somenteLeitura,
+  confirmacaoProxima, // string com nome da próxima etapa (ou null)
+  onConfirmar,        // () => void — avança para próxima etapa
+  onRecusar,          // () => void — fica na etapa atual
   children,
 }) => {
 
-  const clicavelHeader = status !== 'bloqueado';
+  const clicavelHeader = status !== 'bloqueado'
 
-  // Estilo da borda do card
-  const bordaCard = expandido
-    ? 'border-[#7B2D8B] shadow-lg shadow-purple-100'
-    : selecionado
-      ? 'border-[#7B2D8B]/40 shadow-sm shadow-purple-50'
-      : status === 'concluido'
-        ? 'border-emerald-300 hover:border-emerald-400'
-        : status === 'disponivel'
-          ? 'border-slate-200 hover:border-slate-300'
-          : 'border-slate-200 bg-slate-50';   // bloqueado
-
-  // Badge numérico
-  const estiloBadge = expandido
-    ? 'bg-[#7B2D8B] text-white'
-    : status === 'concluido'
-      ? 'bg-emerald-500 text-white'
-      : status === 'disponivel'
-        ? 'bg-slate-300 text-slate-600'
-        : 'bg-slate-200 text-slate-400';    // bloqueado
-
-  // Para cards somenteLeitura: header clica abre/fecha diretamente
   const handleHeaderClick = () => {
-    if (!clicavelHeader) return;
+    if (!clicavelHeader) return
     if (somenteLeitura) {
-      expandido ? onFechar() : onEditar();
+      expandido ? onFechar() : onEditar()
     } else {
-      onSelecionar();
+      onSelecionar()
     }
-  };
+  }
 
   return (
-    <div className={`rounded-xl border-2 bg-white transition-all duration-300 ${bordaCard}`}>
+    <div className={cn(
+      "rounded-xl border bg-card text-card-foreground shadow-sm transition-all duration-300",
+      expandido     && "border-primary shadow-md shadow-primary/10",
+      selecionado   && !expandido && "border-primary/30",
+      status === 'bloqueado' && "opacity-60 bg-muted/30",
+    )}>
 
-      {/* ── Cabeçalho ── sempre visível ── */}
+      {/* ── Cabeçalho ── */}
       <div
-        className={`flex items-center justify-between px-5 py-4 select-none
-          ${clicavelHeader ? 'cursor-pointer' : ''}
-          ${status === 'bloqueado' ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
+        className={cn(
+          "flex items-center justify-between px-5 py-4 select-none",
+          clicavelHeader && "cursor-pointer",
+          status === 'bloqueado' && "cursor-not-allowed",
+        )}
         onClick={handleHeaderClick}
       >
-        {/* Esquerda: badge + título + resumo */}
+        {/* Esquerda */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-sm transition-all ${estiloBadge}`}>
-            {status === 'concluido' && !expandido ? '✓' : numero}
+          {/* Badge */}
+          <div className={cn(
+            "w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold transition-all",
+            expandido             ? "bg-primary text-primary-foreground"
+            : status === 'concluido' ? "bg-emerald-500 text-white"
+            : status === 'disponivel'? "bg-muted text-muted-foreground border border-border"
+            : "bg-muted text-muted-foreground"
+          )}>
+            {status === 'concluido' && !expandido
+              ? <CheckCircle2 className="w-4 h-4" />
+              : numero
+            }
           </div>
 
+          {/* Título + resumo */}
           <div className="min-w-0">
-            <p className={`text-sm font-black uppercase tracking-wide leading-tight ${
-              status === 'bloqueado' ? 'text-slate-400' : 'text-slate-700'
-            }`}>
+            <p className={cn(
+              "text-sm font-semibold leading-tight",
+              status === 'bloqueado' ? "text-muted-foreground" : "text-foreground"
+            )}>
               {icone} {titulo}
             </p>
-            {/* Resumo apenas quando concluído e fechado */}
             {status === 'concluido' && !expandido && resumo && (
-              <p className="text-xs text-slate-500 font-medium mt-0.5 truncate max-w-sm">
-                {resumo}
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-sm">{resumo}</p>
             )}
           </div>
         </div>
 
-        {/* Direita: ações */}
+        {/* Direita — ações */}
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
 
-          {/* Botão Editar — apenas para cards editáveis */}
+          {/* Status badge */}
+          {status === 'concluido' && !expandido && (
+            <Badge variant="success" className="text-[10px] hidden sm:flex">Concluído</Badge>
+          )}
+
+          {/* Botão Editar */}
           {!somenteLeitura && status === 'concluido' && !expandido && (
-            <button
-              onClick={e => { e.stopPropagation(); onEditar(); }}
-              className="text-xs font-bold px-3 py-1.5 rounded-lg border border-[#7B2D8B] text-[#7B2D8B] hover:bg-purple-50 transition-all"
+            <Button
+              variant="outline" size="sm"
+              onClick={e => { e.stopPropagation(); onEditar() }}
+              className="h-7 text-xs gap-1"
             >
-              ✏️ Editar
-            </button>
+              <Pencil className="w-3 h-3" /> Editar
+            </Button>
           )}
 
-          {/* Botão Descartar — apenas para cards editáveis */}
+          {/* Botão Descartar */}
           {!somenteLeitura && expandido && (
-            <button
-              onClick={e => { e.stopPropagation(); onFechar(); }}
-              className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-all"
+            <Button
+              variant="ghost" size="sm"
+              onClick={e => { e.stopPropagation(); onFechar() }}
+              className="h-7 text-xs gap-1 text-muted-foreground"
             >
-              ✕ Descartar edição
-            </button>
-          )}
-
-          {/* Chevron para somenteLeitura (abre/fecha pelo header) */}
-          {somenteLeitura && status !== 'bloqueado' && (
-            <span className="text-slate-400 text-sm font-bold">
-              {expandido ? '▲' : '▼'}
-            </span>
+              <X className="w-3 h-3" /> Descartar
+            </Button>
           )}
 
           {/* Lock */}
-          {status === 'bloqueado' && (
-            <span className="text-slate-300 text-base select-none">🔒</span>
-          )}
+          {status === 'bloqueado' && <Lock className="w-4 h-4 text-muted-foreground/40" />}
 
-          {/* Indicador de selecionado (sem edição) */}
+          {/* Ponto selecionado */}
           {!expandido && selecionado && status !== 'bloqueado' && (
-            <span className="w-2 h-2 rounded-full bg-[#7B2D8B] animate-pulse"/>
+            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           )}
 
-          {/* Chevron: disponível, não selecionado, não expandido */}
+          {/* Chevron somenteLeitura */}
+          {somenteLeitura && status !== 'bloqueado' && (
+            expandido
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
+
+          {/* Chevron disponível */}
           {status === 'disponivel' && !expandido && !selecionado && (
-            <span className="text-slate-400 text-sm">▼</span>
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
           )}
         </div>
       </div>
 
-      {/* ── Conteúdo ── SEMPRE montado, escondido via CSS quando colapsado ── */}
-      <div className={expandido ? 'border-t border-slate-100' : 'hidden'}>
+      {/* ── Conteúdo ── sempre montado ── */}
+      <div className={cn(
+        "border-t border-border",
+        expandido ? "block" : "hidden"
+      )}>
         {children}
       </div>
 
+      {/* ── Barra de confirmação ── aparece após concluir a etapa ── */}
+      {expandido && confirmacaoProxima && (
+        <div className="border-t border-emerald-200 bg-emerald-50 px-5 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-emerald-700 text-sm">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <span>
+              Etapa concluída! Avançar para{' '}
+              <strong>{confirmacaoProxima}</strong>?
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="ghost" size="sm"
+              onClick={onRecusar}
+              className="text-slate-500 hover:text-slate-700 text-xs"
+            >
+              Continuar aqui
+            </Button>
+            <Button
+              size="sm"
+              onClick={onConfirmar}
+              className="gap-1 text-xs bg-emerald-600 hover:bg-emerald-700"
+            >
+              Avançar <ChevronRight className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
-  );
-};
+  )
+}
 
-export default EtapaCard;
+export default EtapaCard
