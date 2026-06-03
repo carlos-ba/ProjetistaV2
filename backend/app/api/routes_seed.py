@@ -182,7 +182,7 @@ async def seed_perf_t2(token: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {sql_path}")
 
     with open(sql_path, encoding="utf-8") as f:
-        lines = [l.strip() for l in f if l.strip().startswith("INSERT")]
+        lines = [l.strip() for l in f if l.strip().startswith("INSERT") or l.strip().startswith("SELECT")]
 
     inseridos = 0
     erros = 0
