@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFinalizar }) => {
+const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaTChange, aoFinalizar }) => {
   const [cargaTotal, setCargaTotal] = useState(2000);
   const [numMaquinas, setNumMaquinas] = useState(1);
   const [deltaT, setDeltaT] = useState('');
   const [evap, setEvap] = useState('');
-  const [cond, setCond] = useState(45);
+  // T.Cond = T.Amb + 10°C (padrão de mercado) — sincroniza com o card de carga térmica
+  const [cond, setCond] = useState(tempAmb + 10);
   const [fluido, setFluido] = useState('R22');
   const [tipo, setTipo] = useState('Unidade Condensadora');
 
@@ -23,6 +24,11 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFina
       setCargaTotal(Math.round(cargaInicial));
     }
   }, [cargaInicial]);
+
+  // Sincroniza T.Cond quando T.Amb do Card 2 mudar (só atualiza se o técnico não editou manualmente)
+  useEffect(() => {
+    setCond(tempAmb + 10);
+  }, [tempAmb]);
 
   // Recalcula T. evaporação sempre que tempInterna ou deltaT mudar
   useEffect(() => {
@@ -92,6 +98,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, onDeltaTChange, aoFina
       vazao_ar: item.vazao_ar,
       fluido: fluido,
       temp_evap: evap,
+      temp_cond: cond,   // T.Condensação usada na seleção
       modelo: item.modelo,
       id: item.id,
       categoria: tipo,   // ex: "Unidade Condensadora", "Evaporadora"

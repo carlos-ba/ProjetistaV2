@@ -223,7 +223,7 @@ function AppContent() {
 
   const novoProjeto = () => {
     if (!window.confirm("Iniciar novo projeto? Os dados não salvos serão perdidos.")) return;
-    // Reseta estados do App
+    // Reseta TODOS os estados do App
     setDadosDoGabinete(null);
     setCargaCalculada(null);
     setItensOrcamento({ materiais: [], equipamentos: [] });
@@ -234,9 +234,12 @@ function AppContent() {
     setProjetoAtual(null);
     setGabineteCalculado(false);
     setDeltaTCalculado(null);
+    setTempExternaCalculo(35);   // reset T.Amb
+    setProximaEtapa(null);       // reset confirmação pendente
     gabineteCalculadoRef.current = false;
-    setPassoExpandido(1); setPassoSelecionado(1); // volta ao primeiro card
+    // projetoKey incrementado remonta TODOS os cards (key propagada)
     setProjetoKey(k => k + 1);
+    setPassoExpandido(1); setPassoSelecionado(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -536,7 +539,7 @@ function AppContent() {
               confirmacaoProxima={passoExpandido === 2 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraCargaTermica dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
+              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
             </EtapaCard>
 
             {/* 3. Seleção de Equipamentos */}
@@ -551,8 +554,10 @@ function AppContent() {
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <SelecaoEquipamentos
+                key={projetoKey}
                 cargaInicial={cargaCalculada}
                 tempInterna={dadosDoGabinete?.temperatura_interna}
+                tempAmb={tempExternaCalculo}
                 onDeltaTChange={setDeltaTCalculado}
                 aoFinalizar={receberEquipamentosFinalizados}
               />
@@ -570,6 +575,7 @@ function AppContent() {
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <ComponentesFluxo
+                key={projetoKey}
                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
                 fluido={getUltimoEquipamento()?.fluido || 'R404A'}
                 tempEvap={getUltimoEquipamento()?.temp_evap || -10}
@@ -589,7 +595,7 @@ function AppContent() {
               confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraTubulacao equipamentoSelecionado={getUltimoEquipamento()} aoFinalizar={receberDadosTubulacao} />
+              <CalculadoraTubulacao key={projetoKey} equipamentoSelecionado={getUltimoEquipamento()} aoFinalizar={receberDadosTubulacao} />
             </EtapaCard>
 
             {/* 6. Orçamento */}
@@ -603,6 +609,7 @@ function AppContent() {
               onEditar={() => editarEtapa(6)} onFechar={fecharEtapa}
             >
               <GeradorOrcamento
+                key={projetoKey}
                 dadosAutomaticos={itensOrcamento}
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
@@ -615,7 +622,7 @@ function AppContent() {
       </main>
 
       {/* Painel Lateral Direito */}
-      <aside className="print:hidden">
+      <aside className="print:hidden flex flex-col min-h-0 flex-shrink-0">
         <PainelResumoLateral
           dadosGabinete={dadosDoGabinete}
           cargaCalculada={cargaCalculada}

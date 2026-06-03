@@ -52,20 +52,44 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
   if (passoExpandido === 3) {
     const equips = itensOrcamento.equipamentos;
     if (equips.length === 0) return <p className="text-xs text-slate-400 italic">Nenhum equipamento selecionado ainda.</p>;
-    const totalCap = equips.reduce((s, e) => s + (e.capacidade_real * e.qtde), 0);
+
+    // Capacidade nominal = média aritmética das capacidades individuais (unidades × qtde)
+    const totalQtde  = equips.reduce((s, e) => s + e.qtde, 0);
+    const somaCapAll = equips.reduce((s, e) => s + (e.capacidade_real * e.qtde), 0);
+    const capNominal = totalQtde > 0 ? Math.round(somaCapAll / totalQtde) : 0;
+
+    // Parâmetros de seleção (pega do primeiro equipamento — todos usam o mesmo critério)
+    const ref       = equips[0];
+    const tEvap     = ref?.temp_evap   ?? '—';
+    const tCond     = ref?.temp_cond   ?? '—';
+    const deltaTEq  = (tEvap !== '—' && deltaT != null) ? deltaT : null;
+
     return (
       <div className="space-y-2">
+        {/* Cards dos equipamentos */}
         {equips.map((e, i) => (
           <div key={i} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
             <p className="text-xs font-bold text-slate-700 truncate">{e.nome}</p>
             <div className="flex justify-between mt-1">
-              <span className="text-[10px] text-slate-500">{e.qtde}× {e.capacidade_real} kcal/h</span>
+              <span className="text-[10px] text-slate-500">{e.qtde}× {e.capacidade_real.toLocaleString('pt-BR')} kcal/h</span>
               <span className="text-[10px] font-bold text-blue-600">{e.fluido}</span>
             </div>
           </div>
         ))}
-        <div className="pt-2 border-t border-slate-100">
-          <Chip label="Capacidade total" valor={`${totalCap.toLocaleString('pt-BR')} kcal/h`} destaque />
+
+        {/* Capacidade nominal (média) */}
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <Chip label="Capacidade nominal" valor={`${capNominal.toLocaleString('pt-BR')} kcal/h`} destaque />
+        </div>
+
+        {/* Parâmetros de seleção */}
+        <div className="pt-1 space-y-1.5">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Parâmetros de Seleção</p>
+          <Chip label="T. Evaporação" valor={tEvap !== '—' ? `${tEvap}°C` : '—'} />
+          <Chip label="T. Condensação" valor={tCond !== '—' ? `${tCond}°C` : '—'} />
+          {deltaTEq != null && (
+            <Chip label="Delta T evaporador" valor={`${deltaTEq}°C`} />
+          )}
         </div>
       </div>
     );
@@ -172,7 +196,7 @@ const PainelResumoLateral = ({
   const temEvap   = vazaoTotalHoraria > 0;
 
   return (
-    <aside className="w-80 bg-white border-l border-slate-200 hidden xl:flex flex-col min-h-0 overflow-y-auto shadow-sm">
+    <aside className="w-80 bg-white border-l border-slate-200 hidden xl:flex flex-col overflow-y-auto shadow-sm" style={{ height: '100%', maxHeight: '100vh' }}>
 
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6">

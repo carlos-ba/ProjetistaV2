@@ -150,7 +150,10 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
       largura: parseFloat(largura),
       altura: parseFloat(altura),
       temperatura_interna: parseFloat(temperaturaInterna),
-      espessura: painelSelecionado ? painelSelecionado.espessura_mm : 100,
+      // Usa espessuraSelecionada diretamente para que o PainelInsights reaja
+      // imediatamente à troca, mesmo quando painelSelecionado ainda é null
+      // (ex: usuário mudou espessura mas ainda não escolheu largura)
+      espessura: painelSelecionado ? painelSelecionado.espessura_mm : (parseInt(espessuraSelecionada) || 100),
       nucleo: painelSelecionado ? painelSelecionado.nucleo : 'PIR',
       u_global: painelSelecionado ? parseFloat(painelSelecionado.u_global) : null,
       tipo_piso: tipoPiso,
@@ -211,9 +214,10 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
     if (!aoFinalizar) return;
     const validos = comprimento !== '' && largura !== '' && altura !== '' && temperaturaInterna !== '';
     if (!validos) { aoFinalizar(null); return; }
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, tipoPiso });
+    // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
+    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {

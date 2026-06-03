@@ -8,14 +8,12 @@ const COMPONENTES_SEGURANCA = [
   { id: 'pressostato_baixa',label: 'Pressostato de Baixa' },
 ];
 
-// Categorias para seleção manual (modo Engenharia)
+// Categorias para seleção manual (modo Engenharia) — Separador de Líquido é sempre automático
 const CATEGORIAS_MANUAL = [
   'Válvula de Expansão Termostática',
   'Filtro Secador',
-  'Visor de Líquido',
   'Válvula Solenoide',
-  'Separador de Líquido',
-  'Pressostato',
+  'Visor de Líquido',
 ];
 
 const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', conexao: '', capacidade: '', custo: '' });
@@ -60,9 +58,15 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     finally   { setLoading(false); }
   };
 
+  // Busca componentes em ambos os modos (separador de líquido é sempre automático)
   useEffect(() => {
-    if (cargaAlvo > 0 && modo === 'automatico') buscarComponentes();
-  }, [cargaAlvo, fluido, tempEvap, modo]);
+    if (cargaAlvo > 0) buscarComponentes();
+  }, [cargaAlvo, fluido, tempEvap]);
+
+  // Separador de líquido selecionado automaticamente (usado em ambos os modos)
+  const separadorAuto = componentes.find(c =>
+    c.categoria?.toLowerCase().includes('separador')
+  ) || null;
 
   // ── Finalizar Automático ──────────────────────────────────────────────
   const finalizar = () => {
@@ -79,15 +83,30 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // ── Finalizar Engenharia ──────────────────────────────────────────────
   const finalizarEngenharia = () => {
-    const itens = linhasManuais
+    const itens = [];
+
+    // Separador de líquido sempre vem do automático
+    if (separadorAuto) {
+      itens.push({
+        item: `${separadorAuto.categoria} ${separadorAuto.modelo}`,
+        quantidade: 1, unidade: 'un',
+        detalhe: `${separadorAuto.fabricante} | ${separadorAuto.conexao_entrada} | ${separadorAuto.faixa_operacao}`,
+        custo_unitario: separadorAuto.custo,
+        preco: separadorAuto.custo,
+      });
+    }
+
+    // Componentes manuais (VET, Filtro, Solenoide, Visor)
+    linhasManuais
       .filter(l => l.modelo.trim() && l.categoria)
-      .map(l => ({
+      .forEach(l => itens.push({
         item: `${l.categoria} ${l.modelo}`,
         quantidade: 1, unidade: 'un',
         detalhe: [l.fabricante, l.conexao, l.capacidade ? `${l.capacidade} kcal/h` : ''].filter(Boolean).join(' | '),
         custo_unitario: parseFloat(l.custo) || 0,
         preco: parseFloat(l.custo) || 0,
       }));
+
     if (aoFinalizar) aoFinalizar(itens);
   };
 
@@ -259,9 +278,9 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     Após selecionar, registre os resultados abaixo.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-blue-600 font-bold">
-                    <span>✓ VET • Filtros • Solenoides</span>
+                    <span>✓ VET • Filtro Secador • Solenoide • Visor</span>
                     <span>✓ R22 • R404A • R448A • CO₂</span>
-                    <span>✓ Sem instalação necessária</span>
+                    <span>✓ Separador de Líquido: automático</span>
                   </div>
                 </div>
               </div>
@@ -338,14 +357,13 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </p>
                 <ol className="space-y-2">
                   {[
-                    { n:1, txt: 'Aguarde o CoolSelector carregar. Clique no menu superior em "Language" → "Portuguese (Brazil)" para mudar o idioma' },
-                    { n:2, txt: 'No menu lateral esquerdo, clique em "Válvulas" → "Válvulas de Expansão Termostática (VET)"' },
-                    { n:3, txt: `Informe o fluido: ${fluido}` },
-                    { n:4, txt: `Informe a temperatura de evaporação: ${tempEvap}°C` },
-                    { n:5, txt: `Informe a temperatura de condensação: ${tempCond}°C (T.Amb ${tempAmb}°C + 10°C)` },
-                    { n:6, txt: `Informe a capacidade: ${cargaKw} kW (equivale a ${cargaAlvo?.toLocaleString('pt-BR')} kcal/h — o CoolSelector usa kW)` },
-                    { n:7, txt: 'Clique em "Calcular" — o sistema exibirá os modelos recomendados' },
-                    { n:8, txt: 'Anote o modelo selecionado e registre abaixo' },
+                    { n:1, txt: 'Aguarde o CoolSelector carregar. Clique em "Language" → "Portuguese (Brazil)" para mudar o idioma' },
+                    { n:2, txt: `Use os parâmetros: Fluido ${fluido} | T.Evap ${tempEvap}°C | T.Cond ${tempCond}°C | Capacidade ${cargaKw} kW` },
+                    { n:3, txt: 'Selecione a Válvula de Expansão Termostática (VET): menu "Válvulas" → "VET" → calcular → anotar modelo' },
+                    { n:4, txt: 'Selecione o Filtro Secador: menu "Filtros" → Filtro Secador → anotar modelo' },
+                    { n:5, txt: 'Selecione a Válvula Solenoide: menu "Válvulas" → Solenoide → anotar modelo' },
+                    { n:6, txt: 'Selecione o Visor de Líquido: menu "Indicadores" → Visor → anotar modelo' },
+                    { n:7, txt: 'Registre cada componente abaixo. O Separador de Líquido já foi selecionado automaticamente pelo sistema.' },
                   ].map(p => (
                     <li key={p.n} className="flex gap-3 text-xs text-amber-800">
                       <span className="w-5 h-5 rounded-full bg-amber-400 text-white font-black flex items-center justify-center flex-shrink-0 text-[10px]">{p.n}</span>
@@ -359,13 +377,47 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
               </div>
             </div>
 
+            {/* Separador de Líquido — sempre automático no modo Engenharia */}
+            <div className="mb-6">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                🔒 Separador de Líquido — seleção automática
+              </h3>
+              {loading && (
+                <div className="p-4 text-center text-slate-400 text-sm animate-pulse">Buscando separador...</div>
+              )}
+              {!loading && separadorAuto ? (
+                <div className="p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50 flex items-start gap-4">
+                  <div className="mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black bg-emerald-500 text-white flex-shrink-0">
+                    ✓
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-black uppercase text-emerald-600">{separadorAuto.categoria}</span>
+                      <span className="text-xs font-bold text-slate-900">R$ {separadorAuto.custo?.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <h4 className="font-bold text-slate-800">{separadorAuto.modelo}</h4>
+                    <div className="text-[10px] text-slate-500 font-medium mt-1">
+                      {separadorAuto.fabricante} | {separadorAuto.conexao_entrada} | {separadorAuto.faixa_operacao}
+                    </div>
+                    <div className="mt-1.5 inline-block bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                      🔒 Selecionado automaticamente
+                    </div>
+                  </div>
+                </div>
+              ) : !loading && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                  ⚠️ Separador de líquido não encontrado no banco para esta faixa. Verifique os dados cadastrados.
+                </div>
+              )}
+            </div>
+
             {/* Registro manual dos componentes selecionados */}
             <div className="mb-6">
               <h3 className="text-sm font-black text-slate-700 mb-1 flex items-center gap-2">
                 📋 Registrar componentes selecionados no CoolSelector
               </h3>
               <p className="text-[10px] text-slate-400 mb-4">
-                Após selecionar no CoolSelector, insira os componentes escolhidos abaixo para incluir no projeto.
+                Selecione no CoolSelector e registre abaixo: VET, Filtro Secador, Válvula Solenoide e Visor de Líquido.
               </p>
 
               <div className="space-y-3">
@@ -454,7 +506,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
             <button
               onClick={finalizarEngenharia}
-              disabled={!linhasManuais.some(l => l.modelo.trim())}
+              disabled={!linhasManuais.some(l => l.modelo.trim()) && !separadorAuto}
               className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               CONFIRMAR COMPONENTES E IR PARA TUBULAÇÃO ➡️
