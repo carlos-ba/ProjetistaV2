@@ -202,6 +202,40 @@ async def seed_perf_t2(token: str, db: AsyncSession = Depends(get_db)):
             "total_performance_componente": total}
 
 
+@router.post("/sep-oleo")
+async def seed_sep_oleo(token: str, db: AsyncSession = Depends(get_db)):
+    """Insere separadores de óleo RAC Brasil (10 modelos, 140 performances)."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    import os
+    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            "seed_sep_oleo.sql")
+    if not os.path.exists(sql_path):
+        raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {sql_path}")
+
+    with open(sql_path, encoding="utf-8") as f:
+        lines = [l.strip() for l in f if l.strip().startswith("INSERT") or l.strip().startswith("SELECT")]
+
+    inseridos = 0; erros = 0
+    for line in lines:
+        try:
+            await db.execute(text(line))
+            inseridos += 1
+        except Exception:
+            erros += 1
+
+    await db.commit()
+
+    r = await db.execute(text("SELECT COUNT(*) FROM componente_tecnico ct JOIN categoria cat ON cat.id=ct.categoria_id WHERE cat.nome='Separador de Óleo'"))
+    total_comp = r.scalar()
+    r2 = await db.execute(text("SELECT COUNT(*) FROM performance_componente pc JOIN componente_tecnico ct ON ct.id=pc.componente_id JOIN categoria cat ON cat.id=ct.categoria_id WHERE cat.nome='Separador de Óleo'"))
+    total_perf = r2.scalar()
+
+    return {"status": "sucesso", "inseridos": inseridos, "erros": erros,
+            "separadores_oleo": total_comp, "performances": total_perf}
+
+
 @router.get("/auditoria")
 async def auditoria(token: str, db: AsyncSession = Depends(get_db)):
     """
