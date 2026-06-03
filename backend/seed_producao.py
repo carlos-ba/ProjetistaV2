@@ -7,9 +7,9 @@ import asyncio
 import sys
 import os
 
-# Garantir que roda em ambiente de produção
-if os.getenv("APP_ENV") != "production":
-    print("[SEED] Nao e producao — abortando.")
+# Rodar apenas se DATABASE_URL estiver configurada
+if not os.getenv("DATABASE_URL"):
+    print("[SEED] DATABASE_URL nao definida — abortando.")
     sys.exit(0)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
