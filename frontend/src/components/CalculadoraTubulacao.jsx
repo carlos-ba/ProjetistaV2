@@ -16,6 +16,8 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
   const [deltaT,         setDeltaT]        = useState(6);
   const [padrao,         setPadrao]        = useState('H');
   const [isolarLiquido,  setIsolarLiquido] = useState(false);
+  const [numCurvas90,    setNumCurvas90]   = useState('');    // vazio = automático
+  const [incluirSifao,   setIncluirSifao]  = useState(true);
   const [sugestao,       setSugestao]      = useState(null);
   const [resultado,      setResultado]     = useState(null);
   const [erro,           setErro]          = useState('');
@@ -55,6 +57,8 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
         delta_t_selecionado:  deltaT,
         padrao_isolamento:    padrao,
         isolar_liquido:       isolarLiquido,
+        num_curvas_90:        numCurvas90 !== '' ? parseInt(numCurvas90) : null,
+        incluir_sifao:        incluirSifao,
       });
       setResultado(response.data);
       if (aoFinalizar) aoFinalizar(response.data.lista_materiais);
@@ -115,6 +119,56 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
               <input type="checkbox" checked={isolarLiquido} onChange={e => setIsolarLiquido(e.target.checked)}
                 className="w-4 h-4 accent-blue-600" />
             </label>
+          </div>
+        </div>
+
+        {/* Conexões */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <h3 className="text-sm font-black text-slate-700 mb-3">🔗 Conexões e Acessórios</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">
+                Curvas 90°
+                <span className="font-normal text-slate-400 ml-1 normal-case">(vazio = automático)</span>
+              </label>
+              <input
+                type="number" min="0" value={numCurvas90}
+                onChange={e => setNumCurvas90(e.target.value)}
+                placeholder={`Auto (${
+                  parseFloat(distancia) <= 10 ? 2 :
+                  parseFloat(distancia) <= 20 ? 4 :
+                  parseFloat(distancia) <= 40 ? 6 :
+                  parseFloat(distancia) <= 60 ? 8 : 10
+                } estimado)`}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              />
+              <p className="text-[10px] text-slate-400">
+                Curvas 45° = metade das 90° | Uniões = igual às 90°
+              </p>
+            </div>
+
+            <div className="flex items-end pb-6">
+              <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${incluirSifao ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
+                <div>
+                  <span className="font-bold block">Sifão + Contra-sifão</span>
+                  <span className="text-[10px] opacity-70">Saída do evaporador</span>
+                </div>
+                <input type="checkbox" checked={incluirSifao} onChange={e => setIncluirSifao(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600" />
+              </label>
+            </div>
+
+            <div className="flex items-end pb-6">
+              <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${isolarLiquido ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
+                <div>
+                  <span className="font-bold block">Isolar Líquido</span>
+                  <span className="text-[10px] opacity-70">Caso especial</span>
+                </div>
+                <input type="checkbox" checked={isolarLiquido} onChange={e => setIsolarLiquido(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600" />
+              </label>
+            </div>
           </div>
         </div>
 
@@ -181,6 +235,14 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
                 <div className="text-3xl font-black text-teal-900 mt-1">{resultado.diametro_succao}</div>
                 <p className="text-xs text-teal-600 mt-1 font-medium">Com Isolamento</p>
               </div>
+            </div>
+
+            {/* Info conexões */}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
+              <span className="font-bold">Conexões: </span>
+              {resultado.curvas_90_usadas} curvas 90° + {Math.floor(resultado.curvas_90_usadas / 2)} curvas 45°
+              {incluirSifao && ' + sifão + contra-sifão (sucção)'}
+              <span className="text-blue-400 ml-2">— {resultado.origem_curvas}</span>
             </div>
 
             {/* Lista de materiais */}

@@ -13,6 +13,10 @@ import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
 import PainelInsights from './components/PainelInsights.jsx';
 import EtapaCard from './components/EtapaCard.jsx';
+import { Button } from './components/ui/button.jsx';
+import { Badge } from './components/ui/badge.jsx';
+import { Separator } from './components/ui/separator.jsx';
+import { LayoutDashboard, FolderOpen, Settings, LogOut, Plus, Save, CopyPlus, CheckCircle2, Circle, Lock, ChevronRight } from 'lucide-react';
 
 
 function AppContent() {
@@ -24,18 +28,29 @@ function AppContent() {
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
   const [cargaCalculada, setCargaCalculada] = useState(null);
   const [itensOrcamento, setItensOrcamento] = useState({ materiais: [], equipamentos: [] });
-  const [itensAcessorios, setItensAcessorios] = useState([]);   // step 4 — para o painel lateral
-  const [itensTubulacao, setItensTubulacao]   = useState([]);   // step 5 — para o painel lateral
+  const [itensGabinete,   setItensGabinete]   = useState([]);   // step 1 — lista de corte de painéis
+  const [itensAcessorios, setItensAcessorios] = useState([]);   // step 4 — componentes de fluxo
+  const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 5 — tubulação
   const [passoAtual, setPassoAtual] = useState(1);
-  const [passoExpandido, setPassoExpandido] = useState(1);   // qual card está aberto para edição
-  const [passoSelecionado, setPassoSelecionado] = useState(1); // qual card está selecionado (detalhe à direita)
+  const [passoExpandido, setPassoExpandido] = useState(1);
+  const [passoSelecionado, setPassoSelecionado] = useState(1);
+  const [proximaEtapa, setProximaEtapa] = useState(null); // {numero, label} — aguardando confirmação do usuário
   const [salvando, setSalvando] = useState(false);
   const [projetoAtual, setProjetoAtual] = useState(null); // { id, nome, cliente } ou null se novo
   const [listaProjetos, setListaProjetos] = useState([]);
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
 
   // --- FUNÇÕES DE INTERLIGAÇÃO (PONTES) ---
-  const { useCallback } = React;
+  const { useCallback, useEffect } = React;
+
+  // Reconstrói materiais do orçamento sempre que qualquer fonte muda.
+  // Ordem: gabinete (painéis) → acessórios (VET, separador) → tubulação (tubos, isolamento)
+  useEffect(() => {
+    setItensOrcamento(prev => ({
+      ...prev,
+      materiais: [...itensGabinete, ...itensAcessorios, ...itensTubulacao],
+    }));
+  }, [itensGabinete, itensAcessorios, itensTubulacao]);
 
   // 1. Recebe do Gabinete (Módulo 1)
   const receberDadosGabinete = useCallback((dadosCompletos) => {
@@ -65,24 +80,22 @@ function AppContent() {
       const eraFalse = !gabineteCalculadoRef.current;
       gabineteCalculadoRef.current = true;
       setGabineteCalculado(true);
-      if (eraFalse) { setPassoExpandido(2); setPassoSelecionado(2); }
+      if (eraFalse) {
+        setPassoSelecionado(2);
+        setProximaEtapa({ numero: 2, label: 'Cálculo de Carga Térmica' });
+      }
     } else {
       gabineteCalculadoRef.current = false;
       setGabineteCalculado(false);
+      setProximaEtapa(null);
       setPassoExpandido(1); setPassoSelecionado(1);
     }
 
     if (dadosCompletos.lista_materiais) {
-      setItensOrcamento(prev => ({ 
-        ...prev, 
-        materiais: dadosCompletos.lista_materiais,
-        imagem_projeto: dadosCompletos.imagem_projeto
-      }));
+      setItensGabinete(dadosCompletos.lista_materiais); // painéis, acessórios de montagem etc.
+      setItensOrcamento(prev => ({ ...prev, imagem_projeto: dadosCompletos.imagem_projeto }));
     } else if (dadosCompletos.imagem_projeto) {
-      setItensOrcamento(prev => ({ 
-        ...prev, 
-        imagem_projeto: dadosCompletos.imagem_projeto
-      }));
+      setItensOrcamento(prev => ({ ...prev, imagem_projeto: dadosCompletos.imagem_projeto }));
     }
     
     setPassoAtual(prev => (prev < 2 ? 2 : prev));
@@ -92,27 +105,31 @@ function AppContent() {
   const receberResultadoCarga = useCallback((valorKcal) => {
     setCargaCalculada(valorKcal);
     setPassoAtual(prev => Math.max(prev, 3));
-    setPassoExpandido(3); setPassoSelecionado(3);
+    setPassoSelecionado(3);
+    setProximaEtapa({ numero: 3, label: 'Seleção de Equipamentos' });
   }, []);
 
   const receberEquipamentosFinalizados = useCallback((equipamentos) => {
-    setItensOrcamento(prev => ({ ...prev, equipamentos: [...prev.equipamentos, ...equipamentos] }));
+    setItensOrcamento(prev => ({ ...prev, equipamentos }));
+    setItensAcessorios([]);
+    setItensTubulacao([]);
     setPassoAtual(prev => Math.max(prev, 4));
-    setPassoExpandido(4); setPassoSelecionado(4);
+    setPassoSelecionado(4);
+    setProximaEtapa({ numero: 4, label: 'Componentes e Acessórios' });
   }, []);
 
   const receberComponentesFluxo = useCallback((listaAcessorios) => {
-    setItensOrcamento(prev => ({ ...prev, materiais: [...prev.materiais, ...listaAcessorios] }));
-    setItensAcessorios(listaAcessorios);   // guarda separado para o painel lateral
+    setItensAcessorios(listaAcessorios);
     setPassoAtual(prev => Math.max(prev, 5));
-    setPassoExpandido(5); setPassoSelecionado(5);
+    setPassoSelecionado(5);
+    setProximaEtapa({ numero: 5, label: 'Dimensionamento de Tubulação' });
   }, []);
 
   const receberDadosTubulacao = useCallback((listaTubos) => {
-    setItensOrcamento(prev => ({ ...prev, materiais: [...prev.materiais, ...listaTubos] }));
-    setItensTubulacao(listaTubos);         // guarda separado para o painel lateral
+    setItensTubulacao(listaTubos);
     setPassoAtual(prev => Math.max(prev, 6));
-    setPassoExpandido(6); setPassoSelecionado(6);
+    setPassoSelecionado(6);
+    setProximaEtapa({ numero: 6, label: 'Gerador de Orçamento' });
   }, []);
 
   // ── Wizard helpers ────────────────────────────────────────────────────
@@ -148,11 +165,22 @@ function AppContent() {
     if (etapaDisponivel(n)) {
       setPassoExpandido(n);
       setPassoSelecionado(n);
+      setProximaEtapa(null); // cancela confirmação pendente ao editar
     }
   };
 
   // Clique em "Descartar edição" → fecha sem perder dados, mantém selecionado
-  const fecharEtapa = () => setPassoExpandido(null);
+  const fecharEtapa = () => { setPassoExpandido(null); setProximaEtapa(null); };
+
+  // Confirmação do usuário para avançar à próxima etapa
+  const confirmarAvanco = () => {
+    if (proximaEtapa) {
+      setPassoExpandido(proximaEtapa.numero);
+      setPassoSelecionado(proximaEtapa.numero);
+      setProximaEtapa(null);
+    }
+  };
+  const recusarAvanco = () => setProximaEtapa(null);
 
   // Summaries exibidos nos cards colapsados
   const resumoEtapa = (n) => {
@@ -197,6 +225,7 @@ function AppContent() {
     setDadosDoGabinete(null);
     setCargaCalculada(null);
     setItensOrcamento({ materiais: [], equipamentos: [] });
+    setItensGabinete([]);
     setItensAcessorios([]);
     setItensTubulacao([]);
     setPassoAtual(1);
@@ -291,46 +320,133 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex print:bg-white">
-      {/* Sidebar Lateral Moderna */}
-      <aside className="w-64 text-white flex-shrink-0 hidden lg:flex flex-col print:hidden" style={{ background: 'linear-gradient(180deg, #1a0d2e 0%, #2a1245 100%)' }}>
-        <div className="p-6">
+    <div className="h-screen bg-background flex flex-col overflow-hidden print:bg-white print:h-auto print:overflow-visible">
+
+      {/* ══ BARRA DE CABEÇALHO ÚNICA — alinha as 3 colunas ══ */}
+      <div className="sticky top-0 z-20 flex border-b bg-card print:hidden">
+
+        {/* Cabeçalho Esquerda */}
+        <div className="w-60 flex-shrink-0 border-r hidden lg:flex flex-col justify-center px-5 py-3">
           <img
-            src="/static/logoIceNexusIAR.png"
+            src="/logoIceNexusIAR _png.png"
             alt="IceNexus IAR"
-            className="w-full max-h-20 object-contain mb-4"
+            className="w-full max-h-12 object-contain"
           />
-          <h1 className="text-2xl font-black bg-gradient-to-r from-green-400 to-purple-400 bg-clip-text text-transparent">
-            PROJETISTA 360
-          </h1>
-          <p className="text-purple-300/60 text-xs mt-1 font-medium uppercase tracking-widest">Engineering Suite</p>
+          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mt-1">
+            Engineering Suite <span className="text-muted-foreground/40 ml-1">v1.2</span>
+          </p>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <div className="p-3 rounded-lg flex items-center gap-3 cursor-pointer" style={{ background: 'rgba(123,45,139,0.5)' }}>
-            <span>📐</span> <span className="font-semibold">Projeto Atual</span>
+        {/* Cabeçalho Centro */}
+        <div className="flex-1 flex flex-col justify-between px-6 py-3">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="font-semibold text-foreground leading-tight">
+                {projetoAtual ? projetoAtual.nome : 'Novo Dimensionamento'}
+              </h2>
+              <div className="mt-0.5">
+                {projetoAtual
+                  ? <span className="text-xs text-muted-foreground">#{projetoAtual.id}</span>
+                  : <Badge variant="warning" className="text-[10px]">Não salvo</Badge>
+                }
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={novoProjeto} className="gap-1">
+                <Plus className="w-4 h-4" /> Novo
+              </Button>
+              <Button variant="outline" size="sm" onClick={salvarComo} disabled={salvando} className="gap-1">
+                <CopyPlus className="w-4 h-4" /> Salvar Como
+              </Button>
+              <Button size="sm" onClick={salvarProjeto} disabled={salvando} className="gap-1">
+                <Save className="w-4 h-4" /> {salvando ? 'Salvando...' : 'Salvar'}
+              </Button>
+              <Separator orientation="vertical" className="h-6 mx-1" />
+              <span className="text-xs text-muted-foreground hidden sm:block">{user.username}</span>
+              <Button variant="ghost" size="icon" onClick={logout} title="Sair" className="text-muted-foreground hover:text-destructive">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-          <div
-            onClick={abrirHistorico}
-            className="p-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors text-purple-200/70 hover:text-white"
-            style={{ '--tw-bg-opacity': 1 }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(123,45,139,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <span>📁</span> <span>Histórico</span>
+          {/* Progress tracker */}
+          <div className="mt-2">
+            <div className="flex items-center gap-1">
+              {[
+                [1,'Gabinete'], [2,'Carga'], [3,'Equipamentos'],
+                [4,'Acessórios'], [5,'Tubulação'], [6,'Orçamento']
+              ].map(([step, label], idx) => {
+                const st        = statusEtapa(step);
+                const concluido = st === 'concluido';
+                const ativo     = passoExpandido === step;
+                const disponivel= st !== 'bloqueado';
+                return (
+                  <React.Fragment key={step}>
+                    {idx > 0 && (
+                      <div className={`flex-1 h-px transition-colors ${concluido || ativo ? 'bg-primary/40' : 'bg-border'}`} />
+                    )}
+                    <div
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all
+                        ${disponivel ? 'cursor-pointer' : 'cursor-not-allowed'}
+                        ${ativo ? 'bg-primary text-primary-foreground' : ''}
+                        ${concluido && !ativo ? 'text-emerald-600 hover:bg-muted' : ''}
+                        ${!concluido && !ativo ? 'text-muted-foreground' : ''}
+                      `}
+                      onClick={() => abrirEtapa(step)}
+                    >
+                      {ativo        ? <Circle className="w-3 h-3 fill-current" />
+                      : concluido   ? <CheckCircle2 className="w-3 h-3" />
+                      : !disponivel ? <Lock className="w-3 h-3" />
+                      : <Circle className="w-3 h-3" />}
+                      <span className="hidden sm:block">{label}</span>
+                      <span className="sm:hidden">{step}</span>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
-          <div
-            className="p-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors text-purple-200/70 hover:text-white"
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(123,45,139,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <span>⚙️</span> <span>Configurações</span>
+        </div>
+
+        {/* Cabeçalho Direita */}
+        <div className="w-80 flex-shrink-0 border-l hidden xl:flex flex-col justify-center px-5 py-3"
+             style={{ background: 'linear-gradient(135deg, #1a0d2e 0%, #2a1245 100%)' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-widest">Painel Técnico</h3>
+              <p className="text-xs text-purple-300/70 font-bold uppercase mt-0.5">Indicadores em tempo real</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+              <span className="text-[10px] text-emerald-400 font-medium">Conectado</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ CORPO — 3 colunas abaixo do header ══ */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+      {/* ── Sidebar Esquerda ── */}
+      <aside className="w-60 border-r bg-card flex-shrink-0 hidden lg:flex flex-col print:hidden overflow-y-auto">
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary font-semibold text-sm cursor-pointer">
+            <LayoutDashboard className="w-4 h-4" /> Projeto Atual
+          </div>
+          <div onClick={abrirHistorico}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+            <FolderOpen className="w-4 h-4" /> Histórico
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+            <Settings className="w-4 h-4" /> Configurações
           </div>
         </nav>
 
-        {/* Insights de Engenharia — sidebar esquerda */}
+        {/* Insights */}
         {dadosDoGabinete && (
-          <div className="px-4 pb-2">
+          <div className="px-3 pb-2">
+            <Separator className="mb-3" />
             <PainelInsights
               dimensoes={{ comp: dadosDoGabinete.comprimento, larg: dadosDoGabinete.largura, alt: dadosDoGabinete.altura }}
               temps={{ interna: dadosDoGabinete.temperatura_interna, externa: 35,
@@ -343,106 +459,12 @@ function AppContent() {
           </div>
         )}
 
-        <div className="p-4 border-t border-purple-900/50">
-          <div className="p-4 rounded-xl" style={{ background: 'rgba(107,191,63,0.1)', border: '1px solid rgba(107,191,63,0.2)' }}>
-            <p className="text-xs text-slate-400">Status do Servidor</p>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-bold text-emerald-500">Conectado</span>
-            </div>
-          </div>
-        </div>
       </aside>
 
-      {/* Área de Conteúdo Principal */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto print:h-auto print:overflow-visible print:bg-white">
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm print:hidden">
-          <div className="p-4 flex justify-between items-center">
-            <div>
-              <h2 className="text-slate-800 font-bold text-lg">
-                {projetoAtual ? projetoAtual.nome : 'Novo Dimensionamento Frigorífico'}
-              </h2>
-              {projetoAtual ? (
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Projeto #{projetoAtual.id}</p>
-              ) : (
-                <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wide">Projeto não salvo</span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={novoProjeto}
-                className="text-slate-500 px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors"
-              >
-                + Novo
-              </button>
-              <button
-                onClick={salvarComo}
-                disabled={salvando}
-                className="border-2 border-[#7B2D8B] text-[#7B2D8B] px-3 py-2 rounded-lg text-sm font-bold hover:bg-purple-50 transition-colors disabled:opacity-50"
-              >
-                Salvar Como
-              </button>
-              <button
-                onClick={salvarProjeto}
-                disabled={salvando}
-                className={`bg-[#7B2D8B] text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors ${salvando ? 'opacity-50 cursor-not-allowed' : 'hover:bg-purple-800'}`}
-              >
-                {salvando ? 'Salvando...' : 'Salvar Projeto'}
-              </button>
-              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-slate-200">
-                <span className="text-xs text-slate-500 font-medium hidden sm:block">{user.username}</span>
-                <button
-                  onClick={logout}
-                  className="text-slate-400 hover:text-red-500 px-2 py-2 rounded-lg text-sm transition-colors"
-                  title="Sair"
-                >
-                  ⏏
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Progress Tracker Visual - Agora dentro do header fixo */}
-          <div className="px-8 pb-6 max-w-4xl mx-auto w-full">
-            <div className="flex justify-between items-center relative">
-              <div className="absolute h-1 bg-slate-200 left-0 right-0 top-1/2 -translate-y-1/2 z-0"></div>
-              {[
-                [1,'Gabinete'], [2,'Carga'], [3,'Equipamento'],
-                [4,'Acessórios'], [5,'Tubulação'], [6,'Orçamento']
-              ].map(([step, label]) => {
-                const st        = statusEtapa(step);
-                const concluido = st === 'concluido';
-                const ativo     = passoExpandido === step;
-                const disponivel= st !== 'bloqueado';
-                return (
-                  <div
-                    key={step}
-                    className={`flex flex-col items-center z-10 ${disponivel ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                    onClick={() => abrirEtapa(step)}
-                    title={disponivel ? `Ir para ${label}` : `Complete a etapa ${step - 1} primeiro`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-all duration-300 ${
-                      ativo
-                        ? 'bg-[#7B2D8B] text-white border-purple-200 scale-110 shadow-lg shadow-purple-200'
-                        : concluido
-                          ? 'bg-[#6BBF3F] text-white border-green-100 hover:scale-105'
-                          : 'bg-white text-slate-400 border-slate-200'
-                    }`}>
-                      {concluido && !ativo ? '✓' : step}
-                    </div>
-                    <span className={`text-[10px] font-bold uppercase mt-1 absolute -bottom-5 whitespace-nowrap ${
-                      ativo ? 'text-[#7B2D8B]' : concluido ? 'text-emerald-600' : 'text-slate-400'
-                    }`}>
-                      {label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </header>
+      {/* ── Área Principal ── */}
+      <main className="flex-1 min-w-0 min-h-0 overflow-y-auto print:overflow-visible">
 
-        <div className="p-8 pt-12 max-w-5xl mx-auto w-full space-y-12 print:p-0 print:max-w-none print:m-0">
+        <div className="p-6 max-w-4xl mx-auto w-full space-y-4 print:p-0 print:max-w-none print:m-0">
           
           {/* MODAL DE HISTÓRICO */}
           {mostrandoHistorico && (
@@ -495,6 +517,8 @@ function AppContent() {
               selecionado={passoSelecionado === 1 && passoExpandido !== 1}
               onSelecionar={() => selecionarEtapa(1)}
               onEditar={() => editarEtapa(1)} onFechar={fecharEtapa}
+              confirmacaoProxima={passoExpandido === 1 && proximaEtapa ? proximaEtapa.label : null}
+              onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <CalculadoraGabinete key={projetoKey} aoFinalizar={receberDadosGabinete} />
             </EtapaCard>
@@ -507,6 +531,8 @@ function AppContent() {
               selecionado={passoSelecionado === 2 && passoExpandido !== 2}
               onSelecionar={() => selecionarEtapa(2)}
               onEditar={() => editarEtapa(2)} onFechar={fecharEtapa}
+              confirmacaoProxima={passoExpandido === 2 && proximaEtapa ? proximaEtapa.label : null}
+              onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <CalculadoraCargaTermica dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
             </EtapaCard>
@@ -519,6 +545,8 @@ function AppContent() {
               selecionado={passoSelecionado === 3 && passoExpandido !== 3}
               onSelecionar={() => selecionarEtapa(3)}
               onEditar={() => editarEtapa(3)} onFechar={fecharEtapa}
+              confirmacaoProxima={passoExpandido === 3 && proximaEtapa ? proximaEtapa.label : null}
+              onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <SelecaoEquipamentos
                 cargaInicial={cargaCalculada}
@@ -536,6 +564,8 @@ function AppContent() {
               selecionado={passoSelecionado === 4 && passoExpandido !== 4}
               onSelecionar={() => selecionarEtapa(4)}
               onEditar={() => editarEtapa(4)} onFechar={fecharEtapa}
+              confirmacaoProxima={passoExpandido === 4 && proximaEtapa ? proximaEtapa.label : null}
+              onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <ComponentesFluxo
                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
@@ -553,6 +583,8 @@ function AppContent() {
               selecionado={passoSelecionado === 5 && passoExpandido !== 5}
               onSelecionar={() => selecionarEtapa(5)}
               onEditar={() => editarEtapa(5)} onFechar={fecharEtapa}
+              confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
+              onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
               <CalculadoraTubulacao equipamentoSelecionado={getUltimoEquipamento()} aoFinalizar={receberDadosTubulacao} />
             </EtapaCard>
@@ -579,7 +611,7 @@ function AppContent() {
         </div>
       </main>
 
-      {/* PAINEL RESUMO LATERAL (Ocupa o espaço em branco na direita) */}
+      {/* Painel Lateral Direito */}
       <aside className="print:hidden">
         <PainelResumoLateral
           dadosGabinete={dadosDoGabinete}
@@ -592,6 +624,8 @@ function AppContent() {
           itensTubulacao={itensTubulacao}
         />
       </aside>
+
+      </div>{/* fim do corpo 3 colunas */}
     </div>
   );
 }
@@ -611,5 +645,6 @@ function App() {
 }
 
 export default App;
+
 
 

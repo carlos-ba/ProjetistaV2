@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.schemas.catalogo import (
     CategoriaOut, FabricanteOut, PerfilProdutoTermicoOut,
-    TipoProdutoTermicoOut, MaterialOut, EquipamentoOut, PainelFrigorificoOut,
+    TipoProdutoTermicoOut, MaterialOut, EquipamentoOut,
+    PainelFrigorificoOut, PortaFrigoriificaOut,
 )
 from app.services.catalogo import (
     listar_categorias, listar_fabricantes, listar_perfis_produto,
     listar_tipos_produto, listar_materiais, listar_equipamentos,
-    listar_paineis, listar_fabricantes_paineis,
+    listar_paineis, listar_fabricantes_paineis, listar_portas,
 )
 
 router = APIRouter(prefix="/api/v1/catalogo", tags=["catalogo"])
@@ -63,3 +64,13 @@ async def get_paineis(
 ):
     """Lista painéis com filtros opcionais: fabricante, núcleo, espessura."""
     return await listar_paineis(db, fabricante_id, nucleo, espessura_mm)
+
+
+@router.get("/portas", response_model=list[PortaFrigoriificaOut])
+async def get_portas(
+    classificacao: str | None = Query(default=None, description="resfriados | congelada | ultra-congelada"),
+    tipo: str | None = Query(default=None, description="giratoria | deslizante | rapida"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lista portas frigoríficas com filtros opcionais."""
+    return await listar_portas(db, classificacao, tipo)

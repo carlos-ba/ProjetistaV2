@@ -73,6 +73,23 @@ class EquipamentoOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PortaFrigoriificaOut(BaseModel):
+    id: int
+    descricao: str
+    tipo: str
+    largura_mm: int
+    altura_mm: int
+    espessura_mm: int
+    classificacao: str
+    abertura: str | None
+    batente: str | None
+    soleira: bool
+    custo: Decimal
+    fabricante: FabricanteOut | None
+
+    model_config = {"from_attributes": True}
+
+
 class PainelFrigorificoOut(BaseModel):
     id: int
     produto: str

@@ -172,14 +172,8 @@ const PainelResumoLateral = ({
   const temEvap   = vazaoTotalHoraria > 0;
 
   return (
-    <aside className="w-80 bg-white border-l border-slate-200 hidden xl:flex flex-col sticky top-0 h-screen overflow-y-auto shadow-sm">
+    <aside className="w-80 bg-white border-l border-slate-200 hidden xl:flex flex-col min-h-0 overflow-y-auto shadow-sm">
 
-      {/* Cabeçalho */}
-      <div className="p-5 border-b border-purple-900/30 flex-shrink-0"
-           style={{ background: 'linear-gradient(135deg, #1a0d2e 0%, #2a1245 100%)' }}>
-        <h3 className="text-sm font-black text-white uppercase tracking-widest">Painel Técnico</h3>
-        <p className="text-xs text-purple-300/70 font-bold uppercase mt-0.5">Indicadores em tempo real</p>
-      </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
@@ -300,13 +294,6 @@ const PainelResumoLateral = ({
 
       </div>
 
-      {/* Rodapé */}
-      <div className="p-4 bg-slate-900 text-white flex-shrink-0">
-        <div className="flex justify-between items-center">
-          <span className="text-[10px] font-black uppercase text-slate-400">Versão</span>
-          <span className="text-[10px] font-black uppercase">1.2 PRO</span>
-        </div>
-      </div>
     </aside>
   );
 };
