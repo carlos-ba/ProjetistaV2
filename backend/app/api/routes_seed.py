@@ -166,6 +166,42 @@ async def seed_delta(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "inseridos": inseridos, "erros": erros, "totais": totais}
 
 
+@router.post("/perf-t2")
+async def seed_perf_t2(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Insere as 128 performances das VETs T2 Danfoss faltantes em produção.
+    Usa ON CONFLICT DO NOTHING — seguro rodar múltiplas vezes.
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    import os
+    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            "seed_perf_t2.sql")
+    if not os.path.exists(sql_path):
+        raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {sql_path}")
+
+    with open(sql_path, encoding="utf-8") as f:
+        lines = [l.strip() for l in f if l.strip().startswith("INSERT")]
+
+    inseridos = 0
+    erros = 0
+    for line in lines:
+        try:
+            await db.execute(text(line))
+            inseridos += 1
+        except Exception:
+            erros += 1
+
+    await db.commit()
+
+    r = await db.execute(text("SELECT COUNT(*) FROM performance_componente"))
+    total = r.scalar()
+
+    return {"status": "sucesso", "inseridos": inseridos, "erros": erros,
+            "total_performance_componente": total}
+
+
 @router.post("/executar")
 async def executar_seed(token: str, db: AsyncSession = Depends(get_db)):
     """
