@@ -2,183 +2,380 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 
 const COMPONENTES_SEGURANCA = [
-  { id: 'quadro_eletrico',     label: 'Quadro Elétrico' },
-  { id: 'separador_oleo',      label: 'Separador de Óleo' },
-  { id: 'pressostato_alta',    label: 'Pressostato de Alta' },
-  { id: 'pressostato_baixa',   label: 'Pressostato de Baixa' },
+  { id: 'quadro_eletrico',  label: 'Quadro Elétrico' },
+  { id: 'separador_oleo',   label: 'Separador de Óleo' },
+  { id: 'pressostato_alta', label: 'Pressostato de Alta' },
+  { id: 'pressostato_baixa',label: 'Pressostato de Baixa' },
 ];
 
+// Categorias para seleção manual (modo Engenharia)
+const CATEGORIAS_MANUAL = [
+  'Válvula de Expansão Termostática',
+  'Filtro Secador',
+  'Visor de Líquido',
+  'Válvula Solenoide',
+  'Separador de Líquido',
+  'Pressostato',
+];
+
+const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', conexao: '', capacidade: '', custo: '' });
+
 const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, aoFinalizar }) => {
-  const [componentes, setComponentes] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState('');
+
+  // ── Modo de seleção ───────────────────────────────────────────────────
+  const [modo, setModo] = useState('automatico'); // 'automatico' | 'engenharia'
+
+  // ── Modo Automático ───────────────────────────────────────────────────
+  const [componentes,  setComponentes]  = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [erro,         setErro]         = useState('');
   const [selecionados, setSelecionados] = useState({});
-  const [seguranca, setSeguranca] = useState(
+  const [seguranca,    setSeguranca]    = useState(
+    Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
+  );
+
+  // ── Modo Engenharia ───────────────────────────────────────────────────
+  const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
+  const [segurancaEng,  setSegurancaEng]  = useState(
     Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
   );
 
   const buscarComponentes = async () => {
-    setLoading(true);
-    setErro('');
+    setLoading(true); setErro('');
     try {
       const response = await api.post('/api/v1/componentes', {
-        capacidade_kcalh: cargaAlvo,
-        fluido: fluido,
-        temp_evap: tempEvap
+        capacidade_kcalh: cargaAlvo, fluido, temp_evap: tempEvap
       });
       setComponentes(response.data);
-      
-      // Pré-seleciona todos por padrão
       const initial = {};
-      response.data.forEach(c => {
-        initial[c.categoria] = true;
-      });
+      response.data.forEach(c => { initial[c.categoria] = true; });
       setSelecionados(initial);
-    } catch (error) {
-      console.error(error);
-      setErro('Erro ao buscar componentes de fluxo.');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setErro('Erro ao buscar componentes de fluxo.'); }
+    finally   { setLoading(false); }
   };
 
   useEffect(() => {
-    if (cargaAlvo > 0) {
-      buscarComponentes();
-    }
-  }, [cargaAlvo, fluido, tempEvap]);
+    if (cargaAlvo > 0 && modo === 'automatico') buscarComponentes();
+  }, [cargaAlvo, fluido, tempEvap, modo]);
 
-  const toggleSelecao = (categoria) => {
-    setSelecionados(prev => ({
-      ...prev,
-      [categoria]: !prev[categoria]
-    }));
-  };
-
+  // ── Finalizar Automático ──────────────────────────────────────────────
   const finalizar = () => {
-    const itensParaEnviar = componentes
+    const itens = componentes
       .filter(c => selecionados[c.categoria])
       .map(c => ({
         item: `${c.categoria} ${c.modelo}`,
-        quantidade: 1,
-        unidade: 'un',
+        quantidade: 1, unidade: 'un',
         detalhe: `${c.fabricante} | ${c.conexao_entrada} | ${c.faixa_operacao}`,
-        custo_unitario: c.custo, // Se o orçamento precisar do custo
-        preco: c.custo // Compatibilidade com GeradorOrcamento
+        custo_unitario: c.custo, preco: c.custo,
       }));
-
-    if (aoFinalizar) {
-      aoFinalizar(itensParaEnviar);
-    }
+    if (aoFinalizar) aoFinalizar(itens);
   };
 
-  if (loading) return <div className="p-8 text-center text-slate-500 font-bold animate-pulse">⚙️ Dimensionando acessórios de fluxo...</div>;
-  if (erro) return <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100">{erro}</div>;
+  // ── Finalizar Engenharia ──────────────────────────────────────────────
+  const finalizarEngenharia = () => {
+    const itens = linhasManuais
+      .filter(l => l.modelo.trim() && l.categoria)
+      .map(l => ({
+        item: `${l.categoria} ${l.modelo}`,
+        quantidade: 1, unidade: 'un',
+        detalhe: [l.fabricante, l.conexao, l.capacidade ? `${l.capacidade} kcal/h` : ''].filter(Boolean).join(' | '),
+        custo_unitario: parseFloat(l.custo) || 0,
+        preco: parseFloat(l.custo) || 0,
+      }));
+    if (aoFinalizar) aoFinalizar(itens);
+  };
+
+  const updateLinha = (i, campo, valor) => {
+    const novas = [...linhasManuais];
+    novas[i] = { ...novas[i], [campo]: valor };
+    setLinhasManuais(novas);
+  };
+
+  const COOLSELECTOR_URL = `https://coolselectoronline.danfoss.com/`;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden transition-all hover:shadow-xl">
+    <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
       <div className="bg-gradient-to-r from-[#7B2D8B] to-[#6BBF3F] px-6 py-4 flex justify-between items-center">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <span className="bg-white/20 p-1.5 rounded-lg text-lg">🔧</span>
           Componentes de Fluxo e Segurança
         </h2>
         <div className="text-[10px] text-white/80 font-bold bg-white/20 px-3 py-1 rounded-full uppercase">
-          Dimensionamento Automático
+          {modo === 'automatico' ? 'Seleção Automática' : 'Modo Engenharia'}
         </div>
       </div>
 
       <div className="p-6">
-        <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-           <div>
-              <span className="text-[10px] font-black text-slate-400 uppercase">Referência de Projeto</span>
-              <div className="text-sm font-bold text-slate-700">
-                {cargaAlvo} kcal/h | {fluido} | {tempEvap}°C Evap.
-              </div>
-           </div>
-           <button 
-             onClick={buscarComponentes}
-             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline"
-           >
-             Recalcular Acessórios
-           </button>
+
+        {/* ── Seletor de modo ── */}
+        <div className="mb-6 bg-slate-50 rounded-xl border border-slate-200 p-1 flex gap-1">
+          <button
+            onClick={() => setModo('automatico')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              modo === 'automatico'
+                ? 'bg-[#7B2D8B] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            ⚡ Automático
+            <span className={`text-[10px] font-normal ${modo === 'automatico' ? 'text-white/70' : 'text-slate-400'}`}>
+              — banco de dados
+            </span>
+          </button>
+          <button
+            onClick={() => setModo('engenharia')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              modo === 'engenharia'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            🔬 Engenharia
+            <span className={`text-[10px] font-normal ${modo === 'engenharia' ? 'text-white/70' : 'text-slate-400'}`}>
+              — CoolSelector Danfoss
+            </span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {componentes.map((comp, idx) => (
-            <div 
-              key={idx}
-              onClick={() => toggleSelecao(comp.categoria)}
-              className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
-                selecionados[comp.categoria] 
-                  ? 'border-emerald-500 bg-emerald-50 shadow-sm' 
-                  : 'border-slate-100 bg-white opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
-              }`}
-            >
-              <div className={`mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${
-                selecionados[comp.categoria] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
-              }`}>
-                {selecionados[comp.categoria] ? '✓' : ''}
+        {/* ══ MODO AUTOMÁTICO ══ */}
+        {modo === 'automatico' && (
+          <>
+            {/* Referência do projeto */}
+            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black text-slate-400 uppercase">Referência de Projeto</span>
+                <div className="text-sm font-bold text-slate-700">
+                  {cargaAlvo} kcal/h | {fluido} | {tempEvap}°C Evap.
+                </div>
               </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <span className={`text-[10px] font-black uppercase ${
-                    selecionados[comp.categoria] ? 'text-emerald-600' : 'text-slate-400'
+              <button onClick={buscarComponentes} className="text-xs font-bold text-emerald-600 hover:underline">
+                Recalcular
+              </button>
+            </div>
+
+            {loading && <div className="p-8 text-center text-slate-500 animate-pulse">⚙️ Selecionando componentes...</div>}
+            {erro    && <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 mb-4">{erro}</div>}
+
+            {/* Cards dos componentes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {componentes.map((comp, idx) => (
+                <div key={idx}
+                  onClick={() => setSelecionados(prev => ({ ...prev, [comp.categoria]: !prev[comp.categoria] }))}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
+                    selecionados[comp.categoria]
+                      ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                      : 'border-slate-100 bg-white opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
+                  }`}
+                >
+                  <div className={`mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${
+                    selecionados[comp.categoria] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
                   }`}>
-                    {comp.categoria}
-                  </span>
-                  <span className="text-xs font-bold text-slate-900">R$ {comp.custo.toLocaleString('pt-BR')}</span>
+                    {selecionados[comp.categoria] ? '✓' : ''}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <span className={`text-[10px] font-black uppercase ${selecionados[comp.categoria] ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {comp.categoria}
+                      </span>
+                      <span className="text-xs font-bold text-slate-900">R$ {comp.custo?.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <h4 className="font-bold text-slate-800">{comp.modelo}</h4>
+                    <div className="text-[10px] text-slate-500 font-medium mt-1">
+                      {comp.fabricante} | {comp.conexao_entrada} | {comp.faixa_operacao}
+                    </div>
+                  </div>
                 </div>
-                <h4 className="font-bold text-slate-800">{comp.modelo}</h4>
-                <div className="text-[10px] text-slate-500 font-medium mt-1">
-                  {comp.fabricante} | {comp.conexao_entrada} | {comp.faixa_operacao}
-                </div>
+              ))}
+            </div>
+
+            {/* Segurança */}
+            <div className="mb-6">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                Componentes de Segurança
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {COMPONENTES_SEGURANCA.map(comp => (
+                  <div key={comp.id}
+                    onClick={() => setSeguranca(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
+                      seguranca[comp.id] ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-black ${
+                      seguranca[comp.id] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      {seguranca[comp.id] ? '✓' : ''}
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">{comp.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* CHECKLIST DE SEGURANÇA */}
-        <div className="mt-6">
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-            Componentes de Segurança
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {COMPONENTES_SEGURANCA.map(comp => (
-              <div
-                key={comp.id}
-                onClick={() => setSeguranca(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
-                  seguranca[comp.id]
-                    ? 'border-emerald-500 bg-emerald-50 shadow-sm'
-                    : 'border-slate-100 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-black ${
-                  seguranca[comp.id] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
-                }`}>
-                  {seguranca[comp.id] ? '✓' : ''}
+            <button onClick={finalizar}
+              className="w-full py-4 bg-[#7B2D8B] text-white rounded-xl font-bold hover:bg-purple-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
+              CONFIRMAR ACESSÓRIOS E IR PARA TUBULAÇÃO ➡️
+            </button>
+          </>
+        )}
+
+        {/* ══ MODO ENGENHARIA ══ */}
+        {modo === 'engenharia' && (
+          <>
+            {/* Banner CoolSelector */}
+            <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white text-2xl flex-shrink-0">
+                  🔬
                 </div>
                 <div className="flex-1">
-                  <span className="font-bold text-slate-800 text-sm">{comp.label}</span>
-                  <span className={`ml-2 text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                    seguranca[comp.id]
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-100 text-slate-400'
-                  }`}>
-                    {seguranca[comp.id] ? 'Selecionado' : 'Não Selecionado'}
-                  </span>
+                  <h3 className="font-black text-blue-900 text-base">CoolSelector®2 Online — Danfoss</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Acesse o seletor oficial da Danfoss para dimensionar componentes com precisão de engenharia.
+                    Após selecionar, registre os resultados abaixo.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-blue-600 font-bold">
+                    <span>✓ VET • Filtros • Solenoides</span>
+                    <span>✓ R22 • R404A • R448A • CO₂</span>
+                    <span>✓ Sem instalação necessária</span>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <button
-          onClick={finalizar}
-          className="w-full mt-8 py-4 bg-[#7B2D8B] text-white rounded-xl font-bold hover:bg-purple-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
-        >
-          CONFIRMAR ACESSÓRIOS E IR PARA TUBULAÇÃO ➡️
-        </button>
+              {/* Parâmetros sugeridos */}
+              <div className="mt-4 bg-white rounded-lg border border-blue-100 p-3">
+                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">
+                  Parâmetros do seu projeto para usar no CoolSelector:
+                </p>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                    <p className="text-[9px] text-blue-400 uppercase font-bold">Capacidade</p>
+                    <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')} kcal/h</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                    <p className="text-[9px] text-blue-400 uppercase font-bold">Fluido</p>
+                    <p className="text-sm font-black text-blue-800">{fluido}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                    <p className="text-[9px] text-blue-400 uppercase font-bold">T. Evaporação</p>
+                    <p className="text-sm font-black text-blue-800">{tempEvap}°C</p>
+                  </div>
+                </div>
+              </div>
+
+              <a
+                href={COOLSELECTOR_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+              >
+                🚀 ABRIR COOLSELECTOR®2 ONLINE
+                <span className="text-[10px] text-blue-200">— abre em nova aba</span>
+              </a>
+            </div>
+
+            {/* Registro manual dos componentes selecionados */}
+            <div className="mb-6">
+              <h3 className="text-sm font-black text-slate-700 mb-1 flex items-center gap-2">
+                📋 Registrar componentes selecionados no CoolSelector
+              </h3>
+              <p className="text-[10px] text-slate-400 mb-4">
+                Após selecionar no CoolSelector, insira os componentes escolhidos abaixo para incluir no projeto.
+              </p>
+
+              <div className="space-y-3">
+                {linhasManuais.map((l, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-slate-400 uppercase">Componente {i + 1}</span>
+                      {linhasManuais.length > 1 && (
+                        <button onClick={() => setLinhasManuais(linhasManuais.filter((_, j) => j !== i))}
+                          className="text-red-400 hover:text-red-600 text-xs">✕ remover</button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="col-span-2 md:col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Categoria</label>
+                        <select value={l.categoria} onChange={e => updateLinha(i, 'categoria', e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none bg-white">
+                          <option value="">Selecione...</option>
+                          {CATEGORIAS_MANUAL.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Modelo</label>
+                        <input value={l.modelo} onChange={e => updateLinha(i, 'modelo', e.target.value)}
+                          placeholder="Ex: T2 - 3"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Fabricante</label>
+                        <input value={l.fabricante} onChange={e => updateLinha(i, 'fabricante', e.target.value)}
+                          placeholder="Ex: Danfoss"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Conexão</label>
+                        <input value={l.conexao} onChange={e => updateLinha(i, 'conexao', e.target.value)}
+                          placeholder='Ex: 3/8"'
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Capacidade (kcal/h)</label>
+                        <input type="number" value={l.capacidade} onChange={e => updateLinha(i, 'capacidade', e.target.value)}
+                          placeholder="Ex: 7178"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Custo (R$)</label>
+                        <input type="number" value={l.custo} onChange={e => updateLinha(i, 'custo', e.target.value)}
+                          placeholder="0,00"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={() => setLinhasManuais([...linhasManuais, novaLinhaManual()])}
+                className="mt-3 text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
+                + Adicionar componente
+              </button>
+            </div>
+
+            {/* Segurança modo engenharia */}
+            <div className="mb-6">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                Componentes de Segurança
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {COMPONENTES_SEGURANCA.map(comp => (
+                  <div key={comp.id}
+                    onClick={() => setSegurancaEng(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
+                      segurancaEng[comp.id] ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-black ${
+                      segurancaEng[comp.id] ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-400'
+                    }`}>
+                      {segurancaEng[comp.id] ? '✓' : ''}
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">{comp.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={finalizarEngenharia}
+              disabled={!linhasManuais.some(l => l.modelo.trim())}
+              className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              CONFIRMAR COMPONENTES E IR PARA TUBULAÇÃO ➡️
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
