@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: projetista-v2-api
+    name: projetista-v2-backend
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt && alembic upgrade head
@@ -25,3 +25,4 @@ databases:
   - name: projetista-v2-db
     databaseName: projetista_v2
     user: projetista
+
