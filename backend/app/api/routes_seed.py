@@ -78,6 +78,54 @@ SELECT setval('tipo_produto_termico_id_seq', GREATEST((SELECT MAX(id) FROM tipo_
 """
 
 
+@router.post("/catalogo")
+async def seed_catalogo(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Importa equipamentos, componentes, painéis, isolamentos e portas.
+    Lê o arquivo seed_catalogo_clean.sql do repositório.
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    # Verificar se já tem dados
+    result = await db.execute(text("SELECT COUNT(*) FROM equipamento"))
+    count = result.scalar()
+    if count > 0:
+        return {"status": "ja_executado", "equipamentos": count}
+
+    # Ler SQL do arquivo
+    import os
+    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            "seed_catalogo_clean.sql")
+    if not os.path.exists(sql_path):
+        raise HTTPException(status_code=404, detail=f"Arquivo seed não encontrado: {sql_path}")
+
+    with open(sql_path, encoding="utf-8") as f:
+        sql_content = f.read()
+
+    # Executar linha por linha (apenas INSERTs)
+    inseridos = 0
+    for line in sql_content.splitlines():
+        line = line.strip()
+        if line.startswith("INSERT INTO"):
+            try:
+                await db.execute(text(line))
+                inseridos += 1
+            except Exception:
+                pass  # ON CONFLICT DO NOTHING equivalente
+
+    await db.commit()
+
+    # Contar resultados
+    totais = {}
+    for tabela in ["equipamento", "performance_equipamento", "componente_tecnico",
+                   "painel_frigorifico", "isolamento_tubulacao", "porta_frigoriifica"]:
+        r = await db.execute(text(f"SELECT COUNT(*) FROM {tabela}"))
+        totais[tabela] = r.scalar()
+
+    return {"status": "sucesso", "inseridos": inseridos, "totais": totais}
+
+
 @router.post("/executar")
 async def executar_seed(token: str, db: AsyncSession = Depends(get_db)):
     """
