@@ -10,6 +10,7 @@ class TubulacaoRequest(BaseModel):
     delta_t_selecionado: float = 6.0
     padrao_isolamento: str = "H"
     isolar_liquido: bool = False
+    num_circuitos: int = 1              # nº de unidades condensadoras (cada uma = 1 circuito)
     # Conexões
     num_curvas_90: int | None = None    # None = automático por distância
     incluir_sifao: bool = True          # sifão + contra-sifão na sucção (saída evap)

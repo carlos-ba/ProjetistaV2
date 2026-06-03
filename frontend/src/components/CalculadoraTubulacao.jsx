@@ -57,6 +57,7 @@ const CalculadoraTubulacao = ({ equipamentoSelecionado, aoFinalizar }) => {
         delta_t_selecionado:  deltaT,
         padrao_isolamento:    padrao,
         isolar_liquido:       isolarLiquido,
+        num_circuitos:        equipamentoSelecionado.qtde || 1,
         num_curvas_90:        numCurvas90 !== '' ? parseInt(numCurvas90) : null,
         incluir_sifao:        incluirSifao,
       });

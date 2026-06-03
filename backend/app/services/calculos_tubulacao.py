@@ -284,10 +284,13 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
     diam_liquido = _selecionar_liquido(fluido_tabela, req.capacidade_real, fator_liquido)
 
     # ── Quantidades ───────────────────────────────────────────────────────────
-    qtd_tubo  = math.ceil(req.distancia * 1.1)   # +10% para conexões e curvas
-    match     = re.search(r"(\d+)", diam_succao)
-    valor_diam= int(match.group()) if match else 1
-    qtd_solda = math.ceil((qtd_tubo / 5) * (valor_diam / 2))
+    # Cada unidade condensadora = 1 circuito independente (sucção + líquido + conexões)
+    circuitos  = max(1, req.num_circuitos)
+    qtd_tubo_1 = math.ceil(req.distancia * 1.1)   # +10% para conexões e curvas (por circuito)
+    qtd_tubo   = qtd_tubo_1 * circuitos            # total para todos os circuitos
+    match      = re.search(r"(\d+)", diam_succao)
+    valor_diam = int(match.group()) if match else 1
+    qtd_solda  = math.ceil((qtd_tubo_1 / 5) * (valor_diam / 2)) * circuitos
 
     # ── Notas técnicas ────────────────────────────────────────────────────────
     cap_interp = _interpolar_cap(fluido_tabela, _SUCCAO_CAP.get(fluido_tabela, _SUCCAO_CAP[_FLUIDO_FALLBACK]), req.temp_evap, diam_succao)
@@ -348,22 +351,33 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
                 detalhe=f"Consultar catálogo para bitola {diam_liquido}",
             ))
 
-    # ── Conexões (curvas, uniões, reduções, sifão) ────────────────────────
-    conexoes, curvas_usadas, origem_curvas = _calcular_conexoes(
+    # ── Conexões (curvas, uniões, reduções, sifão) — por circuito ────────
+    conexoes_1, curvas_usadas, origem_curvas = _calcular_conexoes(
         diam_succao   = diam_succao,
         diam_liquido  = diam_liquido,
         distancia     = req.distancia,
         num_curvas_90 = req.num_curvas_90,
         incluir_sifao = req.incluir_sifao,
     )
+    # Multiplica conexões pelo número de circuitos
+    conexoes: list[ItemTubulacao] = []
+    sufixo = f" × {circuitos} circuitos" if circuitos > 1 else ""
+    for c in conexoes_1:
+        conexoes.append(ItemTubulacao(
+            item=c.item,
+            quantidade=c.quantidade * circuitos,
+            unidade=c.unidade,
+            detalhe=c.detalhe + sufixo,
+        ))
     materiais.extend(conexoes)
 
     # ── Solda: emendas de tubo + uma por conexão ──────────────────────────
-    qtd_solda_total = qtd_solda + len(conexoes)
+    qtd_solda_total = qtd_solda + len(conexoes_1) * circuitos
+    nota_circ = f" | {circuitos} circuito(s)" if circuitos > 1 else ""
     materiais.append(ItemTubulacao(
         item="Solda Prata 15% / Foscoper",
         quantidade=qtd_solda_total, unidade="vareta",
-        detalhe=f"{qtd_solda} emendas de tubo + {len(conexoes)} conexões ({diam_succao})",
+        detalhe=f"{qtd_solda} emendas de tubo + {len(conexoes_1) * circuitos} conexões ({diam_succao}){nota_circ}",
     ))
 
     return TubulacaoResponse(
