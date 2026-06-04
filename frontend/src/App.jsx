@@ -351,7 +351,9 @@ function AppContent() {
               </h2>
               <div className="mt-0.5">
                 {projetoAtual
-                  ? <span className="text-xs text-muted-foreground">#{projetoAtual.id}</span>
+                  ? <span className="text-xs text-muted-foreground">
+                      {projetoAtual.cliente ? `Cliente: ${projetoAtual.cliente}` : '✅ Salvo'}
+                    </span>
                   : <Badge variant="warning" className="text-[10px]">Não salvo</Badge>
                 }
               </div>
