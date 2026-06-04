@@ -58,13 +58,17 @@ _SUCCAO_CAP: dict[str, dict[int, dict[str, int]]] = {
 }
 
 # ── Linha de Líquido (capacidade pouco dependente de temperatura) ──────────
+# REVISÃO v2: fator de correção 0,56 aplicado sobre valores originais.
+# Calibração com 4 casos reais (jun/2026):
+#   3/8" real: entre 3.841 e 5.128 kcal/h → estimativa 4.500 kcal/h (fator 4500/8000 = 0,56)
+#   Sucção: corrigida na v1 (fator 0,40) — confirmada em 4 casos
 _BITOLAS_LIQUIDO = ['1/4"', '3/8"', '1/2"', '5/8"', '7/8"', '1.1/8"', '1.3/8"', '1.5/8"', '2.1/8"']
 
 _LIQUIDO_CAP: dict[str, dict[str, int]] = {
-    "R22":   {'1/4"': 2500,  '3/8"': 7500,  '1/2"': 15000, '5/8"': 26000,
-              '7/8"': 55000, '1.1/8"': 100000,'1.3/8"': 160000,'1.5/8"': 240000,'2.1/8"': 420000},
-    "R404A": {'1/4"': 2800,  '3/8"': 8000,  '1/2"': 16000, '5/8"': 28000,
-              '7/8"': 60000, '1.1/8"': 110000,'1.3/8"': 175000,'1.5/8"': 265000,'2.1/8"': 460000},
+    "R22":   {'1/4"': 1400,  '3/8"': 4200,  '1/2"':  8400, '5/8"': 14560,
+              '7/8"': 30800, '1.1/8"': 56000,'1.3/8"': 89600,'1.5/8"':134400,'2.1/8"':235200},
+    "R404A": {'1/4"': 1570,  '3/8"': 4480,  '1/2"':  8960, '5/8"': 15680,
+              '7/8"': 33600, '1.1/8"': 61600,'1.3/8"': 98000,'1.5/8"':148400,'2.1/8"':257600},
 }
 # Fluidos sem tabela própria → usa R22 como fallback conservador
 _FLUIDO_FALLBACK = "R22"
