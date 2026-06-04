@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-const COMPONENTES_SEGURANCA = [
-  { id: 'quadro_eletrico', label: 'Quadro Elétrico' },
-];
 
 // Categorias para seleção manual (modo Engenharia) — Separadores de Líquido e Óleo são automáticos
 const CATEGORIAS_MANUAL = [
@@ -25,15 +22,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [loading,      setLoading]      = useState(false);
   const [erro,         setErro]         = useState('');
   const [selecionados, setSelecionados] = useState({});
-  const [seguranca,    setSeguranca]    = useState(
-    Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
-  );
-
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
-  const [segurancaEng,  setSegurancaEng]  = useState(
-    Object.fromEntries(COMPONENTES_SEGURANCA.map(c => [c.id, false]))
-  );
   // T.Amb vem do Card 2 (Carga Térmica) — ajustável pelo técnico se necessário
   const [tempAmb, setTempAmb] = useState(tempAmbProp);
   const tempCond = tempAmb + 10; // T.Cond = T.Amb + 10°C (padrão de mercado)
@@ -245,30 +235,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* Segurança */}
-            <div className="mb-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                Componentes de Segurança
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {COMPONENTES_SEGURANCA.map(comp => (
-                  <div key={comp.id}
-                    onClick={() => setSeguranca(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
-                      seguranca[comp.id] ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-black ${
-                      seguranca[comp.id] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
-                    }`}>
-                      {seguranca[comp.id] ? '✓' : ''}
-                    </div>
-                    <span className="font-bold text-slate-800 text-sm">{comp.label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
 
             <button onClick={finalizar}
@@ -498,30 +464,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 className="mt-3 text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
                 + Adicionar componente
               </button>
-            </div>
-
-            {/* Segurança modo engenharia */}
-            <div className="mb-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                Componentes de Segurança
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {COMPONENTES_SEGURANCA.map(comp => (
-                  <div key={comp.id}
-                    onClick={() => setSegurancaEng(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 ${
-                      segurancaEng[comp.id] ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-black ${
-                      segurancaEng[comp.id] ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-400'
-                    }`}>
-                      {segurancaEng[comp.id] ? '✓' : ''}
-                    </div>
-                    <span className="font-bold text-slate-800 text-sm">{comp.label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
 
             <button
