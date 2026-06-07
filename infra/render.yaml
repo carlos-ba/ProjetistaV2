@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: projetista-v2-backend
+    name: projetista-v2-api-alt
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt && alembic upgrade head
@@ -13,11 +13,11 @@ services:
           name: projetista-v2-db
           property: connectionString
       - key: CORS_ORIGINS
-        value: '["https://projetista-v2-frontend.vercel.app"]'
+        value: '["https://projetista-v2.vercel.app"]'
       - key: SECRET_KEY
         generateValue: true
       - key: FRONTEND_URL
-        value: https://projetista-v2-frontend.vercel.app
+        value: https://projetista-v2.vercel.app
       # Email — configurar manualmente no painel Render após deploy
       # MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM, MAIL_SERVER, MAIL_PORT
 

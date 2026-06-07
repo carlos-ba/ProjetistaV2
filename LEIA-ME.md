@@ -35,8 +35,9 @@ cd frontend && npm run dev       # frontend (novo terminal)
 ---
 
 ## Produção
-- **Frontend:** https://projetista-v2-frontend-carlos-bas-projects.vercel.app
-- **Backend:** https://projetista-v2-backend.onrender.com
+- **Frontend:** https://projetista-v2.vercel.app
+- **Backend:** https://projetista-v2-api-alt.onrender.com
+- **API Docs:** https://projetista-v2-api-alt.onrender.com/docs
 
 ---
 
@@ -94,4 +95,4 @@ python scripts\importar_portas.py <arquivo.xlsx>
 | Backend | FastAPI + SQLAlchemy + PostgreSQL + Alembic |
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy | Render (backend) + Vercel (frontend) |
-| Banco local | Docker PostgreSQL 17 |
+| Banco local | PostgreSQL 17 instalado localmente (porta 5432) |
