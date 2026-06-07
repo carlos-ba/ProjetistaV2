@@ -40,3 +40,7 @@ build/
 tools/
 .claude/
 .junie/
+
+# Database dumps
+*.sql.bak
+db_*_dump.sql
