@@ -37,7 +37,12 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
-        if isinstance(value, str) and value.startswith("postgresql://"):
+        if not isinstance(value, str):
+            return value
+        # Render fornece "postgres://" — normalizar para o driver psycopg3
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
