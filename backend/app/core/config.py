@@ -41,12 +41,8 @@ class Settings(BaseSettings):
             return value
         # Render fornece "postgres://" — normalizar para o driver psycopg3
         if value.startswith("postgres://"):
-            url = value.replace("postgres://", "postgresql+psycopg://", 1)
-            # Render exige SSL — adicionar sslmode=require se não presente
-            if "sslmode" not in url:
-                sep = "&" if "?" in url else "?"
-                url += f"{sep}sslmode=require"
-            return url
+            # Render fornece postgres:// — converter para psycopg3
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
         if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
