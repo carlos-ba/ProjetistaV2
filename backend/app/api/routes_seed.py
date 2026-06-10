@@ -407,3 +407,53 @@ async def executar_seed(token: str, db: AsyncSession = Depends(get_db)):
         totais[tabela] = r.scalar()
 
     return {"status": "sucesso", "registros": totais}
+
+
+@router.post("/base-completo")
+async def seed_base_completo(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Força a inserção de todas as categorias, fabricantes e dados base
+    mesmo que já existam registros. Usa ON CONFLICT DO NOTHING — seguro.
+    Útil para completar bancos que foram criados com seed parcial.
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    # Executa cada bloco separadamente para contornar limitação do driver async
+    sqls = [
+        """INSERT INTO categoria (id, nome) VALUES
+          (1,'Unidade Condensadora'),(2,'Evaporadora'),(3,'Compressor'),
+          (4,'Válvula de Expansão Termostática'),(5,'Filtro Secador'),
+          (6,'Visor de Líquido'),(7,'Válvula Solenoide'),(8,'Pressostato'),
+          (9,'Tubulação de Cobre'),(10,'Isolamento Térmico'),
+          (11,'Material Elétrico'),(12,'Painel Frigorífico'),
+          (13,'Solda e Fluxo'),(14,'Separador de Líquido'),
+          (15,'Separador de Óleo')
+        ON CONFLICT DO NOTHING""",
+
+        """INSERT INTO fabricante (nome) VALUES
+          ('Tecumseh'),('Embraco'),('Bitzer'),('Danfoss'),('Parker'),
+          ('Elgin'),('Genérico'),('Kingspan Isoeste'),('RAC'),('Armacel')
+        ON CONFLICT (nome) DO NOTHING""",
+
+        """INSERT INTO unidade_medida (id, nome, sigla) VALUES
+          (1,'unidade','un'),(2,'metro','m'),(3,'metro quadrado','m²'),
+          (4,'quilograma','kg'),(5,'litro','L'),(6,'conjunto','cj')
+        ON CONFLICT DO NOTHING""",
+    ]
+
+    for sql in sqls:
+        await db.execute(text(sql))
+
+    await db.commit()
+
+    totais = {}
+    for tabela in ["categoria", "fabricante", "unidade_medida"]:
+        r = await db.execute(text(f"SELECT COUNT(*) FROM {tabela}"))
+        totais[tabela] = r.scalar()
+
+    # Lista as categorias inseridas
+    r = await db.execute(text("SELECT id, nome FROM categoria ORDER BY id"))
+    totais["categorias_lista"] = [{"id": row[0], "nome": row[1]} for row in r.fetchall()]
+
+    return {"status": "sucesso", "totais": totais}
