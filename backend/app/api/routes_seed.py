@@ -497,6 +497,44 @@ async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "categorias": categorias}
 
 
+@router.post("/fix-equipamentos-duplicados")
+async def fix_equipamentos_duplicados(token: str, db: AsyncSession = Depends(get_db)):
+    """Remove registros duplicados de equipamento (mesmo modelo, mantém o de menor id)."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    # Encontra duplicatas
+    r = await db.execute(text("""
+        SELECT modelo, COUNT(*) as total, MIN(id) as manter
+        FROM equipamento
+        GROUP BY modelo
+        HAVING COUNT(*) > 1
+    """))
+    duplicatas = r.fetchall()
+
+    removidos = 0
+    for modelo, total, manter_id in duplicatas:
+        # Deleta todos exceto o de menor id
+        res = await db.execute(text("""
+            DELETE FROM equipamento
+            WHERE modelo = :m AND id != :keep
+        """), {"m": modelo, "keep": manter_id})
+        removidos += res.rowcount
+
+    await db.commit()
+
+    r = await db.execute(text("SELECT COUNT(*) FROM equipamento"))
+    r2 = await db.execute(text("SELECT COUNT(*) FROM performance_equipamento"))
+
+    return {
+        "status": "sucesso",
+        "duplicatas_encontradas": len(duplicatas),
+        "registros_removidos": removidos,
+        "total_equipamentos": r.scalar(),
+        "total_performances": r2.scalar()
+    }
+
+
 @router.get("/export-equipamentos")
 async def export_equipamentos(token: str, db: AsyncSession = Depends(get_db)):
     """Exporta todos os equipamentos com performances para sincronização entre bancos."""
