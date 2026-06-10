@@ -587,6 +587,11 @@ async def _rac_extras_impl(db: AsyncSession):
         ('RAC 14000 4 1/8"', '4 1/8"', 580500, [("R134a",-30,61920,24768),("R134a",-10,193500,77400),("R134a",5,387000,154800),("R22",-30,141900,56760),("R22",-10,322500,129000),("R22",5,580500,232200),("R404A",-30,141900,56760),("R404A",-10,322500,129000),("R404A",5,580500,232200)]),
     ]
 
+    # Reseta sequência para evitar conflito de ID (dados foram inseridos com IDs explícitos)
+    await db.execute(text(
+        "SELECT setval('componente_tecnico_id_seq', (SELECT MAX(id) FROM componente_tecnico))"
+    ))
+
     comp_novos = 0; perf_ins = 0
 
     for modelo, conexao, cap_nom, perfs in MODELOS:
