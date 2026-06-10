@@ -497,6 +497,50 @@ async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "categorias": categorias}
 
 
+@router.post("/isolamentos")
+async def seed_isolamentos(token: str, db: AsyncSession = Depends(get_db)):
+    """Insere os 97 registros de isolamento Armacel. Idempotente."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    DADOS = [
+        (6.0,"D","D-06",6.0),(6.0,"F","F-06",9.0),(6.0,"H","H-06",13.0),(6.0,"M","M-06",19.0),
+        (10.0,"D","D-10",6.5),(10.0,"F","F-10",9.0),(10.0,"H","H-10",13.0),(10.0,"M","M-10",19.0),
+        (12.0,"D","D-12",7.0),(12.0,"F","F-12",9.5),(12.0,"H","H-12",13.0),(12.0,"M","M-12",19.0),(12.0,"R","R-12",25.0),
+        (15.0,"D","D-15",7.0),(15.0,"F","F-15",9.5),(15.0,"H","H-15",13.0),(15.0,"M","M-15",19.0),(15.0,"R","R-15",25.0),(15.0,"T","T-15",32.0),
+        (18.0,"D","D-18",7.0),(18.0,"F","F-18",10.0),(18.0,"H","H-18",13.0),(18.0,"M","M-18",19.0),(18.0,"R","R-18",25.0),(18.0,"T","T-18",32.0),
+        (22.0,"D","D-22",7.5),(22.0,"F","F-22",10.0),(22.0,"H","H-22",13.0),(22.0,"M","M-22",20.0),(22.0,"R","R-22",25.0),(22.0,"T","T-22",32.0),
+        (25.0,"D","D-25",7.5),(25.0,"F","F-25",10.5),(25.0,"H","H-25",13.0),(25.0,"M","M-25",20.5),(25.0,"R","R-25",25.0),(25.0,"T","T-25",32.0),
+        (28.0,"D","D-28",7.5),(28.0,"F","F-28",10.5),(28.0,"H","H-28",13.5),(28.0,"M","M-28",21.0),(28.0,"R","R-28",25.0),(28.0,"T","T-28",33.5),
+        (32.0,"M","M-32",21.5),(32.0,"R","R-32",27.0),
+        (35.0,"F","F-35",11.0),(35.0,"H","H-35",14.0),(35.0,"M","M-35",21.5),(35.0,"R","R-35",27.0),(35.0,"T","T-35",35.0),
+        (38.0,"M","M-38",22.0),(38.0,"R","R-38",27.0),
+        (42.0,"F","F-42",11.0),(42.0,"H","H-42",14.5),(42.0,"M","M-42",22.0),(42.0,"R","R-42",27.0),(42.0,"T","T-42",36.5),
+        (48.0,"F","F-48",11.0),(48.0,"H","H-48",14.5),(48.0,"M","M-48",22.5),(48.0,"R","R-48",27.5),(48.0,"T","T-48",37.5),
+        (54.0,"F","F-54",11.5),(54.0,"H","H-54",14.5),(54.0,"M","M-54",23.0),(54.0,"R","R-54",28.5),(54.0,"T","T-54",38.0),
+        (60.0,"F","F-60",11.5),(60.0,"H","H-60",15.0),(60.0,"M","M-60",23.5),(60.0,"R","R-60",29.0),(60.0,"T","T-60",39.0),
+        (64.0,"F","F-64",11.5),(64.0,"H","H-64",15.0),(64.0,"M","M-64",23.5),(64.0,"R","R-64",29.0),(64.0,"T","T-64",39.5),
+        (76.2,"F","F-76",11.5),(76.2,"H","H-76",15.0),(76.2,"M","M-76",24.0),(76.2,"R","R-76",30.0),(76.2,"T","T-76",40.5),
+        (80.0,"F","F-80",11.5),(80.0,"H","H-80",15.5),(80.0,"M","M-80",24.5),(80.0,"R","R-80",30.5),(80.0,"T","T-80",41.0),
+        (88.9,"F","F-89",11.5),(88.9,"H","H-89",15.5),(88.9,"M","M-89",24.5),(88.9,"R","R-89",30.5),(88.9,"T","T-89",41.5),
+        (101.6,"F","F-102",11.5),(101.6,"H","H-102",15.5),(101.6,"M","M-102",25.0),(101.6,"R","R-102",31.5),(101.6,"T","T-102",42.5),
+    ]
+
+    inseridos = 0; atualizados = 0
+    for diam, padrao, ref, esp in DADOS:
+        await db.execute(text("""
+            INSERT INTO isolamento_tubulacao (diametro_cu_mm, padrao, referencia, espessura_mm)
+            VALUES (:d, :p, :r, :e)
+            ON CONFLICT (diametro_cu_mm, padrao) DO UPDATE
+              SET referencia=EXCLUDED.referencia, espessura_mm=EXCLUDED.espessura_mm
+        """), {"d": diam, "p": padrao, "r": ref, "e": esp})
+        inseridos += 1
+
+    await db.commit()
+    r = await db.execute(text("SELECT COUNT(*) FROM isolamento_tubulacao"))
+    return {"status": "sucesso", "processados": inseridos, "total": r.scalar()}
+
+
 @router.post("/fix-sequences")
 async def fix_sequences(token: str, db: AsyncSession = Depends(get_db)):
     """Reseta todas as sequências de autoincremento para o valor correto."""
