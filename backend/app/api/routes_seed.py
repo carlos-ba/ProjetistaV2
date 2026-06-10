@@ -504,9 +504,9 @@ async def export_equipamentos(token: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Token inválido.")
 
     r = await db.execute(text("""
-        SELECT e.modelo, e.codigo_fabricante, cat.nome as categoria,
-               f.nome as fabricante, e.capacidade_nominal, e.vazao_ar,
-               e.dados_especificos, e.custo
+        SELECT e.id, e.modelo, cat.nome as categoria, f.nome as fabricante,
+               e.qtde_ventiladores, e.diametro_ventilador_mm,
+               e.vazao_ar_m3h, e.flecha_ar_m, e.custo
         FROM equipamento e
         JOIN categoria cat ON cat.id = e.categoria_id
         JOIN fabricante f ON f.id = e.fabricante_id
@@ -514,21 +514,23 @@ async def export_equipamentos(token: str, db: AsyncSession = Depends(get_db)):
     """))
     equipamentos = []
     for row in r.fetchall():
+        eq_id = row[0]
         r2 = await db.execute(text("""
-            SELECT fluido, temp_evaporacao, temp_condensacao,
-                   capacidade_real, vazao_ar
+            SELECT fluido, temp_ambiente, temp_evaporacao, delta_t,
+                   capacidade, consumo_kw
             FROM performance_equipamento
-            WHERE equipamento_id = (
-                SELECT id FROM equipamento WHERE modelo=:m AND categoria_id=(
-                    SELECT id FROM categoria WHERE nome=:c))
+            WHERE equipamento_id = :eid
             ORDER BY fluido, temp_evaporacao
-        """), {"m": row[0], "c": row[2]})
-        perfs = [{"fluido": p[0], "temp_evap": p[1], "temp_cond": p[2],
-                  "cap_real": p[3], "vazao_ar": p[4]} for p in r2.fetchall()]
+        """), {"eid": eq_id})
+        perfs = [{"fluido": p[0], "temp_amb": p[1], "temp_evap": p[2],
+                  "delta_t": float(p[3]), "capacidade": p[4],
+                  "consumo_kw": float(p[5]) if p[5] else None}
+                 for p in r2.fetchall()]
         equipamentos.append({
-            "modelo": row[0], "codigo": row[1], "categoria": row[2],
-            "fabricante": row[3], "cap_nominal": row[4], "vazao_ar": row[5],
-            "dados": row[6], "custo": float(row[7]) if row[7] else 0,
+            "modelo": row[1], "categoria": row[2], "fabricante": row[3],
+            "qtde_vent": row[4], "diam_vent": row[5],
+            "vazao_ar": row[6], "flecha_ar": row[7],
+            "custo": float(row[8]) if row[8] else 0,
             "performances": perfs
         })
 
