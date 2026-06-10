@@ -526,14 +526,22 @@ async def seed_isolamentos(token: str, db: AsyncSession = Depends(get_db)):
         (101.6,"F","F-102",11.5),(101.6,"H","H-102",15.5),(101.6,"M","M-102",25.0),(101.6,"R","R-102",31.5),(101.6,"T","T-102",42.5),
     ]
 
-    inseridos = 0; atualizados = 0
+    # Busca fabricante Armacel
+    r = await db.execute(text("SELECT id FROM fabricante WHERE nome = 'Armacel'"))
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fabricante 'Armacel' não encontrado.")
+    fab_id = row[0]
+
+    inseridos = 0
     for diam, padrao, ref, esp in DADOS:
         await db.execute(text("""
-            INSERT INTO isolamento_tubulacao (diametro_cu_mm, padrao, referencia, espessura_mm)
-            VALUES (:d, :p, :r, :e)
-            ON CONFLICT (diametro_cu_mm, padrao) DO UPDATE
-              SET referencia=EXCLUDED.referencia, espessura_mm=EXCLUDED.espessura_mm
-        """), {"d": diam, "p": padrao, "r": ref, "e": esp})
+            INSERT INTO isolamento_tubulacao
+              (fabricante_id, diametro_cu_mm, padrao, referencia, espessura_mm, custo)
+            VALUES (:fab, :d, :p, :r, :e, 0)
+            ON CONFLICT (fabricante_id, padrao, referencia) DO UPDATE
+              SET diametro_cu_mm=EXCLUDED.diametro_cu_mm, espessura_mm=EXCLUDED.espessura_mm
+        """), {"fab": fab_id, "d": diam, "p": padrao, "r": ref, "e": esp})
         inseridos += 1
 
     await db.commit()
