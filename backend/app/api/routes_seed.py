@@ -497,6 +497,32 @@ async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "categorias": categorias}
 
 
+@router.post("/fix-sequences")
+async def fix_sequences(token: str, db: AsyncSession = Depends(get_db)):
+    """Reseta todas as sequências de autoincremento para o valor correto."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    tabelas = [
+        "componente_tecnico", "performance_componente",
+        "isolamento_tubulacao", "painel_frigorifico",
+        "porta_frigoriifica", "equipamento", "performance_equipamento",
+        "categoria", "fabricante", "usuario", "projeto",
+    ]
+    resultados = {}
+    for tabela in tabelas:
+        try:
+            r = await db.execute(text(
+                f"SELECT setval('{tabela}_id_seq', GREATEST((SELECT COALESCE(MAX(id),1) FROM {tabela}), 1))"
+            ))
+            resultados[tabela] = r.scalar()
+        except Exception as e:
+            resultados[tabela] = f"erro: {e}"
+
+    await db.commit()
+    return {"status": "sucesso", "sequencias": resultados}
+
+
 @router.post("/fix-componentes-categoria")
 async def fix_componentes_categoria(token: str, db: AsyncSession = Depends(get_db)):
     """
