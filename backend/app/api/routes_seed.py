@@ -495,3 +495,95 @@ async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
     categorias = [{"id": row[0], "nome": row[1]} for row in r.fetchall()]
 
     return {"status": "sucesso", "categorias": categorias}
+
+
+@router.post("/rac-extras")
+async def seed_rac_extras(token: str, db: AsyncSession = Depends(get_db)):
+    """Insere os 6 modelos RAC de Separador de Líquido maiores (faltando em produção)."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    from app.models.componente import ComponenteTecnico, PerformanceComponente
+    from app.models.catalogo import Categoria, Fabricante
+    from sqlalchemy import select as sa_select
+
+    MODELOS = [
+        {"modelo": 'RAC 1500 1 3/8"', "conexao": '1 3/8"', "cap_nom": 49020,
+         "perfs": [("R134a",-30,7224,2924),("R134a",-10,18920,7568),("R134a",5,36980,14792),
+                   ("R22",-30,15480,6192),("R22",-10,31820,12728),("R22",5,49020,19608),
+                   ("R404A",-30,15480,6192),("R404A",-10,31820,12728),("R404A",5,49020,19608)]},
+        {"modelo": 'RAC 2500 1 5/8"', "conexao": '1 5/8"', "cap_nom": 79980,
+         "perfs": [("R134a",-30,10750,4300),("R134a",-10,27520,11008),("R134a",5,52460,20984),
+                   ("R22",-30,19780,7912),("R22",-10,46440,18576),("R22",5,79980,31992),
+                   ("R404A",-30,19780,7912),("R404A",-10,46440,18576),("R404A",5,79980,31992)]},
+        {"modelo": 'RAC 4500 2 1/8"', "conexao": '2 1/8"', "cap_nom": 163400,
+         "perfs": [("R134a",-30,20640,8256),("R134a",-10,55040,22016),("R134a",5,116100,46440),
+                   ("R22",-30,37840,15136),("R22",-10,98900,39560),("R22",5,163400,65360),
+                   ("R404A",-30,37840,15136),("R404A",-10,98900,39560),("R404A",5,163400,65360)]},
+        {"modelo": 'RAC 9000 2 5/8"', "conexao": '2 5/8"', "cap_nom": 258000,
+         "perfs": [("R134a",-30,33540,13416),("R134a",-10,86000,34400),("R134a",5,172000,68800),
+                   ("R22",-30,61920,24768),("R22",-10,154800,61920),("R22",5,258000,103200),
+                   ("R404A",-30,61920,24768),("R404A",-10,154800,61920),("R404A",5,258000,103200)]},
+        {"modelo": 'RAC 12500 3 1/8"', "conexao": '3 1/8"', "cap_nom": 387000,
+         "perfs": [("R134a",-30,41280,16512),("R134a",-10,129000,51600),("R134a",5,258000,103200),
+                   ("R22",-30,94600,37840),("R22",-10,215000,86000),("R22",5,387000,154800),
+                   ("R404A",-30,94600,37840),("R404A",-10,215000,86000),("R404A",5,387000,154800)]},
+        {"modelo": 'RAC 14000 4 1/8"', "conexao": '4 1/8"', "cap_nom": 580500,
+         "perfs": [("R134a",-30,61920,24768),("R134a",-10,193500,77400),("R134a",5,387000,154800),
+                   ("R22",-30,141900,56760),("R22",-10,322500,129000),("R22",5,580500,232200),
+                   ("R404A",-30,141900,56760),("R404A",-10,322500,129000),("R404A",5,580500,232200)]},
+    ]
+
+    res = await db.execute(sa_select(Categoria).where(Categoria.nome == "Separador de Líquido"))
+    cat = res.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria 'Separador de Líquido' não encontrada.")
+
+    res = await db.execute(sa_select(Fabricante).where(Fabricante.nome == "RAC"))
+    fab = res.scalar_one_or_none()
+    if not fab:
+        raise HTTPException(status_code=404, detail="Fabricante 'RAC' não encontrado.")
+
+    comp_novos = 0; perf_ins = 0; perf_upd = 0
+
+    for m in MODELOS:
+        res = await db.execute(sa_select(ComponenteTecnico).where(
+            ComponenteTecnico.modelo == m["modelo"],
+            ComponenteTecnico.categoria_id == cat.id))
+        comp = res.scalar_one_or_none()
+        if not comp:
+            comp = ComponenteTecnico(
+                modelo=m["modelo"], categoria_id=cat.id, fabricante_id=fab.id,
+                conexao_entrada=m["conexao"], conexao_saida=m["conexao"],
+                capacidade_nominal=float(m["cap_nom"]), custo=0,
+                dados_especificos={})
+            db.add(comp); await db.flush()
+            comp_novos += 1
+
+        for fluido, t_evap, cap, cap_min in m["perfs"]:
+            res = await db.execute(sa_select(PerformanceComponente).where(
+                PerformanceComponente.componente_id == comp.id,
+                PerformanceComponente.fluido == fluido,
+                PerformanceComponente.temp_evaporacao == t_evap,
+                PerformanceComponente.temp_condensacao == 45))
+            ex = res.scalar_one_or_none()
+            if ex:
+                ex.capacidade_kcalh = float(cap); ex.capacidade_min_kcalh = float(cap_min)
+                perf_upd += 1
+            else:
+                db.add(PerformanceComponente(
+                    componente_id=comp.id, fluido=fluido,
+                    temp_evaporacao=t_evap, temp_condensacao=45,
+                    capacidade_kcalh=float(cap), capacidade_min_kcalh=float(cap_min)))
+                perf_ins += 1
+
+    await db.commit()
+
+    r = await db.execute(text(f"SELECT COUNT(*) FROM componente_tecnico WHERE categoria_id={cat.id}"))
+    total_comp = r.scalar()
+    r2 = await db.execute(text(f"SELECT COUNT(*) FROM performance_componente pc JOIN componente_tecnico ct ON ct.id=pc.componente_id WHERE ct.categoria_id={cat.id}"))
+    total_perf = r2.scalar()
+
+    return {"status": "sucesso", "comp_novos": comp_novos,
+            "perf_inseridas": perf_ins, "perf_atualizadas": perf_upd,
+            "total_separadores_liquido": total_comp, "total_performances": total_perf}
