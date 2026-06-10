@@ -5,7 +5,7 @@
 
 param(
     [string]$Token = "afd9dbd2df55ef4b30c286c16d16e0c5e836cbfdfd0b1e79c2471f7bac773915",
-    [string]$BackendUrl = "https://projetista-v2-backend.onrender.com"
+    [string]$BackendUrl = "https://projetista-v2-api-alt.onrender.com"
 )
 
 Write-Host ""
