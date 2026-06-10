@@ -457,3 +457,41 @@ async def seed_base_completo(token: str, db: AsyncSession = Depends(get_db)):
     totais["categorias_lista"] = [{"id": row[0], "nome": row[1]} for row in r.fetchall()]
 
     return {"status": "sucesso", "totais": totais}
+
+
+@router.post("/fix-categorias")
+async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
+    """Corrige nomes de categorias para bater exatamente com o código."""
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    updates = [
+        (1,  "Unidade Condensadora"),
+        (2,  "Evaporadora"),
+        (3,  "Compressor"),
+        (4,  "Válvula de Expansão Termostática"),
+        (5,  "Filtro Secador"),
+        (6,  "Visor de Líquido"),
+        (7,  "Válvula Solenoide"),
+        (8,  "Pressostato"),
+        (9,  "Tubulação de Cobre"),
+        (10, "Isolamento Térmico"),
+        (11, "Material Elétrico"),
+        (12, "Painel Frigorífico"),
+        (13, "Solda e Fluxo"),
+        (14, "Separador de Líquido"),
+        (15, "Separador de Óleo"),
+    ]
+
+    for cat_id, nome in updates:
+        await db.execute(
+            text("UPDATE categoria SET nome = :nome WHERE id = :id"),
+            {"nome": nome, "id": cat_id}
+        )
+
+    await db.commit()
+
+    r = await db.execute(text("SELECT id, nome FROM categoria ORDER BY id"))
+    categorias = [{"id": row[0], "nome": row[1]} for row in r.fetchall()]
+
+    return {"status": "sucesso", "categorias": categorias}
