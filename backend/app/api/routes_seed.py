@@ -590,22 +590,34 @@ async def _rac_extras_impl(db: AsyncSession):
     comp_novos = 0; perf_ins = 0
 
     for modelo, conexao, cap_nom, perfs in MODELOS:
-        # Insere componente
-        await db.execute(text("""
-            INSERT INTO componente_tecnico
-              (modelo, codigo_fabricante, categoria_id, fabricante_id,
-               conexao_entrada, conexao_saida, capacidade_nominal, dados_especificos, custo)
-            VALUES (:modelo, NULL, :cat_id, :fab_id, :cx, :cx, :cap, '{}', 0)
-            ON CONFLICT DO NOTHING
-        """), {"modelo": modelo, "cat_id": cat_id, "fab_id": fab_id,
-               "cx": conexao, "cap": float(cap_nom)})
-        comp_novos += 1
-
-        # Busca id do componente
+        # Verifica se já existe (busca por modelo apenas, independente de categoria)
         r = await db.execute(text(
-            "SELECT id FROM componente_tecnico WHERE modelo=:m AND categoria_id=:c"),
-            {"m": modelo, "c": cat_id})
-        comp_id = r.fetchone()[0]
+            "SELECT id, categoria_id FROM componente_tecnico WHERE modelo=:m"),
+            {"m": modelo})
+        row = r.fetchone()
+
+        if row:
+            # Já existe — atualiza categoria_id se necessário
+            comp_id = row[0]
+            if row[1] != cat_id:
+                await db.execute(text(
+                    "UPDATE componente_tecnico SET categoria_id=:c WHERE id=:i"),
+                    {"c": cat_id, "i": comp_id})
+        else:
+            # Não existe — insere
+            await db.execute(text("""
+                INSERT INTO componente_tecnico
+                  (modelo, codigo_fabricante, categoria_id, fabricante_id,
+                   conexao_entrada, conexao_saida, capacidade_nominal, dados_especificos, custo)
+                VALUES (:modelo, NULL, :cat_id, :fab_id, :cx, :cx, :cap, '{}', 0)
+            """), {"modelo": modelo, "cat_id": cat_id, "fab_id": fab_id,
+                   "cx": conexao, "cap": float(cap_nom)})
+            await db.flush()
+            r = await db.execute(text(
+                "SELECT id FROM componente_tecnico WHERE modelo=:m"),
+                {"m": modelo})
+            comp_id = r.fetchone()[0]
+            comp_novos += 1
 
         # Insere performances
         for fluido, t_evap, cap, cap_min in perfs:
