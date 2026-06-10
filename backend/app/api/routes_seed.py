@@ -497,6 +497,60 @@ async def fix_categorias(token: str, db: AsyncSession = Depends(get_db)):
     return {"status": "sucesso", "categorias": categorias}
 
 
+@router.post("/fix-componentes-categoria")
+async def fix_componentes_categoria(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Corrige o vínculo categoria_id dos componentes após renomear as categorias.
+    PC2 tinha: id=4 'Separador de Líquido', id=5 'Válvula de Expansão'
+    Após fix-categorias: id=4='VET', id=5='Filtro Secador', id=14='Separador de Líquido'
+    Precisa mover RAC (id=4→14) e T2 (id=5→4).
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    # Verifica estado atual antes de corrigir
+    r = await db.execute(text("""
+        SELECT cat.id, cat.nome, COUNT(ct.id) as total
+        FROM categoria cat
+        LEFT JOIN componente_tecnico ct ON ct.categoria_id = cat.id
+        WHERE cat.id IN (4, 5, 14)
+        GROUP BY cat.id, cat.nome ORDER BY cat.id
+    """))
+    antes = [{"id": row[0], "nome": row[1], "componentes": row[2]} for row in r.fetchall()]
+
+    # Move RAC separadores: categoria_id=4 → 14 (Separador de Líquido)
+    r1 = await db.execute(text("""
+        UPDATE componente_tecnico SET categoria_id = 14
+        WHERE categoria_id = 4 AND modelo LIKE 'RAC%'
+    """))
+
+    # Move T2 VETs: categoria_id=5 → 4 (Válvula de Expansão Termostática)
+    r2 = await db.execute(text("""
+        UPDATE componente_tecnico SET categoria_id = 4
+        WHERE categoria_id = 5 AND modelo LIKE 'T2%'
+    """))
+
+    await db.commit()
+
+    # Verifica estado após correção
+    r = await db.execute(text("""
+        SELECT cat.id, cat.nome, COUNT(ct.id) as total
+        FROM categoria cat
+        LEFT JOIN componente_tecnico ct ON ct.categoria_id = cat.id
+        WHERE cat.id IN (4, 5, 14)
+        GROUP BY cat.id, cat.nome ORDER BY cat.id
+    """))
+    depois = [{"id": row[0], "nome": row[1], "componentes": row[2]} for row in r.fetchall()]
+
+    return {
+        "status": "sucesso",
+        "rac_movidos": r1.rowcount,
+        "t2_movidos": r2.rowcount,
+        "antes": antes,
+        "depois": depois
+    }
+
+
 @router.post("/rac-extras")
 async def seed_rac_extras(token: str, db: AsyncSession = Depends(get_db)):
     """Insere os 6 modelos RAC de Separador de Líquido maiores (faltando em produção)."""
