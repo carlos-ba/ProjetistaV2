@@ -535,6 +535,42 @@ async def fix_equipamentos_duplicados(token: str, db: AsyncSession = Depends(get
     }
 
 
+@router.post("/import-performances")
+async def import_performances(token: str, payload: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Importa/completa performances de equipamentos.
+    Payload: {"equipamentos": [{"modelo": "...", "performances": [...]}]}
+    """
+    if token != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Token inválido.")
+
+    inseridos = 0; atualizados = 0
+
+    for eq in payload.get("equipamentos", []):
+        modelo = eq["modelo"]
+        r = await db.execute(text("SELECT id FROM equipamento WHERE modelo=:m"), {"m": modelo})
+        row = r.fetchone()
+        if not row:
+            continue
+        eq_id = row[0]
+
+        for p in eq.get("performances", []):
+            await db.execute(text("""
+                INSERT INTO performance_equipamento
+                  (equipamento_id, fluido, temp_ambiente, temp_evaporacao, delta_t, capacidade, consumo_kw)
+                VALUES (:eid, :fl, :ta, :te, :dt, :cap, :ckw)
+                ON CONFLICT (equipamento_id, fluido, temp_ambiente, temp_evaporacao, delta_t)
+                DO UPDATE SET capacidade=EXCLUDED.capacidade, consumo_kw=EXCLUDED.consumo_kw
+            """), {"eid": eq_id, "fl": p["fluido"], "ta": p["temp_amb"],
+                   "te": p["temp_evap"], "dt": p["delta_t"],
+                   "cap": p["capacidade"], "ckw": p.get("consumo_kw")})
+            inseridos += 1
+
+    await db.commit()
+    r = await db.execute(text("SELECT COUNT(*) FROM performance_equipamento"))
+    return {"status": "sucesso", "processados": inseridos, "total": r.scalar()}
+
+
 @router.get("/export-equipamentos")
 async def export_equipamentos(token: str, db: AsyncSession = Depends(get_db)):
     """Exporta todos os equipamentos com performances para sincronização entre bancos."""
