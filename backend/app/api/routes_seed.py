@@ -557,6 +557,14 @@ async def seed_rac_extras(token: str, db: AsyncSession = Depends(get_db)):
     if token != settings.SECRET_KEY:
         raise HTTPException(status_code=403, detail="Token inválido.")
 
+    try:
+      return await _rac_extras_impl(db)
+    except Exception as e:
+      import traceback
+      raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+
+async def _rac_extras_impl(db: AsyncSession):
     # Busca IDs via SQL direto
     r = await db.execute(text("SELECT id FROM categoria WHERE nome = 'Separador de Líquido'"))
     cat_row = r.fetchone()
