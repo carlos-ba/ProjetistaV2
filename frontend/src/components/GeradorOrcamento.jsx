@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import ModalCotacaoFornecedor from './ModalCotacaoFornecedor';
 
 const agruparItens = (itens) => {
   const cats = {
@@ -123,66 +124,47 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
     finally { setLoading(false); }
   };
 
-  // ── Gerar planilha de cotação ─────────────────────────────────────────
-  const gerarCotacao = async () => {
-    setLoading(true); setErro(null);
-    try {
-      const itens = [
-        ...equipamentosAprovados.map(e => ({
-          id:         e.id        || null,
-          tipo:       e.categoria || 'Equipamento',   // ex: "Unidade Condensadora", "Evaporadora"
-          item:       e.nome      || e.item,
-          detalhe:    e.detalhe   || '',
-          quantidade: e.qtde      || 1,
-          unidade:    'un',
-        })),
-        ...materiaisAprovados.map(m => {
-          // Extrai número do campo quantidade — pode vir como int, float ou string "24.50 m²"
-          const rawQtd = m.quantidade ?? m.qtd;
-          const qtdNum = parseFloat(String(rawQtd));
-          const qtd    = isNaN(qtdNum) ? 1 : qtdNum;
+  // ── Cotação com fornecedor (Fase 1) ───────────────────────────────────
+  const [modalCotacaoAberto, setModalCotacaoAberto] = useState(false);
 
-          // Para materiais_extras do gabinete (qtd é string), inclui o texto original no detalhe
-          const detalheQtd = (typeof rawQtd === 'string' && isNaN(parseFloat(rawQtd)))
-            ? rawQtd : null;
+  const montarItensCotacao = () => [
+    ...equipamentosAprovados.map(e => ({
+      tipo_item: e.categoria || 'Equipamento',   // ex: "Unidade Condensadora", "Evaporadora"
+      ref_id:    e.id || null,
+      descricao: e.nome || e.item,
+      detalhe:   e.detalhe || '',
+      qtde:      e.qtde || 1,
+      unidade:   'un',
+    })),
+    ...materiaisAprovados.map(m => {
+      // Extrai número do campo quantidade — pode vir como int, float ou string "24.50 m²"
+      const rawQtd = m.quantidade ?? m.qtd;
+      const qtdNum = parseFloat(String(rawQtd));
+      const qtd    = isNaN(qtdNum) ? 1 : qtdNum;
 
-          return {
-            id:         m.id || null,
-            tipo:       m.item?.toLowerCase().includes('válvula') || m.item?.toLowerCase().includes('separador')
-                          ? 'Componente' : 'Material',
-            item:       m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
-            detalhe:    [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : detalheQtd].filter(Boolean).join(' — '),
-            quantidade: qtd,
-            unidade:    m.unidade || 'un',
-          };
-        }),
-        ...complementosPreenchidos.map(c => ({
-          id:         null,
-          tipo:       'Complemento',
-          item:       c.descricao,
-          detalhe:    '',
-          quantidade: parseFloat(c.qtde) || 1,
-          unidade:    c.unidade || 'un',
-        })),
-      ];
+      // Para materiais_extras do gabinete (qtd é string), inclui o texto original no detalhe
+      const detalheQtd = (typeof rawQtd === 'string' && isNaN(parseFloat(rawQtd)))
+        ? rawQtd : null;
 
-      const payload = {
-        itens,
-        nome_projeto: 'Câmara Frigorífica',
-        nome_cliente: dadosCliente.nome || '',
+      return {
+        tipo_item: m.item?.toLowerCase().includes('válvula') || m.item?.toLowerCase().includes('separador')
+                     ? 'Componente' : 'Material',
+        ref_id:    m.id || null,
+        descricao: m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
+        detalhe:   [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : detalheQtd].filter(Boolean).join(' — '),
+        qtde:      qtd,
+        unidade:   m.unidade || 'un',
       };
-
-      const resp = await api.post('/api/v1/orcamento/cotacao', payload, { responseType: 'blob' });
-      const url  = window.URL.createObjectURL(new Blob([resp.data]));
-      const link = document.createElement('a');
-      link.href  = url;
-      link.setAttribute('download', `Cotacao_${dadosCliente.nome?.replace(/\s+/g, '_') || 'Projeto'}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch { setErro("Erro ao gerar planilha de cotação."); }
-    finally { setLoading(false); }
-  };
+    }),
+    ...complementosPreenchidos.map(c => ({
+      tipo_item: 'Complemento',
+      ref_id:    null,
+      descricao: c.descricao,
+      detalhe:   '',
+      qtde:      parseFloat(c.qtde) || 1,
+      unidade:   c.unidade || 'un',
+    })),
+  ];
 
   const enviarWhatsApp = () => {
     const msg = encodeURIComponent(`Olá ${dadosCliente.contato || dadosCliente.nome || 'Cliente'}!\n\nOrçamento câmara frigorífica:\n*Total: R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\nEnvio o PDF em anexo.`);
@@ -419,7 +401,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
 
               {/* Opção A: Enviar para cotação */}
-              <button onClick={gerarCotacao} disabled={loading}
+              <button onClick={() => setModalCotacaoAberto(true)} disabled={loading}
                 className="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 flex items-center justify-center gap-2">
                 📊 GERAR PLANILHA DE COTAÇÃO
                 <span className="text-[10px] font-normal opacity-80">— enviar ao fornecedor</span>
@@ -440,6 +422,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
       )}
 
       {erro && <div className="p-4 bg-red-100 text-red-700 rounded-xl text-center font-bold border border-red-200">{erro}</div>}
+
+      {/* Modal de cotação com fornecedor */}
+      <ModalCotacaoFornecedor
+        aberto={modalCotacaoAberto}
+        aoFechar={() => setModalCotacaoAberto(false)}
+        itens={modalCotacaoAberto ? montarItensCotacao() : []}
+        nomeProjeto={dadosCliente.nome ? `Câmara Frigorífica — ${dadosCliente.nome}` : 'Câmara Frigorífica'}
+      />
 
       {/* ══ 3. PROPOSTA FINAL ══ */}
       {orcamento && (
