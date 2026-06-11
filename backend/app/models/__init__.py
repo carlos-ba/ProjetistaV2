@@ -12,6 +12,7 @@ from app.models.material import Material
 from app.models.usuario import Usuario
 from app.models.projeto import Projeto
 from app.models.calculo import Calculo
+from app.models.cotacao import Fornecedor, Cotacao, CotacaoItem
 
 __all__ = [
     "Base",
@@ -28,4 +29,7 @@ __all__ = [
     "Usuario",
     "Projeto",
     "Calculo",
+    "Fornecedor",
+    "Cotacao",
+    "CotacaoItem",
 ]
