@@ -19,6 +19,8 @@ TABELAS = [
     "painel_frigorifico",
     "isolamento_tubulacao",
     "porta_frigoriifica",
+    "tipo_produto_termico",
+    "perfil_produto_termico",
     "usuario",
 ]
 
