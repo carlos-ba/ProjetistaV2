@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api';
+import PropostaComercial from './PropostaComercial';
 
 /**
  * Painel de Cotações (Fase 2).
@@ -35,6 +36,7 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
   const [edicao, setEdicao] = useState({});           // { item_id: { preco, marca, prazo, obs } }
   const [importando, setImportando] = useState(false);
   const [sucessoImport, setSucessoImport] = useState(null);
+  const [propostaAberta, setPropostaAberta] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -240,6 +242,22 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
                 </button>
               </div>
 
+              {/* ── Proposta comercial (Fase 3) ── */}
+              {cotacoes.some(c => c.status === 'processada') && (
+                <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-5 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold text-indigo-900">💼 Pronto para fechar negócio?</p>
+                    <p className="text-xs text-indigo-600 mt-0.5">
+                      Compare os fornecedores, monte sua composição de custos e gere a proposta comercial com aceite.
+                    </p>
+                  </div>
+                  <button onClick={() => setPropostaAberta(true)}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow transition-all whitespace-nowrap">
+                    GERAR PROPOSTA
+                  </button>
+                </div>
+              )}
+
               {/* ── Lista de cotações ── */}
               <div>
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Cotações geradas</h4>
@@ -277,6 +295,8 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
           )}
         </div>
       </div>
+
+      <PropostaComercial aberto={propostaAberta} aoFechar={() => setPropostaAberta(false)} />
     </div>,
     document.body
   );
