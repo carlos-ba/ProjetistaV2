@@ -1,8 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,7 @@ from app.schemas.cotacao import (
 )
 from app.services.auth import get_current_user
 from app.services.cotacao_excel import gerar_planilha_cotacao_v2
+from app.services.cotacao_import import extrair_codigo, ler_itens_planilha, casar_itens
 
 router = APIRouter(prefix="/api/v1/cotacoes", tags=["cotacoes"])
 
@@ -218,6 +220,118 @@ async def cancelar_cotacao(
     cotacao.status = "cancelada"
     await db.commit()
     return None
+
+
+# ── Importação da planilha devolvida (Fase 2) ──────────────────────────────
+
+@router.post("/importar/analisar")
+async def analisar_planilha_devolvida(
+    arquivo: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    usuario: UserOut = Depends(get_current_user),
+):
+    """
+    Lê a planilha devolvida pelo fornecedor e retorna o relatório de conferência.
+    NADA é gravado — o usuário revisa e confirma no passo seguinte.
+    """
+    if not arquivo.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=422, detail="Envie um arquivo Excel (.xlsx)")
+
+    conteudo = await arquivo.read()
+
+    codigo = extrair_codigo(conteudo)
+    if not codigo:
+        raise HTTPException(
+            status_code=422,
+            detail="Código da cotação não encontrado na planilha. "
+                   "Verifique se é o arquivo gerado pelo sistema (COT-...).",
+        )
+
+    result = await db.execute(
+        select(Cotacao)
+        .where(Cotacao.codigo == codigo, Cotacao.owner_id == usuario.id)
+        .options(selectinload(Cotacao.itens), selectinload(Cotacao.fornecedor))
+    )
+    cotacao = result.scalar_one_or_none()
+    if not cotacao:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cotação {codigo} não encontrada na sua conta.",
+        )
+    if cotacao.status == "cancelada":
+        raise HTTPException(status_code=422, detail=f"A cotação {codigo} está cancelada.")
+
+    try:
+        itens_planilha = ler_itens_planilha(conteudo)
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail="Não foi possível ler a planilha. A estrutura pode ter sido alterada.",
+        )
+
+    relatorio = casar_itens(cotacao.itens, itens_planilha)
+
+    resumo = {
+        "ok": sum(1 for r in relatorio if r["status"] == "ok"),
+        "sem_preco": sum(1 for r in relatorio if r["status"] == "sem_preco"),
+        "preco_invalido": sum(1 for r in relatorio if r["status"] == "preco_invalido"),
+        "nao_encontrado": sum(1 for r in relatorio if r["status"] == "nao_encontrado"),
+        "linha_extra": sum(1 for r in relatorio if r["status"] == "linha_extra"),
+    }
+
+    return {
+        "cotacao_id": str(cotacao.id),
+        "codigo": cotacao.codigo,
+        "fornecedor": cotacao.fornecedor.nome,
+        "status_atual": cotacao.status,
+        "ja_processada": cotacao.status == "processada",
+        "resumo": resumo,
+        "itens": relatorio,
+    }
+
+
+class ItemConfirmacao(BaseModel):
+    item_id: int
+    preco_unitario: float | None = None
+    marca_modelo_cotado: str | None = None
+    prazo_entrega_dias: int | None = None
+    obs_fornecedor: str | None = None
+
+
+class ConfirmacaoImportacao(BaseModel):
+    itens: list[ItemConfirmacao]
+
+
+@router.post("/{cotacao_id}/importar/confirmar", response_model=CotacaoComItens)
+async def confirmar_importacao(
+    cotacao_id: UUID,
+    payload: ConfirmacaoImportacao,
+    db: AsyncSession = Depends(get_db),
+    usuario: UserOut = Depends(get_current_user),
+):
+    """Grava os preços conferidos pelo usuário e marca a cotação como processada."""
+    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+
+    itens_por_id = {i.id: i for i in cotacao.itens}
+    atualizados = 0
+    for conf in payload.itens:
+        item = itens_por_id.get(conf.item_id)
+        if not item:
+            continue
+        item.preco_unitario = conf.preco_unitario
+        item.marca_modelo_cotado = conf.marca_modelo_cotado
+        item.prazo_entrega_dias = conf.prazo_entrega_dias
+        item.obs_fornecedor = conf.obs_fornecedor
+        atualizados += 1
+
+    if atualizados == 0:
+        raise HTTPException(status_code=422, detail="Nenhum item válido para atualizar.")
+
+    cotacao.status = "processada"
+    cotacao.data_recebimento = datetime.now().strftime("%Y-%m-%d %H:%M")
+    await db.commit()
+
+    return await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
 
 
 async def _obter_cotacao_com_itens(db: AsyncSession, cotacao_id: UUID, owner_id) -> Cotacao:
