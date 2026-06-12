@@ -115,12 +115,17 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     );
     const cotacoes = comparativo.cotacoes.filter(cab => codigosOk.has(cab.codigo));
 
+    // Lista-base = itens da cotação MAIS RECENTE do projeto (versão atual da lista).
+    // Evita somar itens de versões antigas quando o projeto foi editado entre cotações.
+    const codigoBase = cotacoes[0]?.codigo;
+
     const itens = comparativo.itens
       .map(it => {
         const precos = Object.fromEntries(
           Object.entries(it.precos).filter(([cod]) => codigosOk.has(cod))
         );
         if (Object.keys(precos).length === 0) return null;
+        if (codigoBase && !(codigoBase in precos)) return null;   // item fora da lista atual
         const validos = Object.entries(precos).filter(([, v]) => v.preco_unitario);
         const m = validos.length
           ? validos.reduce((a, b) => (a[1].preco_unitario <= b[1].preco_unitario ? a : b))
