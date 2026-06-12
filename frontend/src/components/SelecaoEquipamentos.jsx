@@ -170,6 +170,15 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
             <input type="number" value={evap} onChange={e => setEvap(e.target.value)} placeholder="Calculada automaticamente" className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
           <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase">T. Condensação (°C)</label>
+            <div className="w-full px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 font-black text-amber-700 text-sm">
+              {cond}°C
+              <div className="text-[9px] font-normal text-amber-600 leading-tight mt-0.5">
+                Catálogo deve estar tabelado nesta temperatura
+              </div>
+            </div>
+          </div>
+          <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase">Fluido</label>
             <select value={fluido} onChange={e => setFluido(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
               <option value="R22">R22</option>
