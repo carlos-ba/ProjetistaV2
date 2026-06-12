@@ -26,8 +26,16 @@ const ITEM_STATUS = {
   linha_extra:    { cor: 'bg-blue-50 border-blue-200',       label: 'ℹ️ Linha extra',       txt: 'text-blue-600' },
 };
 
+const PROPOSTA_BADGE = {
+  rascunho: 'bg-slate-100 text-slate-600',
+  enviada:  'bg-amber-100 text-amber-700',
+  aceita:   'bg-emerald-100 text-emerald-700',
+  recusada: 'bg-red-100 text-red-500',
+};
+
 const PainelCotacoes = ({ aberto, aoFechar }) => {
   const [cotacoes, setCotacoes] = useState([]);
+  const [propostas, setPropostas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -49,13 +57,32 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
   const carregar = async () => {
     setLoading(true);
     try {
-      const r = await api.get('/api/v1/cotacoes');
-      setCotacoes(r.data);
+      const [rc, rp] = await Promise.all([
+        api.get('/api/v1/cotacoes'),
+        api.get('/api/v1/propostas'),
+      ]);
+      setCotacoes(rc.data);
+      setPropostas(rp.data);
     } catch {
       setErro('Erro ao carregar cotações.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const mudarStatusProposta = async (prop, novoStatus) => {
+    try {
+      await api.patch(`/api/v1/propostas/${prop.id}`, { status: novoStatus });
+      carregar();
+    } catch { setErro('Erro ao atualizar o status da proposta.'); }
+  };
+
+  const excluirProposta = async (prop) => {
+    if (!window.confirm(`Excluir a proposta ${prop.codigo}?`)) return;
+    try {
+      await api.delete(`/api/v1/propostas/${prop.id}`);
+      carregar();
+    } catch { setErro('Erro ao excluir a proposta.'); }
   };
 
   const baixarExcel = async (cot) => {
@@ -255,6 +282,38 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
                     className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow transition-all whitespace-nowrap">
                     GERAR PROPOSTA
                   </button>
+                </div>
+              )}
+
+              {/* ── Propostas salvas ── */}
+              {propostas.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">💼 Propostas comerciais</h4>
+                  <div className="space-y-2">
+                    {propostas.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-800 font-mono">{p.codigo}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {p.dados?.cliente?.nome || 'Sem cliente'} · R$ {(p.dados?.valores?.preco_venda || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {' · '}{new Date(p.created_at).toLocaleDateString('pt-BR')}
+                            {' · '}{p.dados?.modo === 'venda_direta' ? 'venda direta' : 'empreitada'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <select value={p.status} onChange={e => mudarStatusProposta(p, e.target.value)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border-0 cursor-pointer ${PROPOSTA_BADGE[p.status] || PROPOSTA_BADGE.rascunho}`}>
+                            <option value="rascunho">rascunho</option>
+                            <option value="enviada">enviada</option>
+                            <option value="aceita">✓ aceita</option>
+                            <option value="recusada">recusada</option>
+                          </select>
+                          <button onClick={() => excluirProposta(p)} title="Excluir"
+                            className="text-xs px-2 py-1.5 text-slate-300 hover:text-red-400 transition-colors">✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

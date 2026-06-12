@@ -130,10 +130,18 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
     blocosCliente.push({ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente });
 
     const custo_total = custo_materiais + custo_servicos;
+
+    // Faturamento próprio: na venda direta os materiais são faturados pelo
+    // fornecedor — impostos e lucro incidem APENAS sobre os serviços.
+    const faturamento_proprio = modo === 'venda_direta' ? preco_servicos_cliente : preco_venda;
+    const custo_proprio       = modo === 'venda_direta' ? custo_servicos : custo_total;
+    const impostos_valor      = faturamento_proprio * ((parseFloat(imposto) || 0) / 100);
+    const lucro_liquido       = faturamento_proprio - custo_proprio - impostos_valor;
+
     return {
       itens, semPreco, custo_materiais, custo_servicos, custo_total,
       preco_venda, preco_materiais_cliente, preco_servicos_cliente,
-      lucro_bruto: preco_venda - custo_total - preco_venda * ((parseFloat(imposto) || 0) / 100),
+      faturamento_proprio, impostos_valor, lucro_liquido,
       blocosCliente,
     };
   };
@@ -161,6 +169,9 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
           custo_materiais: c.custo_materiais,
           custo_servicos: c.custo_servicos,
           preco_venda: c.preco_venda,
+          faturamento_proprio: c.faturamento_proprio,
+          impostos_valor: c.impostos_valor,
+          lucro_liquido: c.lucro_liquido,
           blocos: c.blocosCliente,
         },
         itens: c.itens.map(i => ({
@@ -375,13 +386,15 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
               <div className="bg-slate-900 rounded-xl p-4 text-white">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">🔒 Resumo financeiro — privado (não vai ao cliente)</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div><p className="text-[10px] text-slate-400">Custo total</p><p className="font-black">R$ {fmt(c.custo_total)}</p></div>
-                  <div><p className="text-[10px] text-slate-400">Preço de venda</p><p className="font-black text-emerald-400">R$ {fmt(c.preco_venda)}</p></div>
-                  <div><p className="text-[10px] text-slate-400">Impostos ({imposto}%)</p><p className="font-black text-amber-400">R$ {fmt(c.preco_venda * ((parseFloat(imposto) || 0) / 100))}</p></div>
-                  <div><p className="text-[10px] text-slate-400">Lucro líquido</p><p className="font-black text-emerald-400">R$ {fmt(c.lucro_bruto)}</p></div>
+                  <div><p className="text-[10px] text-slate-400">{modo === 'venda_direta' ? 'Custo dos serviços' : 'Custo total'}</p><p className="font-black">R$ {fmt(modo === 'venda_direta' ? c.custo_servicos : c.custo_total)}</p></div>
+                  <div><p className="text-[10px] text-slate-400">Seu faturamento</p><p className="font-black text-emerald-400">R$ {fmt(c.faturamento_proprio)}</p></div>
+                  <div><p className="text-[10px] text-slate-400">Impostos ({imposto}%)</p><p className="font-black text-amber-400">R$ {fmt(c.impostos_valor)}</p></div>
+                  <div><p className="text-[10px] text-slate-400">Lucro líquido</p><p className="font-black text-emerald-400">R$ {fmt(c.lucro_liquido)}</p></div>
                 </div>
                 {modo === 'venda_direta' && (
-                  <p className="text-[10px] text-slate-400 mt-2">Venda direta: materiais R$ {fmt(c.preco_materiais_cliente)} faturados pelo fornecedor · seus serviços R$ {fmt(c.preco_servicos_cliente)}</p>
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    Venda direta: materiais R$ {fmt(c.preco_materiais_cliente)} faturados direto pelo fornecedor (fora do seu faturamento — sem impostos para você) · seus serviços R$ {fmt(c.preco_servicos_cliente)}
+                  </p>
                 )}
               </div>
 
