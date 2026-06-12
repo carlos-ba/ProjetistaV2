@@ -30,7 +30,8 @@ const agruparItens = (itens) => {
 // ── Linha de complemento em branco ───────────────────────────────────────
 const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '' });
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null }) => {
+  const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
   // ── Checkboxes para aprovar/desmarcar itens ───────────────────────────
@@ -398,11 +399,25 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
             <p className="text-center text-xs text-slate-400 mb-4 font-medium uppercase tracking-widest">
               O que deseja fazer com esta lista?
             </p>
+
+            {/* Trava: cotação e orçamento exigem projeto salvo (vínculo no histórico) */}
+            {!projetoSalvo && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl text-center">
+                <p className="text-sm font-bold text-amber-800">
+                  💾 Salve o projeto antes de cotar ou orçar
+                </p>
+                <p className="text-[11px] text-amber-600 mt-1">
+                  Use o botão <b>Salvar</b> no topo da tela. A cotação e a proposta ficam vinculadas ao projeto — sem isso o histórico se perde.
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
 
               {/* Opção A: Enviar para cotação */}
-              <button onClick={() => setModalCotacaoAberto(true)} disabled={loading}
-                className="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+              <button onClick={() => setModalCotacaoAberto(true)} disabled={loading || !projetoSalvo}
+                title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
+                className="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 📊 GERAR PLANILHA DE COTAÇÃO
                 <span className="text-[10px] font-normal opacity-80">— enviar ao fornecedor</span>
               </button>
@@ -410,8 +425,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
               <span className="text-slate-300 font-bold hidden sm:block">ou</span>
 
               {/* Opção B: Já tem preços, gera orçamento */}
-              <button onClick={gerarOrcamento} disabled={loading}
-                className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg hover:-translate-y-0.5 transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
+              <button onClick={gerarOrcamento} disabled={loading || !projetoSalvo}
+                title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
+                className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg hover:-translate-y-0.5 transition-all disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 💰 GERAR PROPOSTA AO CLIENTE
                 <span className="text-[10px] font-normal opacity-80">— já tenho os preços</span>
               </button>
@@ -428,7 +444,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar 
         aberto={modalCotacaoAberto}
         aoFechar={() => setModalCotacaoAberto(false)}
         itens={modalCotacaoAberto ? montarItensCotacao() : []}
-        nomeProjeto={dadosCliente.nome ? `Câmara Frigorífica — ${dadosCliente.nome}` : 'Câmara Frigorífica'}
+        nomeProjeto={projetoAtual?.nome || (dadosCliente.nome ? `Câmara Frigorífica — ${dadosCliente.nome}` : 'Câmara Frigorífica')}
+        projetoId={projetoAtual?.id || null}
       />
 
       {/* ══ 3. PROPOSTA FINAL ══ */}

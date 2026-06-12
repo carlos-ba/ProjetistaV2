@@ -32,8 +32,9 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const PropostaComercial = ({ aberto, aoFechar }) => {
+const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
   const previewRef = useRef(null);
+  const visualizando = !!propostaVisualizar;
 
   const [passo, setPasso] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -59,11 +60,27 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
   const [codigoSalvo, setCodigoSalvo] = useState(null);
 
   useEffect(() => {
-    if (aberto) {
-      setPasso(1); setErro(''); setCodigoSalvo(null);
+    if (!aberto) return;
+    setErro('');
+    if (visualizando) {
+      // Modo visualização: hidrata os estados a partir da proposta salva
+      const d = propostaVisualizar.dados || {};
+      setFonte(d.fonte || 'melhores');
+      setCustos(d.custos || { mao_obra: '', locomocao: '', despesas: '', outros: '' });
+      setModo(d.modo || 'empreitada');
+      setMargem(d.margem_perc ?? 25);
+      setImposto(d.imposto_perc ?? 6);
+      setApresentacao(d.apresentacao || 'blocos');
+      setCond({ ...CONDICOES_PADRAO, ...(d.condicoes || {}) });
+      setCliente(d.cliente || { nome: '', cnpj: '', contato: '' });
+      setResumoObjeto(d.resumo_objeto || '');
+      setCodigoSalvo(propostaVisualizar.codigo);
+      setPasso(4);
+    } else {
+      setPasso(1); setCodigoSalvo(null);
       carregarComparativo();
     }
-  }, [aberto]);
+  }, [aberto, propostaVisualizar]);
 
   const carregarComparativo = async () => {
     setLoading(true);
@@ -146,7 +163,29 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
     };
   };
 
-  const c = comparativo ? calc() : null;
+  // Em modo visualização, reconstrói os valores a partir da proposta salva
+  const cDeDados = () => {
+    const d = propostaVisualizar.dados || {};
+    const v = d.valores || {};
+    const blocos = v.blocos || [];
+    const servicos = blocos.find(b => b.nome.includes('Instalação'))?.valor || 0;
+    return {
+      itens: d.itens || [],
+      semPreco: 0,
+      custo_materiais: v.custo_materiais || 0,
+      custo_servicos: v.custo_servicos || 0,
+      custo_total: (v.custo_materiais || 0) + (v.custo_servicos || 0),
+      preco_venda: v.preco_venda || 0,
+      preco_servicos_cliente: servicos,
+      preco_materiais_cliente: (v.preco_venda || 0) - servicos,
+      faturamento_proprio: v.faturamento_proprio ?? v.preco_venda ?? 0,
+      impostos_valor: v.impostos_valor ?? 0,
+      lucro_liquido: v.lucro_liquido ?? 0,
+      blocosCliente: blocos,
+    };
+  };
+
+  const c = visualizando ? cDeDados() : (comparativo ? calc() : null);
 
   // Fornecedores usados (para venda direta)
   const fornecedoresUsados = c
@@ -179,7 +218,17 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
           preco_unitario: i.preco_unitario, fornecedor: i.fornecedor,
         })),
       };
-      const r = await api.post('/api/v1/propostas', { dados });
+      // Vincula ao projeto: o da cotação única escolhida, ou o projeto comum
+      // entre as cotações usadas no modo "melhores preços"
+      let projeto_id = null;
+      if (fonte !== 'melhores') {
+        projeto_id = comparativo.cotacoes.find(x => x.codigo === fonte)?.projeto_id || null;
+      } else {
+        const ids = [...new Set(comparativo.cotacoes.map(x => x.projeto_id).filter(Boolean))];
+        if (ids.length === 1) projeto_id = ids[0];
+      }
+
+      const r = await api.post('/api/v1/propostas', { projeto_id, dados });
       setCodigoSalvo(r.data.codigo);
     } catch {
       setErro('Erro ao salvar a proposta.');
@@ -482,7 +531,9 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
             <div className="space-y-4">
               {codigoSalvo && (
                 <p className="text-sm text-emerald-700 font-bold bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200">
-                  ✅ Proposta {codigoSalvo} salva! Histórico disponível para acompanhamento do aceite.
+                  {visualizando
+                    ? `📄 Proposta ${codigoSalvo} — visualização do documento salvo`
+                    : `✅ Proposta ${codigoSalvo} salva! Histórico disponível para acompanhamento do aceite.`}
                 </p>
               )}
 
@@ -598,7 +649,9 @@ const PropostaComercial = ({ aberto, aoFechar }) => {
 
               {/* Ações */}
               <div className="flex justify-between items-center">
-                <button onClick={() => setPasso(3)} className="px-4 py-2 text-slate-500 font-bold text-sm">⬅️ Voltar</button>
+                {visualizando
+                  ? <span />
+                  : <button onClick={() => setPasso(3)} className="px-4 py-2 text-slate-500 font-bold text-sm">⬅️ Voltar</button>}
                 <div className="flex gap-3">
                   {!codigoSalvo && (
                     <button onClick={salvarProposta} disabled={loading}

@@ -631,6 +631,7 @@ function AppContent() {
                 dadosAutomaticos={itensOrcamento}
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
+                projetoAtual={projetoAtual}
               />
             </EtapaCard>
 

@@ -11,7 +11,7 @@ import api from '../api';
  */
 const fornecedorVazio = { nome: '', cnpj: '', telefone: '', email: '', contato: '' };
 
-const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto }) => {
+const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto, projetoId = null }) => {
   const [fornecedores, setFornecedores] = useState([]);
   const [fornecedorId, setFornecedorId] = useState('');
   const [validadeDias, setValidadeDias] = useState(30);
@@ -69,6 +69,7 @@ const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto }) => {
       // 1. Cria a cotação (persiste itens + gera código)
       const cot = await api.post('/api/v1/cotacoes', {
         fornecedor_id: parseInt(fornecedorId),
+        projeto_id: projetoId,
         nome_projeto: nomeProjeto || 'Câmara Frigorífica',
         validade_dias: parseInt(validadeDias) || 30,
         itens,

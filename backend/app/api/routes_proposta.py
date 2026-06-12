@@ -66,6 +66,7 @@ async def comparativo_cotacoes(
             "fornecedor": c.fornecedor.nome,
             "data_recebimento": c.data_recebimento,
             "nome_projeto": c.nome_projeto,
+            "projeto_id": str(c.projeto_id) if c.projeto_id else None,
         }
         for c in cotacoes
     ]
@@ -155,13 +156,15 @@ class PropostaOut(BaseModel):
 
 
 async def _gerar_codigo_proposta(db: AsyncSession) -> str:
+    """Próximo código a partir do MAIOR existente — imune a exclusões."""
     ano = datetime.now().year
     result = await db.execute(
-        select(func.count(PropostaComercial.id)).where(
-            func.extract("year", PropostaComercial.created_at) == ano
+        select(func.max(PropostaComercial.codigo)).where(
+            PropostaComercial.codigo.like(f"PROP-{ano}-%")
         )
     )
-    seq = (result.scalar() or 0) + 1
+    ultimo = result.scalar()
+    seq = (int(ultimo.split("-")[2]) + 1) if ultimo else 1
     return f"PROP-{ano}-{seq:04d}"
 
 

@@ -45,6 +45,7 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
   const [importando, setImportando] = useState(false);
   const [sucessoImport, setSucessoImport] = useState(null);
   const [propostaAberta, setPropostaAberta] = useState(false);
+  const [propostaVer, setPropostaVer] = useState(null);   // proposta salva aberta para visualização
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -291,9 +292,9 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">💼 Propostas comerciais</h4>
                   <div className="space-y-2">
                     {propostas.map(p => (
-                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-800 font-mono">{p.codigo}</p>
+                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 hover:border-indigo-300 transition-all">
+                        <div className="min-w-0 cursor-pointer" onClick={() => setPropostaVer(p)} title="Abrir proposta">
+                          <p className="text-sm font-bold text-indigo-700 font-mono hover:underline">{p.codigo} 📄</p>
                           <p className="text-[10px] text-slate-400">
                             {p.dados?.cliente?.nome || 'Sem cliente'} · R$ {(p.dados?.valores?.preco_venda || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             {' · '}{new Date(p.created_at).toLocaleDateString('pt-BR')}
@@ -356,6 +357,7 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
       </div>
 
       <PropostaComercial aberto={propostaAberta} aoFechar={() => setPropostaAberta(false)} />
+      <PropostaComercial aberto={!!propostaVer} propostaVisualizar={propostaVer} aoFechar={() => setPropostaVer(null)} />
     </div>,
     document.body
   );
