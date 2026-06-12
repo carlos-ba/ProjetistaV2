@@ -51,6 +51,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
   const [margem, setMargem] = useState(25);
   const [imposto, setImposto] = useState(6);
   const [apresentacao, setApresentacao] = useState('blocos');  // 'blocos' | 'global'
+  const [moSeparada, setMoSeparada] = useState(false);         // mão de obra única ou separada na proposta
 
   // Passo 3 — condições e cliente
   const [cond, setCond] = useState(CONDICOES_PADRAO);
@@ -72,6 +73,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       setMargem(d.margem_perc ?? 25);
       setImposto(d.imposto_perc ?? 6);
       setApresentacao(d.apresentacao || 'blocos');
+      setMoSeparada(!!d.mo_separada);
       setCond({ ...CONDICOES_PADRAO, ...(d.condicoes || {}) });
       setCliente(d.cliente || { nome: '', cnpj: '', contato: '' });
       setResumoObjeto(d.resumo_objeto || '');
@@ -216,7 +218,22 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       nome,
       valor: modo === 'venda_direta' ? custo : custo * fator,
     }));
-    blocosCliente.push({ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente });
+
+    // Serviços: valor único ou mão de obra separada (painéis / refrigeração).
+    // Locomoção, despesas e outros são rateados proporcionalmente entre as duas MO.
+    const mo_p = n(custos.mo_paineis), mo_r = n(custos.mo_refrigeracao);
+    const overhead = n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
+    let blocosServicos;
+    if (moSeparada && (mo_p + mo_r) > 0) {
+      const rateio = (mo) => mo + overhead * (mo / (mo_p + mo_r));
+      blocosServicos = [
+        { nome: 'Mão de obra — montagem de painéis', valor: rateio(mo_p) * fator },
+        { nome: 'Mão de obra — montagem de refrigeração e comissionamento', valor: rateio(mo_r) * fator },
+      ].filter(b => b.valor > 0);
+    } else {
+      blocosServicos = [{ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente }];
+    }
+    blocosCliente.push(...blocosServicos);
 
     const custo_total = custo_materiais + custo_servicos;
 
@@ -231,7 +248,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       itens, semPreco, custo_materiais, custo_servicos, custo_total,
       preco_venda, preco_materiais_cliente, preco_servicos_cliente,
       faturamento_proprio, impostos_valor, lucro_liquido,
-      blocosCliente,
+      blocosCliente, blocosServicos,
     };
   };
 
@@ -240,7 +257,8 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     const d = propostaVisualizar.dados || {};
     const v = d.valores || {};
     const blocos = v.blocos || [];
-    const servicos = blocos.find(b => b.nome.includes('Instalação'))?.valor || 0;
+    const blocosServicos = blocos.filter(b => b.nome.includes('Instalação') || b.nome.includes('Mão de obra'));
+    const servicos = blocosServicos.reduce((s, b) => s + (b.valor || 0), 0);
     return {
       itens: d.itens || [],
       semPreco: 0,
@@ -254,6 +272,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       impostos_valor: v.impostos_valor ?? 0,
       lucro_liquido: v.lucro_liquido ?? 0,
       blocosCliente: blocos,
+      blocosServicos,
     };
   };
 
@@ -270,6 +289,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     try {
       const dados = {
         fonte, modo, apresentacao,
+        mo_separada: moSeparada,
         margem_perc: parseFloat(margem) || 0,
         imposto_perc: parseFloat(imposto) || 0,
         custos: { ...custos },
@@ -508,6 +528,14 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
                       <option value="global">Valor global único</option>
                     </select>
                   </div>
+                  <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+                    <input type="checkbox" checked={moSeparada} onChange={e => setMoSeparada(e.target.checked)}
+                      className="accent-indigo-600 mt-0.5" />
+                    <span>
+                      <b>Mão de obra separada na proposta</b><br />
+                      <span className="text-slate-400">Painéis e refrigeração como serviços distintos (locomoção e despesas rateadas)</span>
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -672,10 +700,12 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
                           </div>
                           <span className="font-black text-slate-800 whitespace-nowrap">R$ {fmt(c.preco_materiais_cliente)}</span>
                         </div>
-                        <div className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg border border-indigo-100">
-                          <p className="text-sm font-bold text-slate-800">Serviços de instalação e comissionamento</p>
-                          <span className="font-black text-slate-800 whitespace-nowrap">R$ {fmt(c.preco_servicos_cliente)}</span>
-                        </div>
+                        {(c.blocosServicos || [{ nome: 'Serviços de instalação e comissionamento', valor: c.preco_servicos_cliente }]).map(b => (
+                          <div key={b.nome} className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <p className="text-sm font-bold text-slate-800">{b.nome}</p>
+                            <span className="font-black text-slate-800 whitespace-nowrap">R$ {fmt(b.valor)}</span>
+                          </div>
+                        ))}
                       </div>
                     ) : apresentacao === 'blocos' ? (
                       <div className="space-y-2">
