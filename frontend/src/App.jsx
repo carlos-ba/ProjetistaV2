@@ -12,6 +12,7 @@ import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
 import PainelInsights from './components/PainelInsights.jsx';
+import PainelCotacoes from './components/PainelCotacoes.jsx';
 import EtapaCard from './components/EtapaCard.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
@@ -40,6 +41,7 @@ function AppContent() {
   const [projetoAtual, setProjetoAtual] = useState(null); // { id, nome, cliente } ou null se novo
   const [listaProjetos, setListaProjetos] = useState([]);
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
+  const [mostrandoCotacoes, setMostrandoCotacoes] = useState(false);
 
   // --- FUNÇÕES DE INTERLIGAÇÃO (PONTES) ---
   const { useCallback, useEffect } = React;
@@ -445,6 +447,10 @@ function AppContent() {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <FolderOpen className="w-4 h-4" /> Histórico
           </div>
+          <div onClick={() => setMostrandoCotacoes(true)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+            <CopyPlus className="w-4 h-4" /> Cotações
+          </div>
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <Settings className="w-4 h-4" /> Configurações
           </div>
@@ -480,6 +486,9 @@ function AppContent() {
 
         <div className="p-6 max-w-4xl mx-auto w-full space-y-4 print:p-0 print:max-w-none print:m-0">
           
+          {/* PAINEL DE COTAÇÕES */}
+          <PainelCotacoes aberto={mostrandoCotacoes} aoFechar={() => setMostrandoCotacoes(false)} />
+
           {/* MODAL DE HISTÓRICO */}
           {mostrandoHistorico && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300 print:hidden">
@@ -622,6 +631,7 @@ function AppContent() {
                 dadosAutomaticos={itensOrcamento}
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
+                projetoAtual={projetoAtual}
               />
             </EtapaCard>
 

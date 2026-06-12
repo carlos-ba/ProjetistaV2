@@ -21,6 +21,8 @@ from app.api.routes_orcamento import router as orcamento_router
 from app.api.routes_componentes import router as componentes_router
 from app.api.routes_catalogo import router as catalogo_router
 from app.api.routes_seed import router as seed_router
+from app.api.routes_cotacao import router as cotacao_router
+from app.api.routes_proposta import router as proposta_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -48,3 +50,5 @@ app.include_router(orcamento_router)
 app.include_router(componentes_router)
 app.include_router(catalogo_router)
 app.include_router(seed_router)
+app.include_router(cotacao_router)
+app.include_router(proposta_router)
