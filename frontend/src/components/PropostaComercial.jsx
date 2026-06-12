@@ -43,6 +43,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
   // Passo 1 — fonte de preços
   const [comparativo, setComparativo] = useState(null);
   const [fonte, setFonte] = useState('melhores');        // 'melhores' | codigo da cotação
+  const [projetoSel, setProjetoSel] = useState('');      // projeto_id | 'sem' (órfãs)
 
   // Passo 2 — composição
   const [custos, setCustos] = useState({ mao_obra: '', locomocao: '', despesas: '', outros: '' });
@@ -87,7 +88,9 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     try {
       const r = await api.get('/api/v1/propostas/comparativo');
       setComparativo(r.data);
-      if (r.data.cotacoes.length === 1) setFonte(r.data.cotacoes[0].codigo);
+      // Projeto padrão: o da cotação mais recente
+      const primeiro = r.data.cotacoes[0];
+      setProjetoSel(primeiro ? (primeiro.projeto_id || 'sem') : '');
     } catch {
       setErro('Erro ao carregar o comparativo de cotações.');
     } finally {
@@ -95,10 +98,73 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     }
   };
 
+  // ── Filtro por projeto (cotações de projetos diferentes não se misturam) ──
+  const projetosDisponiveis = comparativo
+    ? [...new Map(comparativo.cotacoes.map(cab => [
+        cab.projeto_id || 'sem',
+        { id: cab.projeto_id || 'sem', nome: cab.projeto_id ? (cab.nome_projeto || 'Projeto sem nome') : '⚠️ Sem projeto vinculado (antigas)' },
+      ])).values()]
+    : [];
+
+  const filtrarComparativo = () => {
+    if (!comparativo) return null;
+    const codigosOk = new Set(
+      comparativo.cotacoes
+        .filter(cab => (cab.projeto_id || 'sem') === projetoSel)
+        .map(cab => cab.codigo)
+    );
+    const cotacoes = comparativo.cotacoes.filter(cab => codigosOk.has(cab.codigo));
+
+    const itens = comparativo.itens
+      .map(it => {
+        const precos = Object.fromEntries(
+          Object.entries(it.precos).filter(([cod]) => codigosOk.has(cod))
+        );
+        if (Object.keys(precos).length === 0) return null;
+        const validos = Object.entries(precos).filter(([, v]) => v.preco_unitario);
+        const m = validos.length
+          ? validos.reduce((a, b) => (a[1].preco_unitario <= b[1].preco_unitario ? a : b))
+          : null;
+        return {
+          ...it, precos,
+          melhor: m ? { codigo: m[0], fornecedor: m[1].fornecedor, preco_unitario: m[1].preco_unitario } : null,
+        };
+      })
+      .filter(Boolean);
+
+    const totais = { por_cotacao: [], melhores_precos: 0 };
+    cotacoes.forEach(cab => {
+      let total = 0, completa = true;
+      itens.forEach(it => {
+        const p = it.precos[cab.codigo]?.preco_unitario;
+        if (p) total += p * it.qtde; else completa = false;
+      });
+      totais.por_cotacao.push({ codigo: cab.codigo, total: Math.round(total * 100) / 100, completa });
+    });
+    totais.melhores_precos = Math.round(
+      itens.reduce((s, it) => s + (it.melhor ? it.melhor.preco_unitario * it.qtde : 0), 0) * 100
+    ) / 100;
+
+    return { cotacoes, itens, totais };
+  };
+
+  const compFiltrado = visualizando ? null : filtrarComparativo();
+
+  // Ajusta a fonte quando o projeto muda
+  useEffect(() => {
+    if (!compFiltrado) return;
+    const codigos = compFiltrado.cotacoes.map(x => x.codigo);
+    if (fonte !== 'melhores' && !codigos.includes(fonte)) {
+      setFonte(codigos.length === 1 ? codigos[0] : 'melhores');
+    } else if (codigos.length === 1 && fonte === 'melhores') {
+      setFonte(codigos[0]);
+    }
+  }, [projetoSel, comparativo]);
+
   // ── Cálculos ────────────────────────────────────────────────────────────
   const itensComPreco = () => {
-    if (!comparativo) return [];
-    return comparativo.itens.map(it => {
+    if (!compFiltrado) return [];
+    return compFiltrado.itens.map(it => {
       let preco = null, fornecedor = null;
       if (fonte === 'melhores') {
         if (it.melhor) { preco = it.melhor.preco_unitario; fornecedor = it.melhor.fornecedor; }
@@ -185,7 +251,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     };
   };
 
-  const c = visualizando ? cDeDados() : (comparativo ? calc() : null);
+  const c = visualizando ? cDeDados() : (compFiltrado ? calc() : null);
 
   // Fornecedores usados (para venda direta)
   const fornecedoresUsados = c
@@ -220,13 +286,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       };
       // Vincula ao projeto: o da cotação única escolhida, ou o projeto comum
       // entre as cotações usadas no modo "melhores preços"
-      let projeto_id = null;
-      if (fonte !== 'melhores') {
-        projeto_id = comparativo.cotacoes.find(x => x.codigo === fonte)?.projeto_id || null;
-      } else {
-        const ids = [...new Set(comparativo.cotacoes.map(x => x.projeto_id).filter(Boolean))];
-        if (ids.length === 1) projeto_id = ids[0];
-      }
+      const projeto_id = projetoSel && projetoSel !== 'sem' ? projetoSel : null;
 
       const r = await api.post('/api/v1/propostas', { projeto_id, dados });
       setCodigoSalvo(r.data.codigo);
@@ -283,7 +343,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
           {loading && !comparativo && <p className="text-sm text-slate-400 animate-pulse">Carregando comparativo...</p>}
 
           {/* ══ PASSO 1 — FONTE DE PREÇOS ══ */}
-          {passo === 1 && comparativo && (
+          {passo === 1 && comparativo && compFiltrado && (
             comparativo.cotacoes.length === 0 ? (
               <div className="text-center py-10 text-slate-400">
                 <p className="font-bold">Nenhuma cotação processada ainda.</p>
@@ -291,21 +351,34 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
               </div>
             ) : (
               <div className="space-y-5">
+                {/* Seletor de projeto — cotações de projetos diferentes não se misturam */}
+                {projetosDisponiveis.length > 1 && (
+                  <div>
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Projeto</h4>
+                    <select value={projetoSel} onChange={e => setProjetoSel(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-indigo-400">
+                      {projetosDisponiveis.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">De onde vêm os preços dos materiais?</h4>
                   <div className="space-y-2">
-                    {comparativo.cotacoes.length > 1 && (
+                    {compFiltrado.cotacoes.length > 1 && (
                       <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${fonte === 'melhores' ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
                         <input type="radio" checked={fonte === 'melhores'} onChange={() => setFonte('melhores')} className="accent-emerald-600" />
                         <div className="flex-1">
                           <p className="text-sm font-bold text-slate-800">🏆 Melhores preços (mix de fornecedores)</p>
                           <p className="text-[10px] text-slate-500">Cada item pelo menor preço entre as cotações</p>
                         </div>
-                        <span className="font-black text-emerald-700">R$ {fmt(comparativo.totais.melhores_precos)}</span>
+                        <span className="font-black text-emerald-700">R$ {fmt(compFiltrado.totais.melhores_precos)}</span>
                       </label>
                     )}
-                    {comparativo.totais.por_cotacao.map(t => {
-                      const cab = comparativo.cotacoes.find(x => x.codigo === t.codigo);
+                    {compFiltrado.totais.por_cotacao.map(t => {
+                      const cab = compFiltrado.cotacoes.find(x => x.codigo === t.codigo);
                       return (
                         <label key={t.codigo} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${fonte === t.codigo ? 'bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200'}`}>
                           <input type="radio" checked={fonte === t.codigo} onChange={() => setFonte(t.codigo)} className="accent-indigo-600" />
@@ -326,16 +399,16 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="text-left p-2 font-bold text-slate-500">Item</th>
-                        {comparativo.cotacoes.map(cab => (
+                        {compFiltrado.cotacoes.map(cab => (
                           <th key={cab.codigo} className="text-right p-2 font-bold text-slate-500">{cab.fornecedor}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {comparativo.itens.map((it, i) => (
+                      {compFiltrado.itens.map((it, i) => (
                         <tr key={i} className="border-b border-slate-100 last:border-0">
                           <td className="p-2 text-slate-700">{it.descricao} <span className="text-slate-400">×{it.qtde}</span></td>
-                          {comparativo.cotacoes.map(cab => {
+                          {compFiltrado.cotacoes.map(cab => {
                             const p = it.precos[cab.codigo]?.preco_unitario;
                             const ehMelhor = it.melhor?.codigo === cab.codigo;
                             return (
