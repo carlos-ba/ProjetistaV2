@@ -46,7 +46,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
   const [projetoSel, setProjetoSel] = useState('');      // projeto_id | 'sem' (órfãs)
 
   // Passo 2 — composição
-  const [custos, setCustos] = useState({ mao_obra: '', locomocao: '', despesas: '', outros: '' });
+  const [custos, setCustos] = useState({ mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
   const [modo, setModo] = useState('empreitada');         // 'empreitada' | 'venda_direta'
   const [margem, setMargem] = useState(25);
   const [imposto, setImposto] = useState(6);
@@ -67,7 +67,7 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
       // Modo visualização: hidrata os estados a partir da proposta salva
       const d = propostaVisualizar.dados || {};
       setFonte(d.fonte || 'melhores');
-      setCustos(d.custos || { mao_obra: '', locomocao: '', despesas: '', outros: '' });
+      setCustos(d.custos || { mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
       setModo(d.modo || 'empreitada');
       setMargem(d.margem_perc ?? 25);
       setImposto(d.imposto_perc ?? 6);
@@ -187,7 +187,8 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
     const semPreco = itens.filter(i => !i.preco_unitario).length;
 
     const n = (v) => parseFloat(v) || 0;
-    const custo_servicos = n(custos.mao_obra) + n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
+    const custo_servicos = n(custos.mo_paineis) + n(custos.mo_refrigeracao)
+      + n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
     const taxa = (parseFloat(margem) || 0) + (parseFloat(imposto) || 0);
     const fator = taxa < 99 ? 1 / (1 - taxa / 100) : 1;
 
@@ -454,7 +455,8 @@ const PropostaComercial = ({ aberto, aoFechar, propostaVisualizar = null }) => {
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Seus custos de serviço</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    ['mao_obra', 'Mão de obra (instalação)'],
+                    ['mo_paineis', 'Mão de obra — montagem de painéis'],
+                    ['mo_refrigeracao', 'Mão de obra — montagem de refrigeração'],
                     ['locomocao', 'Locomoção / mobilização'],
                     ['despesas', 'Despesas gerais'],
                     ['outros', 'Outros'],
