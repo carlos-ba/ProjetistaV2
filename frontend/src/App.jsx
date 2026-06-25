@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from './api';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -20,7 +20,7 @@ import { Separator } from './components/ui/separator.jsx';
 import { LayoutDashboard, FolderOpen, Settings, LogOut, Plus, Save, CopyPlus, CheckCircle2, Circle, Lock, ChevronRight } from 'lucide-react';
 
 
-function AppContent() {
+function AppContent({ catalogo }) {
   const { user, logout } = useAuth();
   const [dadosDoGabinete, setDadosDoGabinete] = useState(null);
   const [gabineteCalculado, setGabineteCalculado] = useState(false);
@@ -204,16 +204,18 @@ function AppContent() {
   const getUltimoEquipamento = () => {
     const lista = itensOrcamento.equipamentos;
     if (lista.length === 0) return null;
-    
-    // Se temos vários, pegamos o último mas calculamos a capacidade real acumulada dele
     const ultimo = { ...lista[lista.length - 1] };
-    if (ultimo.qtde > 1) {
-      ultimo.capacidade_original = ultimo.capacidade_real;
-      // Nota: Para dimensionamento de tubulação, o sistema costuma olhar o diâmetro de UMA unidade.
-      // Se forem 2 unidades separadas, o tubo é para uma unidade.
-      // Vou manter a capacidade individual para tubulação/acessórios, assumindo que cada unidade tem seu kit.
-    }
     return ultimo;
+  };
+
+  const getEvaporador = () => {
+    const lista = itensOrcamento.equipamentos;
+    return lista.findLast(e => e.categoria === 'Evaporadora') ?? null;
+  };
+
+  const getCondensadora = () => {
+    const lista = itensOrcamento.equipamentos;
+    return lista.findLast(e => e.categoria === 'Unidade Condensadora') ?? null;
   };
 
   const removerEquipamentoSugerido = (indexParaRemover) => {
@@ -543,7 +545,12 @@ function AppContent() {
               confirmacaoProxima={passoExpandido === 1 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraGabinete key={projetoKey} aoFinalizar={receberDadosGabinete} />
+              <CalculadoraGabinete
+                key={projetoKey}
+                aoFinalizar={receberDadosGabinete}
+                fabricantes={catalogo.fabricantes}
+                portasCatalogo={catalogo.portasCatalogo}
+              />
             </EtapaCard>
 
             {/* 2. Carga Térmica */}
@@ -613,7 +620,7 @@ function AppContent() {
               confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraTubulacao key={projetoKey} equipamentoSelecionado={getUltimoEquipamento()} aoFinalizar={receberDadosTubulacao} />
+              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} />
             </EtapaCard>
 
             {/* 6. Orçamento */}
@@ -659,8 +666,44 @@ function AppContent() {
   );
 }
 
+function useCatalogo() {
+  const [catalogo, setCatalogo] = useState(null); // null = ainda carregando
+  const tentativaRef = useRef(0);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const carregar = async () => {
+      while (!cancelado) {
+        try {
+          const [fabricantesRes, portasRes] = await Promise.all([
+            api.get('/api/v1/catalogo/paineis/fabricantes'),
+            api.get('/api/v1/catalogo/portas'),
+          ]);
+          if (!cancelado) {
+            setCatalogo({
+              fabricantes: fabricantesRes.data,
+              portasCatalogo: portasRes.data,
+            });
+          }
+          return; // sucesso — encerra o loop
+        } catch {
+          tentativaRef.current += 1;
+          if (!cancelado) await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    };
+
+    carregar();
+    return () => { cancelado = true; };
+  }, []);
+
+  return catalogo;
+}
+
 function App() {
   const { user, loading } = useAuth();
+  const catalogo = useCatalogo();
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] to-[#2a1245]">
@@ -670,7 +713,17 @@ function App() {
 
   if (!user) return <LoginPage />;
 
-  return <AppContent />;
+  if (!catalogo) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] to-[#2a1245]">
+      <div className="text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
+        <p className="text-white text-lg font-bold">Conectando ao servidor...</p>
+        <p className="text-purple-300 text-sm">Aguarde, isso pode levar alguns segundos</p>
+      </div>
+    </div>
+  );
+
+  return <AppContent catalogo={catalogo} />;
 }
 
 export default App;

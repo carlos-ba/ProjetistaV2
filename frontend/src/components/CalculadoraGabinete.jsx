@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import VisualizadorProjeto from './VisualizadorProjeto';
 
-const CalculadoraGabinete = ({ aoFinalizar }) => {
+const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [] }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState('');
   const [largura, setLargura] = useState('');
@@ -12,7 +12,6 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
   const [espessuraConcreto, setEspessuraConcreto] = useState('');
 
   // Seleção de painel do catálogo
-  const [fabricantes, setFabricantes] = useState([]);
   const [fabricanteSelecionado, setFabricanteSelecionado] = useState('');
   const [paineisFabricante, setPaineisFabricante] = useState([]);   // todos os painéis do fabricante
   const [nucleos, setNucleos] = useState([]);
@@ -24,7 +23,6 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
   const [painelSelecionado, setPainelSelecionado] = useState(null);  // objeto completo
 
   // ── Portas frigoríficas ───────────────────────────────────────────────
-  const [portasCatalogo, setPortasCatalogo]   = useState([]);
   const [portasSelecionadas, setPortasSelecionadas] = useState([]); // [{porta, qtde}]
 
   const [resultado, setResultado] = useState(null);
@@ -35,16 +33,6 @@ const CalculadoraGabinete = ({ aoFinalizar }) => {
   const [imagemProjeto, setImagemProjeto] = useState(null);
   const [ouvindo, setOuvindo] = useState(false);
 
-  // ── Carregar fabricantes de painéis ao montar ─────────────────────────
-  useEffect(() => {
-    api.get('/api/v1/catalogo/paineis/fabricantes')
-      .then(r => setFabricantes(r.data))
-      .catch(() => setFabricantes([]));
-    // Carrega todo o catálogo de portas
-    api.get('/api/v1/catalogo/portas')
-      .then(r => setPortasCatalogo(r.data))
-      .catch(() => setPortasCatalogo([]));
-  }, []);
 
   // Classificação sugerida baseada na temperatura interna
   const classificacaoSugerida = () => {
