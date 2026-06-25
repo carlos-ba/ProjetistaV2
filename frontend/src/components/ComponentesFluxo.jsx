@@ -12,6 +12,8 @@ const CATEGORIAS_MANUAL = [
 
 const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', conexao: '', capacidade: '', custo: '' });
 
+const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
+
 const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, aoFinalizar }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
@@ -30,6 +32,58 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // Sincroniza se o prop mudar (ex: usuário recalcula a carga)
   React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
+
+  // ── Seleção automática de solenoide ──────────────────────────────────────
+  const [solenoidLoading, setSolenoidLoading] = useState(false);
+  const [solenoidResult,  setSolenoidResult]  = useState(null);
+  const [solenoidErro,    setSolenoidErro]    = useState('');
+
+  const fluido_norm = fluido?.toUpperCase().replace(/\//g, '').replace(/\s/g, '');
+  const fluidoSuportado = FLUIDOS_SUPORTADOS.some(f =>
+    fluido?.toUpperCase().includes(f.replace('R','')) || fluido?.toUpperCase() === f
+  );
+
+  const selecionarSolenoidAuto = async () => {
+    setSolenoidLoading(true); setSolenoidErro(''); setSolenoidResult(null);
+    try {
+      const cargaKwNum = parseFloat(cargaKw);
+      const res = await api.post('/api/v1/solenoide/selecionar', {
+        fluido: fluido,
+        te_c: parseFloat(tempEvap),
+        tc_c: parseFloat(tempCond),
+        capacidade_kw: cargaKwNum,
+      });
+      const data = res.data;
+      setSolenoidResult(data);
+
+      // Preenche automaticamente a linha manual de solenoide
+      setLinhasManuais(prev => {
+        const existente = prev.findIndex(l => l.categoria === 'Válvula Solenoide');
+        const novaLinha = {
+          categoria: 'Válvula Solenoide',
+          modelo: data.modelo,
+          fabricante: 'Danfoss',
+          conexao: '',
+          capacidade: Math.round(data.capacidade_valvula_kw * 860),
+          custo: '',
+        };
+        if (existente >= 0) {
+          const novas = [...prev];
+          novas[existente] = novaLinha;
+          return novas;
+        }
+        // Se só tem uma linha vazia, substitui; senão adiciona
+        if (prev.length === 1 && !prev[0].modelo && !prev[0].categoria) {
+          return [novaLinha];
+        }
+        return [...prev, novaLinha];
+      });
+    } catch {
+      setSolenoidErro('Erro ao selecionar solenoide. Verifique se o fluido é R404A ou R22.');
+    } finally {
+      setSolenoidLoading(false);
+    }
+  };
 
   const buscarComponentes = async () => {
     setLoading(true); setErro('');
@@ -330,6 +384,79 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   ⬛⬛ Abrir lado a lado
                   <span className="text-[10px] text-blue-300 font-normal">— divide o monitor</span>
                 </button>
+              </div>
+
+              {/* Seleção automática de solenoide */}
+              <div className="mt-4 bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+                <p className="text-xs font-black text-purple-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  ⚡ Válvula Solenoide — Seleção Automática
+                  <span className="text-[10px] font-normal normal-case text-purple-400">cálculo interno por Kv (sem Coolselector)</span>
+                </p>
+
+                {!fluidoSuportado ? (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    ⚠️ Seleção automática disponível apenas para <strong>R404A</strong> e <strong>R22</strong>.
+                    Para outros fluidos, use o CoolSelector abaixo.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                      <div className="bg-white rounded-lg px-2 py-2 border border-purple-100">
+                        <p className="text-[9px] text-purple-400 uppercase font-bold">Fluido</p>
+                        <p className="text-sm font-black text-purple-800">{fluido}</p>
+                      </div>
+                      <div className="bg-white rounded-lg px-2 py-2 border border-purple-100">
+                        <p className="text-[9px] text-purple-400 uppercase font-bold">T. Evap / T. Cond</p>
+                        <p className="text-sm font-black text-purple-800">{tempEvap}°C / {tempCond}°C</p>
+                      </div>
+                      <div className="bg-white rounded-lg px-2 py-2 border border-purple-100">
+                        <p className="text-[9px] text-purple-400 uppercase font-bold">Capacidade</p>
+                        <p className="text-sm font-black text-purple-800">{cargaKw} kW</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={selecionarSolenoidAuto}
+                      disabled={solenoidLoading || !cargaAlvo}
+                      className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      {solenoidLoading ? '⏳ Calculando...' : '⚡ Selecionar Solenoide Automaticamente'}
+                    </button>
+
+                    {solenoidErro && (
+                      <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{solenoidErro}</p>
+                    )}
+
+                    {solenoidResult && (
+                      <div className="mt-3 bg-white border-2 border-purple-400 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-black text-purple-600 uppercase">Selecionado automaticamente</span>
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            FS {solenoidResult.fator_servico}×
+                          </span>
+                        </div>
+                        <p className="text-lg font-black text-slate-800">{solenoidResult.modelo}</p>
+                        <div className="grid grid-cols-3 gap-2 mt-2 text-center">
+                          <div>
+                            <p className="text-[9px] text-slate-400 uppercase font-bold">Kv</p>
+                            <p className="text-sm font-bold text-slate-700">{solenoidResult.kv} m³/h</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-400 uppercase font-bold">Q válvula</p>
+                            <p className="text-sm font-bold text-slate-700">{solenoidResult.capacidade_valvula_kw} kW</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-400 uppercase font-bold">ΔP</p>
+                            <p className="text-sm font-bold text-slate-700">{solenoidResult.dp_bar} bar</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[10px] text-emerald-600 font-bold">
+                          ✓ Preenchido automaticamente no formulário abaixo
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Guia passo a passo */}
