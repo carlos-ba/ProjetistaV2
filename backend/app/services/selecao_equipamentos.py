@@ -82,6 +82,9 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
             diferenca=round(diff, 2),
             percentual=round(percentual, 1),
             status=status,
+            volume_interno_kg=float(eq.volume_interno_kg) if eq.volume_interno_kg else None,
+            conexao_liquido=eq.conexao_liquido,
+            conexao_succao=eq.conexao_succao,
         ))
 
     candidatos.sort(key=lambda x: abs(x.diferenca))

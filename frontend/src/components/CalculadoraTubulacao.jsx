@@ -83,7 +83,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar }) => {
     try {
       const r = await api.post('/api/v1/tubulacao', payload());
       setResultado(r.data);
-      if (aoFinalizar) aoFinalizar(r.data.lista_materiais);
+      if (aoFinalizar) aoFinalizar(r.data.lista_materiais, r.data);
     } catch {
       setErro('Erro ao gerar lista de materiais.');
     } finally {

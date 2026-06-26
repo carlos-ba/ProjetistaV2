@@ -22,6 +22,11 @@ class Equipamento(Base):
     vazao_ar_m3h: Mapped[int] = mapped_column(Integer, default=0)
     flecha_ar_m: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Dados físicos para estimativa de carga de fluido
+    volume_interno_kg: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    conexao_liquido:   Mapped[str | None]     = mapped_column(String(10),    nullable=True)
+    conexao_succao:    Mapped[str | None]     = mapped_column(String(10),    nullable=True)
+
     categoria: Mapped["Categoria"] = relationship(back_populates="equipamentos")
     fabricante: Mapped["Fabricante"] = relationship(back_populates="equipamentos")
     unidade_medida: Mapped["UnidadeMedida"] = relationship(back_populates="equipamentos")

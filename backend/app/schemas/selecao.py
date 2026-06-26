@@ -19,3 +19,6 @@ class EquipamentoSelecionado(BaseModel):
     diferenca: float
     percentual: float
     status: str
+    volume_interno_kg: float | None = None
+    conexao_liquido:   str   | None = None
+    conexao_succao:    str   | None = None

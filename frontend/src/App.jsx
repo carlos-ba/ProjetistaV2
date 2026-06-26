@@ -31,8 +31,9 @@ function AppContent({ catalogo }) {
   const [itensOrcamento, setItensOrcamento] = useState({ materiais: [], equipamentos: [] });
   const [tempExternaCalculo, setTempExternaCalculo] = useState(35); // T.Amb do Card 2
   const [itensGabinete,   setItensGabinete]   = useState([]);   // step 1 — lista de corte de painéis
-  const [itensAcessorios, setItensAcessorios] = useState([]);   // step 4 — componentes de fluxo
-  const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 5 — tubulação
+  const [itensAcessorios, setItensAcessorios] = useState([]);   // step 5 — componentes de fluxo
+  const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 4 — tubulação
+  const [resultadoTubulacao, setResultadoTubulacao] = useState(null); // resultado completo do Card 4 (bitolas, distância)
   const [passoAtual, setPassoAtual] = useState(1);
   const [passoExpandido, setPassoExpandido] = useState(1);
   const [passoSelecionado, setPassoSelecionado] = useState(1);
@@ -119,18 +120,19 @@ function AppContent({ catalogo }) {
     setItensTubulacao([]);
     setPassoAtual(prev => Math.max(prev, 4));
     setPassoSelecionado(4);
-    setProximaEtapa({ numero: 4, label: 'Componentes e Acessórios' });
+    setProximaEtapa({ numero: 4, label: 'Dimensionamento de Tubulação' });
+  }, []);
+
+  const receberDadosTubulacao = useCallback((listaTubos, resultadoCompleto) => {
+    setItensTubulacao(listaTubos);
+    if (resultadoCompleto) setResultadoTubulacao(resultadoCompleto);
+    setPassoAtual(prev => Math.max(prev, 5));
+    setPassoSelecionado(5);
+    setProximaEtapa({ numero: 5, label: 'Componentes e Acessórios' });
   }, []);
 
   const receberComponentesFluxo = useCallback((listaAcessorios) => {
     setItensAcessorios(listaAcessorios);
-    setPassoAtual(prev => Math.max(prev, 5));
-    setPassoSelecionado(5);
-    setProximaEtapa({ numero: 5, label: 'Dimensionamento de Tubulação' });
-  }, []);
-
-  const receberDadosTubulacao = useCallback((listaTubos) => {
-    setItensTubulacao(listaTubos);
     setPassoAtual(prev => Math.max(prev, 6));
     setPassoSelecionado(6);
     setProximaEtapa({ numero: 6, label: 'Gerador de Orçamento' });
@@ -142,7 +144,7 @@ function AppContent({ catalogo }) {
     2: gabineteCalculado,
     3: cargaCalculada != null,
     4: itensOrcamento.equipamentos.length > 0,
-    5: passoAtual >= 5,
+    5: passoAtual >= 5,  // desbloqueado após tubulação
     6: itensOrcamento.materiais.length > 0 || itensOrcamento.equipamentos.length > 0,
   }[n] ?? false);
 
@@ -150,8 +152,8 @@ function AppContent({ catalogo }) {
     1: gabineteCalculado,
     2: cargaCalculada != null,
     3: itensOrcamento.equipamentos.length > 0,
-    4: passoAtual >= 5,
-    5: passoAtual >= 6,
+    4: passoAtual >= 5,  // tubulação concluída
+    5: passoAtual >= 6,  // componentes concluídos
     6: false,
   }[n] ?? false);
 
@@ -195,9 +197,9 @@ function AppContent({ catalogo }) {
     if (n === 3 && itensOrcamento.equipamentos.length > 0)
       return `${itensOrcamento.equipamentos.length} equipamento(s) selecionado(s)`;
     if (n === 4 && passoAtual >= 5)
-      return 'Acessórios e componentes confirmados';
-    if (n === 5 && passoAtual >= 6)
       return 'Tubulação dimensionada';
+    if (n === 5 && passoAtual >= 6)
+      return 'Acessórios e componentes confirmados';
     return null;
   };
 
@@ -234,6 +236,7 @@ function AppContent({ catalogo }) {
     setItensGabinete([]);
     setItensAcessorios([]);
     setItensTubulacao([]);
+    setResultadoTubulacao(null);
     setPassoAtual(1);
     setProjetoAtual(null);
     setGabineteCalculado(false);
@@ -588,9 +591,9 @@ function AppContent({ catalogo }) {
               />
             </EtapaCard>
 
-            {/* 4. Componentes e Acessórios */}
+            {/* 4. Tubulação */}
             <EtapaCard
-              numero={4} titulo="Componentes e Acessórios" icone="🔧"
+              numero={4} titulo="Dimensionamento de Tubulação" icone="🔩"
               status={statusEtapa(4)} resumo={resumoEtapa(4)}
               expandido={passoExpandido === 4}
               selecionado={passoSelecionado === 4 && passoExpandido !== 4}
@@ -599,19 +602,12 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 4 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <ComponentesFluxo
-                key={projetoKey}
-                cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
-                fluido={getUltimoEquipamento()?.fluido || 'R404A'}
-                tempEvap={getUltimoEquipamento()?.temp_evap || -10}
-                tempAmb={tempExternaCalculo}
-                aoFinalizar={receberComponentesFluxo}
-              />
+              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} />
             </EtapaCard>
 
-            {/* 5. Tubulação */}
+            {/* 5. Componentes e Acessórios */}
             <EtapaCard
-              numero={5} titulo="Dimensionamento de Tubulação" icone="🔩"
+              numero={5} titulo="Componentes e Acessórios" icone="🔧"
               status={statusEtapa(5)} resumo={resumoEtapa(5)}
               expandido={passoExpandido === 5}
               selecionado={passoSelecionado === 5 && passoExpandido !== 5}
@@ -620,7 +616,16 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} />
+              <ComponentesFluxo
+                key={projetoKey}
+                cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
+                fluido={getUltimoEquipamento()?.fluido || 'R404A'}
+                tempEvap={getUltimoEquipamento()?.temp_evap || -10}
+                tempAmb={tempExternaCalculo}
+                evaporador={getEvaporador()}
+                dadosTubulacao={resultadoTubulacao}
+                aoFinalizar={receberComponentesFluxo}
+              />
             </EtapaCard>
 
             {/* 6. Orçamento */}

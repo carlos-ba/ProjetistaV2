@@ -13,7 +13,7 @@ const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', cone
 
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, aoFinalizar }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, dadosTubulacao, aoFinalizar }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
   const [modo, setModo] = useState('automatico');
@@ -33,6 +33,11 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [acessorioResult,   setAcessorioResult]   = useState(null);
   const [filtroSelecionado, setFiltroSelecionado] = useState(true);
   const [visorSelecionado,  setVisorSelecionado]  = useState(true);
+
+  // ── Estimativa de carga de fluido ─────────────────────────────────────
+  const [cargaFluido,        setCargaFluido]        = useState(null);
+  const [comprimentoLiquido, setComprimentoLiquido] = useState('');
+  const [comprimentoSuccao,  setComprimentoSuccao]  = useState('');
 
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
@@ -110,6 +115,23 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   }, [temTanqueLiquido]);
 
   const buscarComponentes = () => executarBusca(null);
+
+  // ── Estimar carga de fluido quando temos tubulação + comprimentos ──────
+  const estimarCargaFluido = () => {
+    if (!dadosTubulacao || !comprimentoLiquido || !comprimentoSuccao) return;
+    const lm = parseFloat(comprimentoLiquido);
+    const sm = parseFloat(comprimentoSuccao);
+    if (isNaN(lm) || isNaN(sm) || lm <= 0 || sm <= 0) return;
+
+    api.post('/api/v1/carga-fluido/estimar', {
+      fluido,
+      volume_interno_evap_kg: evaporador?.volume_interno_kg ?? null,
+      bitola_liquido:         dadosTubulacao.diametro_liquido,
+      comprimento_liquido_m:  lm,
+      bitola_succao:          dadosTubulacao.diametro_succao,
+      comprimento_succao_m:   sm,
+    }).then(res => setCargaFluido(res.data)).catch(() => {});
+  };
 
   // Separadores automáticos (banco)
   const separadorLiqAuto = componentes.find(c =>
@@ -409,9 +431,77 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
             </div>
 
+            {/* ── Estimativa de Carga de Fluido ── */}
+            {dadosTubulacao && (
+              <div className="mb-6 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Estimativa de Carga de Fluido</span>
+                    <p className="text-xs text-indigo-700 mt-0.5">
+                      Bitolas: líquido <strong>{dadosTubulacao.diametro_liquido}</strong> | sucção <strong>{dadosTubulacao.diametro_succao}</strong>
+                      {evaporador?.volume_interno_kg ? ` | evap. ${evaporador.volume_interno_kg} kg` : ' | volume evap. não disponível'}
+                    </p>
+                  </div>
+                  {cargaFluido && (
+                    <div className="text-right">
+                      <div className="text-2xl font-black text-indigo-700">{cargaFluido.carga_total_kg} kg</div>
+                      <div className="text-[10px] text-indigo-400 font-bold">CARGA TOTAL</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-500 uppercase">Comprimento linha líquido (m)</label>
+                    <input
+                      type="number" value={comprimentoLiquido}
+                      onChange={e => setComprimentoLiquido(e.target.value)}
+                      placeholder={dadosTubulacao.distancia_considerada?.toFixed(0) || '5'}
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-indigo-200 text-sm outline-none bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-500 uppercase">Comprimento linha sucção (m)</label>
+                    <input
+                      type="number" value={comprimentoSuccao}
+                      onChange={e => setComprimentoSuccao(e.target.value)}
+                      placeholder={dadosTubulacao.distancia_considerada?.toFixed(0) || '5'}
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-indigo-200 text-sm outline-none bg-white"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={estimarCargaFluido}
+                  disabled={!comprimentoLiquido || !comprimentoSuccao}
+                  className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-40"
+                >
+                  Calcular Carga de Fluido
+                </button>
+
+                {cargaFluido && (
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    {[
+                      { label: 'Evaporador', valor: cargaFluido.carga_evaporador_kg },
+                      { label: 'Linha Líquido', valor: cargaFluido.carga_linha_liquido_kg },
+                      { label: 'Linha Sucção', valor: cargaFluido.carga_linha_succao_kg },
+                    ].map(item => (
+                      <div key={item.label} className="bg-white rounded-lg p-2 border border-indigo-100">
+                        <div className="text-xs font-black text-indigo-700">{item.valor} kg</div>
+                        <div className="text-[9px] text-indigo-400 font-bold uppercase">{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {cargaFluido?.nota && (
+                  <p className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1 border border-amber-200">{cargaFluido.nota}</p>
+                )}
+              </div>
+            )}
+
             <button onClick={finalizar}
               className="w-full py-4 bg-[#7B2D8B] text-white rounded-xl font-bold hover:bg-purple-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
-              CONFIRMAR ACESSÓRIOS E IR PARA TUBULAÇÃO ➡️
+              CONFIRMAR ACESSÓRIOS E IR PARA ORÇAMENTO ➡️
             </button>
           </>
         )}
