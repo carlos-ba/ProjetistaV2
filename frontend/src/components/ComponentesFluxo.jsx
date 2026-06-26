@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import CavaleteIlustracao from './CavaleteIlustracao';
 
 
 const CATEGORIAS_MANUAL = [
@@ -669,6 +670,17 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* ── Ilustração do Cavalete ── */}
+            {cavaleteResult && (
+              <CavaleteIlustracao
+                condensadora={condensadora}
+                evaporador={evaporador}
+                configuracoesMontagem={configuracoesMontagem}
+                cavaleteResult={cavaleteResult}
+                temTanque={tanqueSelecionado && !!tanqueResult}
+              />
             )}
 
             <button onClick={finalizar}
