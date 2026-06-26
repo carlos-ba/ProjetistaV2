@@ -22,54 +22,9 @@ const TRECHOS = [
   { campo: 'trecho_sifao_gbc',  label: 'Contra-sifão → GBC sucção' },
 ];
 
-export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
-  const [perfis, setPerfis]         = useState([]);
-  const [editando, setEditando]     = useState(null); // null | perfil obj
-  const [novoForm, setNovoForm]     = useState(null); // null | form obj
-  const [salvando, setSalvando]     = useState(false);
-  const [erro, setErro]             = useState('');
-
-  const carregar = () =>
-    api.get('/api/v1/configuracoes/montagem').then(r => setPerfis(r.data)).catch(() => {});
-
-  useEffect(() => { carregar(); }, []);
-
-  const ativar = async (id) => {
-    await api.patch(`/api/v1/configuracoes/montagem/${id}/ativar`);
-    await carregar();
-    const ativos = perfis.find(p => p.id === id);
-    if (ativos && onPerfilAtivo) onPerfilAtivo(ativos);
-  };
-
-  const salvarEdicao = async () => {
-    if (!editando) return;
-    setSalvando(true); setErro('');
-    try {
-      await api.put(`/api/v1/configuracoes/montagem/${editando.id}`, editando);
-      await carregar();
-      setEditando(null);
-    } catch { setErro('Erro ao salvar.'); }
-    finally { setSalvando(false); }
-  };
-
-  const criarPerfil = async () => {
-    if (!novoForm) return;
-    setSalvando(true); setErro('');
-    try {
-      await api.post('/api/v1/configuracoes/montagem', novoForm);
-      await carregar();
-      setNovoForm(null);
-    } catch { setErro('Erro ao criar perfil.'); }
-    finally { setSalvando(false); }
-  };
-
-  const deletar = async (id) => {
-    if (!window.confirm('Excluir este perfil?')) return;
-    await api.delete(`/api/v1/configuracoes/montagem/${id}`);
-    carregar();
-  };
-
-  const FormPerfil = ({ form, setForm, onSalvar, onCancelar, titulo }) => (
+// Fora do componente pai para que o React não recrie o tipo a cada render
+function FormPerfil({ form, setForm, onSalvar, onCancelar, titulo, salvando, erro }) {
+  return (
     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
       <p className="text-xs font-black text-slate-700 uppercase tracking-wide">{titulo}</p>
 
@@ -159,16 +114,60 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
       </div>
     </div>
   );
+}
+
+export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
+  const [perfis, setPerfis]     = useState([]);
+  const [editando, setEditando] = useState(null);
+  const [novoForm, setNovoForm] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro]         = useState('');
+
+  const carregar = () =>
+    api.get('/api/v1/configuracoes/montagem').then(r => setPerfis(r.data)).catch(() => {});
+
+  useEffect(() => { carregar(); }, []);
+
+  const ativar = async (id) => {
+    await api.patch(`/api/v1/configuracoes/montagem/${id}/ativar`);
+    await carregar();
+    const ativo = perfis.find(p => p.id === id);
+    if (ativo && onPerfilAtivo) onPerfilAtivo(ativo);
+  };
+
+  const salvarEdicao = async () => {
+    if (!editando) return;
+    setSalvando(true); setErro('');
+    try {
+      await api.put(`/api/v1/configuracoes/montagem/${editando.id}`, editando);
+      await carregar();
+      setEditando(null);
+    } catch { setErro('Erro ao salvar.'); }
+    finally { setSalvando(false); }
+  };
+
+  const criarPerfil = async () => {
+    if (!novoForm) return;
+    setSalvando(true); setErro('');
+    try {
+      await api.post('/api/v1/configuracoes/montagem', novoForm);
+      await carregar();
+      setNovoForm(null);
+    } catch { setErro('Erro ao criar perfil.'); }
+    finally { setSalvando(false); }
+  };
+
+  const deletar = async (id) => {
+    if (!window.confirm('Excluir este perfil?')) return;
+    await api.delete(`/api/v1/configuracoes/montagem/${id}`);
+    carregar();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/40" onClick={onFechar} />
 
-      {/* Painel lateral direito */}
       <div className="relative ml-auto w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-800">
           <div>
             <p className="text-sm font-black text-white">Configurações de Montagem</p>
@@ -177,10 +176,7 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
           <button onClick={onFechar} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
-        {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-
-          {/* Lista de perfis */}
           {perfis.map(p => (
             <div key={p.id} className={`rounded-xl border-2 p-4 ${p.ativo ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-center justify-between mb-3">
@@ -208,7 +204,6 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
                 </div>
               </div>
 
-              {/* Resumo do perfil */}
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-slate-600 mb-2">
                 <span>Filtro: <b className="capitalize">{p.tipo_filtro}</b></span>
                 <span>Visor: <b className="capitalize">{p.tipo_visor}</b></span>
@@ -230,25 +225,23 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
                 ))}
               </div>
 
-              {/* Form de edição inline */}
               {editando?.id === p.id && (
                 <div className="mt-4">
                   <FormPerfil
                     form={editando} setForm={setEditando}
                     onSalvar={salvarEdicao} onCancelar={() => setEditando(null)}
-                    titulo="Editar Perfil"
+                    titulo="Editar Perfil" salvando={salvando} erro={erro}
                   />
                 </div>
               )}
             </div>
           ))}
 
-          {/* Form novo perfil */}
           {novoForm ? (
             <FormPerfil
               form={novoForm} setForm={setNovoForm}
               onSalvar={criarPerfil} onCancelar={() => setNovoForm(null)}
-              titulo="Novo Perfil"
+              titulo="Novo Perfil" salvando={salvando} erro={erro}
             />
           ) : (
             <button

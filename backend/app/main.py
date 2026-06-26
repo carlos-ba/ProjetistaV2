@@ -5,8 +5,25 @@ import sys
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from alembic.config import Config as AlembicConfig
+from alembic import command as alembic_command
+
+
+def _run_migrations():
+    import os
+    ini = os.path.join(os.path.dirname(__file__), '..', 'alembic.ini')
+    cfg = AlembicConfig(os.path.abspath(ini))
+    alembic_command.upgrade(cfg, 'head')
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_migrations()
+    yield
 
 from app.core.config import settings
 from app.api.routes_auth import router as auth_router
@@ -34,6 +51,7 @@ app = FastAPI(
     title="Projetista V2 API",
     version="0.2.0",
     description="API de dimensionamento frigorífico — FastAPI + PostgreSQL.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
