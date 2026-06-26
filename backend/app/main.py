@@ -24,6 +24,7 @@ from app.api.routes_seed import router as seed_router
 from app.api.routes_cotacao import router as cotacao_router
 from app.api.routes_proposta import router as proposta_router
 from app.api.routes_solenoide import router as solenoide_router
+from app.api.routes_acessorios import router as acessorios_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -54,3 +55,4 @@ app.include_router(seed_router)
 app.include_router(cotacao_router)
 app.include_router(proposta_router)
 app.include_router(solenoide_router)
+app.include_router(acessorios_router)

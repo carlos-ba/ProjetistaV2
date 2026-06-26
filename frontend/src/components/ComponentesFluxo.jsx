@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 
 
-// Categorias para seleção manual (modo Engenharia) — Separadores de Líquido e Óleo são automáticos
 const CATEGORIAS_MANUAL = [
   'Válvula de Expansão Termostática',
   'Filtro Secador',
@@ -17,17 +16,23 @@ const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, aoFinalizar }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
-  const [modo, setModo] = useState('automatico'); // 'automatico' | 'engenharia'
+  const [modo, setModo] = useState('automatico');
 
-  // ── Modo Automático ───────────────────────────────────────────────────
+  // ── Modo Automático — componentes do banco ────────────────────────────
   const [componentes,  setComponentes]  = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [erro,         setErro]         = useState('');
   const [selecionados, setSelecionados] = useState({});
 
-  // ── Solenoide no Modo Automático ──────────────────────────────────────
-  const [solenoidResult,    setSolenoidResult]    = useState(null);
+  // ── Solenoide (cálculo por Kv) ────────────────────────────────────────
+  const [solenoidResult,      setSolenoidResult]      = useState(null);
   const [solenoidSelecionado, setSolenoidSelecionado] = useState(true);
+
+  // ── Filtro Secador + Visor de Líquido ─────────────────────────────────
+  const [temTanqueLiquido,  setTemTanqueLiquido]  = useState(true);
+  const [acessorioResult,   setAcessorioResult]   = useState(null);
+  const [filtroSelecionado, setFiltroSelecionado] = useState(true);
+  const [visorSelecionado,  setVisorSelecionado]  = useState(true);
 
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
@@ -36,53 +41,77 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
 
-  const cargaKw = (cargaAlvo / 860).toFixed(2);
+  const cargaKw        = (cargaAlvo / 860).toFixed(2);
   const fluidoSuportado = FLUIDOS_SUPORTADOS.some(f => fluido?.toUpperCase() === f);
 
-  // ── Busca componentes do banco + solenoide em paralelo ────────────────
-  useEffect(() => {
-    let cancelado = false;
-    if (cargaAlvo > 0) {
-      setLoading(true); setErro('');
-      setSolenoidResult(null);
+  // ── Busca todos os dados em paralelo ─────────────────────────────────
+  const executarBusca = (canceladoRef) => {
+    if (!cargaAlvo || cargaAlvo <= 0) return;
+    setLoading(true); setErro('');
+    setSolenoidResult(null); setAcessorioResult(null);
 
-      const promessaComponentes = api.post('/api/v1/componentes', {
-        capacidade_kcalh: cargaAlvo, fluido, temp_evap: tempEvap
-      });
+    const tcCond = parseFloat(tempAmb) + 10;
 
-      const promessaSolenoide = fluidoSuportado
+    const promises = [
+      api.post('/api/v1/componentes', { capacidade_kcalh: cargaAlvo, fluido, temp_evap: tempEvap }),
+      fluidoSuportado
         ? api.post('/api/v1/solenoide/selecionar', {
-            fluido,
-            te_c: parseFloat(tempEvap),
-            tc_c: parseFloat(tempCond),
-            capacidade_kw: parseFloat(cargaKw),
+            fluido, te_c: parseFloat(tempEvap), tc_c: tcCond, capacidade_kw: parseFloat(cargaKw),
           })
-        : Promise.resolve(null);
+        : Promise.resolve(null),
+      api.post('/api/v1/acessorios/selecionar', {
+        fluido, capacidade_kcalh: cargaAlvo, tem_tanque_liquido: temTanqueLiquido,
+      }),
+    ];
 
-      Promise.allSettled([promessaComponentes, promessaSolenoide]).then(([resComp, resSol]) => {
-        if (cancelado) return;
+    Promise.allSettled(promises).then(([resComp, resSol, resAce]) => {
+      if (canceladoRef && canceladoRef.current) return;
 
-        if (resComp.status === 'fulfilled') {
-          setComponentes(resComp.value.data);
-          const initial = {};
-          resComp.value.data.forEach(c => { initial[c.categoria] = true; });
-          setSelecionados(initial);
-        } else {
-          setErro('Erro ao buscar componentes de fluxo.');
-        }
+      if (resComp.status === 'fulfilled') {
+        setComponentes(resComp.value.data);
+        const initial = {};
+        resComp.value.data.forEach(c => { initial[c.categoria] = true; });
+        setSelecionados(initial);
+      } else {
+        setErro('Erro ao buscar componentes de fluxo.');
+      }
 
-        if (resSol.status === 'fulfilled' && resSol.value) {
-          setSolenoidResult(resSol.value.data);
-          setSolenoidSelecionado(true);
-        }
+      if (resSol.status === 'fulfilled' && resSol.value) {
+        setSolenoidResult(resSol.value.data);
+        setSolenoidSelecionado(true);
+      }
 
-        setLoading(false);
-      });
-    }
-    return () => { cancelado = true; };
+      if (resAce.status === 'fulfilled' && resAce.value) {
+        setAcessorioResult(resAce.value.data);
+        setFiltroSelecionado(true);
+        setVisorSelecionado(true);
+      }
+
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => {
+    const ref = { current: false };
+    executarBusca(ref);
+    return () => { ref.current = true; };
   }, [cargaAlvo, fluido, tempEvap]);
 
-  // Separadores automáticos
+  // Re-busca filtro/visor quando o técnico muda o toggle de tanque de líquido
+  useEffect(() => {
+    if (!cargaAlvo || cargaAlvo <= 0) return;
+    api.post('/api/v1/acessorios/selecionar', {
+      fluido, capacidade_kcalh: cargaAlvo, tem_tanque_liquido: temTanqueLiquido,
+    }).then(res => {
+      setAcessorioResult(res.data);
+      setFiltroSelecionado(true);
+      setVisorSelecionado(true);
+    }).catch(() => {});
+  }, [temTanqueLiquido]);
+
+  const buscarComponentes = () => executarBusca(null);
+
+  // Separadores automáticos (banco)
   const separadorLiqAuto = componentes.find(c =>
     c.categoria?.toLowerCase().includes('separador de líquido') ||
     c.categoria?.toLowerCase().includes('separador de liquido')
@@ -91,31 +120,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     c.categoria?.toLowerCase().includes('separador de óleo') ||
     c.categoria?.toLowerCase().includes('separador de oleo')
   ) || null;
-
-  const buscarComponentes = async () => {
-    setLoading(true); setErro(''); setSolenoidResult(null);
-    try {
-      const [resComp, resSol] = await Promise.allSettled([
-        api.post('/api/v1/componentes', { capacidade_kcalh: cargaAlvo, fluido, temp_evap: tempEvap }),
-        fluidoSuportado
-          ? api.post('/api/v1/solenoide/selecionar', {
-              fluido, te_c: parseFloat(tempEvap), tc_c: parseFloat(tempCond), capacidade_kw: parseFloat(cargaKw),
-            })
-          : Promise.resolve(null),
-      ]);
-      if (resComp.status === 'fulfilled') {
-        setComponentes(resComp.value.data);
-        const initial = {};
-        resComp.value.data.forEach(c => { initial[c.categoria] = true; });
-        setSelecionados(initial);
-      }
-      if (resSol.status === 'fulfilled' && resSol.value) {
-        setSolenoidResult(resSol.value.data);
-        setSolenoidSelecionado(true);
-      }
-    } catch { setErro('Erro ao buscar componentes de fluxo.'); }
-    finally  { setLoading(false); }
-  };
 
   // ── Finalizar Automático ──────────────────────────────────────────────
   const finalizar = () => {
@@ -132,7 +136,27 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       itens.push({
         item: `Válvula Solenoide ${solenoidResult.modelo}`,
         quantidade: 1, unidade: 'un',
-        detalhe: `Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860)} kcal/h`,
+        detalhe: `Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
+        custo_unitario: 0, preco: 0,
+      });
+    }
+
+    if (acessorioResult && filtroSelecionado) {
+      const f = acessorioResult.filtro_secador;
+      itens.push({
+        item: `Filtro Secador ${f.modelo}`,
+        quantidade: 1, unidade: 'un',
+        detalhe: `${f.fabricante} | ${f.tipo} | ${f.conexao}`,
+        custo_unitario: 0, preco: 0,
+      });
+    }
+
+    if (acessorioResult && visorSelecionado) {
+      const v = acessorioResult.visor_liquido;
+      itens.push({
+        item: `Visor de Líquido ${v.modelo}`,
+        quantidade: 1, unidade: 'un',
+        detalhe: `${v.fabricante} | ${v.conexao} | ${v.tipo}`,
         custo_unitario: 0, preco: 0,
       });
     }
@@ -179,6 +203,50 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     window.resizeTo(metade, alturaTela);
     window.open(COOLSELECTOR_URL, 'CoolSelector',
       `width=${metade},height=${alturaTela},left=${metade},top=0,resizable=yes,scrollbars=yes`);
+  };
+
+  // ── Card reutilizável para componentes automáticos ────────────────────
+  const CardAuto = ({ selecionado, onToggle, categoria, badge, titulo, detalhe, nota, aviso, corBorda }) => {
+    const cor = corBorda || 'emerald';
+    const sels = {
+      emerald: { borda: 'border-emerald-500 bg-emerald-50', check: 'bg-emerald-500 text-white', label: 'text-emerald-600' },
+      purple:  { borda: 'border-purple-400 bg-purple-50',  check: 'bg-purple-500 text-white',  label: 'text-purple-600'  },
+      cyan:    { borda: 'border-cyan-500 bg-cyan-50',       check: 'bg-cyan-500 text-white',    label: 'text-cyan-600'    },
+      teal:    { borda: 'border-teal-500 bg-teal-50',       check: 'bg-teal-500 text-white',    label: 'text-teal-600'    },
+    };
+    const s = sels[cor] || sels.emerald;
+    return (
+      <div
+        onClick={onToggle}
+        className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
+          selecionado ? `${s.borda} shadow-sm` : 'border-slate-100 bg-white opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
+        }`}
+      >
+        <div className={`mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black flex-shrink-0 ${
+          selecionado ? s.check : 'bg-slate-200 text-slate-400'
+        }`}>
+          {selecionado ? '✓' : ''}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-start gap-2">
+            <span className={`text-[10px] font-black uppercase ${selecionado ? s.label : 'text-slate-400'}`}>
+              {categoria}
+            </span>
+            {badge && (
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                selecionado ? `${s.label} bg-white/60` : 'text-slate-400 bg-slate-100'
+              }`}>
+                {badge}
+              </span>
+            )}
+          </div>
+          <h4 className="font-bold text-slate-800">{titulo}</h4>
+          <div className="text-[10px] text-slate-500 font-medium mt-1">{detalhe}</div>
+          {nota && <div className={`text-[9px] font-bold mt-1 ${selecionado ? s.label : 'text-slate-400'}`}>{nota}</div>}
+          {aviso && <div className="text-[9px] text-amber-600 bg-amber-50 rounded px-2 py-1 mt-1.5 border border-amber-200">{aviso}</div>}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -228,101 +296,117 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         {/* ══ MODO AUTOMÁTICO ══ */}
         {modo === 'automatico' && (
           <>
-            {/* Referência do projeto */}
-            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase">Referência de Projeto</span>
-                <div className="text-sm font-bold text-slate-700">
-                  {cargaAlvo} kcal/h | {fluido} | {tempEvap}°C Evap.
+            {/* Referência + toggle tanque de líquido */}
+            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">Referência de Projeto</span>
+                  <div className="text-sm font-bold text-slate-700">
+                    {cargaAlvo?.toLocaleString('pt-BR')} kcal/h | {fluido} | {tempEvap}°C Evap.
+                  </div>
                 </div>
+                <button onClick={buscarComponentes} className="text-xs font-bold text-emerald-600 hover:underline">
+                  Recalcular
+                </button>
               </div>
-              <button onClick={buscarComponentes} className="text-xs font-bold text-emerald-600 hover:underline">
-                Recalcular
-              </button>
+
+              {/* Toggle tanque de líquido */}
+              <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-600">Sistema com tanque de líquido?</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {temTanqueLiquido
+                      ? 'Sim → Filtro secador DML (standalone)'
+                      : 'Não → Filtro secador DMC (combinado com receptor)'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTemTanqueLiquido(prev => !prev)}
+                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${
+                    temTanqueLiquido ? 'bg-teal-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    temTanqueLiquido ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
             </div>
 
             {loading && <div className="p-8 text-center text-slate-500 animate-pulse">⚙️ Selecionando componentes...</div>}
             {erro    && <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 mb-4">{erro}</div>}
 
-            {/* Cards dos componentes do banco */}
+            {/* Grid de cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+              {/* Componentes do banco (separadores) */}
               {componentes.map((comp, idx) => (
-                <div key={idx}
-                  onClick={() => setSelecionados(prev => ({ ...prev, [comp.categoria]: !prev[comp.categoria] }))}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
-                    selecionados[comp.categoria]
-                      ? 'border-emerald-500 bg-emerald-50 shadow-sm'
-                      : 'border-slate-100 bg-white opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
-                  }`}
-                >
-                  <div className={`mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${
-                    selecionados[comp.categoria] ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
-                  }`}>
-                    {selecionados[comp.categoria] ? '✓' : ''}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <span className={`text-[10px] font-black uppercase ${selecionados[comp.categoria] ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {comp.categoria}
-                      </span>
-                      <span className="text-xs font-bold text-slate-900">R$ {comp.custo?.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <h4 className="font-bold text-slate-800">{comp.modelo}</h4>
-                    <div className="text-[10px] text-slate-500 font-medium mt-1">
-                      {comp.fabricante} | {comp.conexao_entrada} | {comp.faixa_operacao}
-                    </div>
-                  </div>
-                </div>
+                <CardAuto
+                  key={idx}
+                  selecionado={!!selecionados[comp.categoria]}
+                  onToggle={() => setSelecionados(prev => ({ ...prev, [comp.categoria]: !prev[comp.categoria] }))}
+                  categoria={comp.categoria}
+                  titulo={comp.modelo}
+                  detalhe={`${comp.fabricante} | ${comp.conexao_entrada} | ${comp.faixa_operacao}`}
+                  badge={`R$ ${comp.custo?.toLocaleString('pt-BR')}`}
+                  corBorda="emerald"
+                />
               ))}
 
-              {/* Card 4 — Válvula Solenoide (cálculo por Kv) */}
+              {/* Válvula Solenoide — cálculo por Kv */}
               {solenoidResult && (
-                <div
-                  onClick={() => setSolenoidSelecionado(prev => !prev)}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
-                    solenoidSelecionado
-                      ? 'border-purple-400 bg-purple-50 shadow-sm'
-                      : 'border-slate-100 bg-white opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
-                  }`}
-                >
-                  <div className={`mt-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${
-                    solenoidSelecionado ? 'bg-purple-500 text-white' : 'bg-slate-200 text-slate-400'
-                  }`}>
-                    {solenoidSelecionado ? '✓' : ''}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <span className={`text-[10px] font-black uppercase ${solenoidSelecionado ? 'text-purple-600' : 'text-slate-400'}`}>
-                        Válvula Solenoide
-                      </span>
-                      <span className="text-[9px] font-bold text-purple-400 bg-purple-100 px-2 py-0.5 rounded-full">
-                        FS {solenoidResult.fator_servico}×
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-slate-800">{solenoidResult.modelo}</h4>
-                    <div className="text-[10px] text-slate-500 font-medium mt-1">
-                      Danfoss | Kv {solenoidResult.kv} m³/h | {Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h
-                    </div>
-                    <div className="text-[9px] text-purple-400 font-bold mt-1">
-                      ⚡ Calculado por Kv — {fluido} {tempEvap}°C/{tempCond}°C
-                    </div>
-                  </div>
-                </div>
+                <CardAuto
+                  selecionado={solenoidSelecionado}
+                  onToggle={() => setSolenoidSelecionado(prev => !prev)}
+                  categoria="Válvula Solenoide"
+                  titulo={solenoidResult.modelo}
+                  detalhe={`Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`}
+                  nota={`⚡ Calculado por Kv — ${fluido} ${tempEvap}°C / T.Cond ${tempCond}°C`}
+                  badge={`FS ${solenoidResult.fator_servico}×`}
+                  corBorda="purple"
+                />
               )}
-
-              {/* Placeholder se fluido não suportado */}
               {!solenoidResult && !loading && !fluidoSuportado && (
                 <div className="p-4 rounded-xl border-2 border-amber-200 bg-amber-50 flex items-start gap-4">
-                  <div className="mt-1 w-5 h-5 rounded bg-amber-200 flex items-center justify-center text-[10px] font-black text-amber-600">?</div>
-                  <div className="flex-1">
+                  <div className="mt-1 w-5 h-5 rounded bg-amber-200 flex items-center justify-center text-[10px] font-black text-amber-600 flex-shrink-0">?</div>
+                  <div>
                     <span className="text-[10px] font-black uppercase text-amber-600">Válvula Solenoide</span>
                     <p className="text-xs text-amber-700 mt-1">
-                      Cálculo automático disponível para R404A e R22.<br/>
-                      Use o <button onClick={() => setModo('engenharia')} className="underline font-bold">Modo Engenharia</button> para selecionar via CoolSelector.
+                      Cálculo automático disponível para R404A e R22.{' '}
+                      <button onClick={() => setModo('engenharia')} className="underline font-bold">Modo Engenharia</button> para CoolSelector.
                     </p>
                   </div>
                 </div>
               )}
+
+              {/* Filtro Secador — DML ou DMC */}
+              {acessorioResult && (
+                <CardAuto
+                  selecionado={filtroSelecionado}
+                  onToggle={() => setFiltroSelecionado(prev => !prev)}
+                  categoria="Filtro Secador"
+                  titulo={acessorioResult.filtro_secador.modelo}
+                  detalhe={`Danfoss | ${acessorioResult.filtro_secador.tipo} | Linha ${acessorioResult.diametro_liquido}`}
+                  nota={`🔵 ${acessorioResult.filtro_secador.motivo}`}
+                  badge={acessorioResult.filtro_secador.tipo}
+                  aviso={acessorioResult.filtro_secador.aviso}
+                  corBorda="cyan"
+                />
+              )}
+
+              {/* Visor de Líquido — SGN */}
+              {acessorioResult && (
+                <CardAuto
+                  selecionado={visorSelecionado}
+                  onToggle={() => setVisorSelecionado(prev => !prev)}
+                  categoria="Visor de Líquido"
+                  titulo={acessorioResult.visor_liquido.modelo}
+                  detalhe={`Danfoss | ${acessorioResult.diametro_liquido} | ${acessorioResult.visor_liquido.tipo}`}
+                  nota={`📍 ${acessorioResult.visor_liquido.posicao}`}
+                  corBorda="teal"
+                />
+              )}
+
             </div>
 
             <button onClick={finalizar}
@@ -335,7 +419,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         {/* ══ MODO ENGENHARIA ══ */}
         {modo === 'engenharia' && (
           <>
-            {/* Banner CoolSelector */}
             <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white text-2xl flex-shrink-0">
@@ -355,7 +438,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </div>
               </div>
 
-              {/* Parâmetros do projeto */}
               <div className="mt-4 bg-white rounded-lg border border-blue-100 p-3">
                 <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">
                   Parâmetros do projeto — use no CoolSelector:
@@ -414,20 +496,19 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </button>
               </div>
 
-              {/* Guia passo a passo */}
               <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3">
                   📖 Como selecionar no CoolSelector — passo a passo
                 </p>
                 <ol className="space-y-2">
                   {[
-                    { n:1, txt: 'Aguarde o CoolSelector carregar. Clique em "Language" → "Portuguese (Brazil)" para mudar o idioma' },
-                    { n:2, txt: `Use os parâmetros: Fluido ${fluido} | T.Evap ${tempEvap}°C | T.Cond ${tempCond}°C | Capacidade ${cargaKw} kW` },
-                    { n:3, txt: 'Selecione a Válvula de Expansão Termostática (VET): menu "Válvulas" → "VET" → calcular → anotar modelo' },
-                    { n:4, txt: 'Selecione o Filtro Secador: menu "Filtros" → Filtro Secador → anotar modelo' },
-                    { n:5, txt: 'Selecione a Válvula Solenoide: menu "Válvulas" → Solenoide → anotar modelo' },
-                    { n:6, txt: 'Selecione o Visor de Líquido: menu "Indicadores" → Visor → anotar modelo' },
-                    { n:7, txt: 'Registre cada componente abaixo. Separadores de Líquido e Óleo já são selecionados automaticamente.' },
+                    { n:1, txt: 'Aguarde carregar. Clique em "Language" → "Portuguese (Brazil)"' },
+                    { n:2, txt: `Parâmetros: Fluido ${fluido} | T.Evap ${tempEvap}°C | T.Cond ${tempCond}°C | Cap. ${cargaKw} kW` },
+                    { n:3, txt: 'VET: menu "Válvulas" → "VET" → calcular → anotar modelo' },
+                    { n:4, txt: 'Filtro Secador: menu "Filtros" → Filtro Secador → anotar modelo' },
+                    { n:5, txt: 'Válvula Solenoide: menu "Válvulas" → Solenoide → anotar modelo' },
+                    { n:6, txt: 'Visor de Líquido: menu "Indicadores" → Visor → anotar modelo' },
+                    { n:7, txt: 'Registre abaixo. Separadores de Líquido e Óleo já são automáticos.' },
                   ].map(p => (
                     <li key={p.n} className="flex gap-3 text-xs text-amber-800">
                       <span className="w-5 h-5 rounded-full bg-amber-400 text-white font-black flex items-center justify-center flex-shrink-0 text-[10px]">{p.n}</span>
@@ -436,14 +517,14 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   ))}
                 </ol>
                 <p className="mt-3 text-[10px] text-amber-500 italic">
-                  ⚠️ O CoolSelector é um aplicativo remoto — não é possível pré-preencher os campos automaticamente.
+                  ⚠️ O CoolSelector é um aplicativo remoto — campos não podem ser pré-preenchidos automaticamente.
                 </p>
               </div>
             </div>
 
             {/* Separadores automáticos */}
             <div className="mb-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
                 🔒 Separadores — seleção automática
               </h3>
               {loading && <div className="p-4 text-center text-slate-400 text-sm animate-pulse">Buscando separadores...</div>}
@@ -479,11 +560,11 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
             {/* Registro manual */}
             <div className="mb-6">
-              <h3 className="text-sm font-black text-slate-700 mb-1 flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-700 mb-1">
                 📋 Registrar componentes selecionados no CoolSelector
               </h3>
               <p className="text-[10px] text-slate-400 mb-4">
-                Selecione no CoolSelector e registre abaixo: VET, Filtro Secador, Válvula Solenoide e Visor de Líquido.
+                VET, Filtro Secador, Válvula Solenoide e Visor de Líquido.
               </p>
 
               <div className="space-y-3">
