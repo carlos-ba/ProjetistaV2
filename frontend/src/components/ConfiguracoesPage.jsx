@@ -9,6 +9,10 @@ const DEFAULTS = {
   trecho_evap_sifao: 0.5,
   trecho_subida: 1.0,
   trecho_sifao_gbc: 0.5,
+  incluir_filtro: true,
+  incluir_visor: true,
+  incluir_gbc_entrada: true,
+  incluir_gbc_saida: true,
 };
 
 const TRECHOS = [
@@ -92,6 +96,32 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
             </select>
           </div>
         ))}
+      </div>
+
+      <div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Componentes Incluídos</p>
+        <div className="space-y-2">
+          {[
+            { campo: 'incluir_gbc_entrada', label: 'GBC entrada (linha de líquido)',   desc: 'Válvula globo na saída da condensadora' },
+            { campo: 'incluir_filtro',      label: 'Filtro Secador',                   desc: 'DML/DMC — pode vir incluso na UC' },
+            { campo: 'incluir_visor',       label: 'Visor de Líquido',                 desc: 'SGN — pode vir incluso na UC' },
+            { campo: 'incluir_gbc_saida',   label: 'GBC saída (linha de sucção)',      desc: 'Válvula globo na entrada da condensadora' },
+          ].map(({ campo, label, desc }) => (
+            <div key={campo} className="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
+              <div>
+                <p className="text-xs font-semibold text-slate-700">{label}</p>
+                <p className="text-[10px] text-slate-400">{desc}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, [campo]: !form[campo] })}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${form[campo] ? 'bg-emerald-500' : 'bg-slate-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form[campo] ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -179,13 +209,25 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
               </div>
 
               {/* Resumo do perfil */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-slate-600">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-slate-600 mb-2">
                 <span>Filtro: <b className="capitalize">{p.tipo_filtro}</b></span>
                 <span>Visor: <b className="capitalize">{p.tipo_visor}</b></span>
                 <span>VET→Evap: <b>{p.trecho_vet_evap} m</b></span>
                 <span>Evap→Sifão: <b>{p.trecho_evap_sifao} m</b></span>
                 <span>Subida: <b>{p.trecho_subida} m</b></span>
                 <span>C-Sifão→GBC: <b>{p.trecho_sifao_gbc} m</b></span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { key: 'incluir_gbc_entrada', label: 'GBC entrada' },
+                  { key: 'incluir_filtro',      label: 'Filtro' },
+                  { key: 'incluir_visor',       label: 'Visor' },
+                  { key: 'incluir_gbc_saida',   label: 'GBC saída' },
+                ].map(({ key, label }) => (
+                  <span key={key} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${p[key] !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500 line-through'}`}>
+                    {label}
+                  </span>
+                ))}
               </div>
 
               {/* Form de edição inline */}

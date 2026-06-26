@@ -15,6 +15,8 @@ DEFAULTS = dict(
     tipo_filtro="solda", tipo_visor="solda",
     trecho_vet_evap=0.5, trecho_evap_sifao=0.5,
     trecho_subida=1.0, trecho_sifao_gbc=0.5,
+    incluir_filtro=True, incluir_visor=True,
+    incluir_gbc_entrada=True, incluir_gbc_saida=True,
 )
 
 
@@ -26,6 +28,10 @@ class PerfilPayload(BaseModel):
     trecho_evap_sifao: float = Field(0.5, gt=0)
     trecho_subida: float = Field(1.0, gt=0)
     trecho_sifao_gbc: float = Field(0.5, gt=0)
+    incluir_filtro:      bool = Field(True)
+    incluir_visor:       bool = Field(True)
+    incluir_gbc_entrada: bool = Field(True)
+    incluir_gbc_saida:   bool = Field(True)
 
 
 def _to_dict(cfg: ConfiguracaoMontagem) -> dict:
@@ -39,6 +45,10 @@ def _to_dict(cfg: ConfiguracaoMontagem) -> dict:
         "trecho_evap_sifao": float(cfg.trecho_evap_sifao),
         "trecho_subida": float(cfg.trecho_subida),
         "trecho_sifao_gbc": float(cfg.trecho_sifao_gbc),
+        "incluir_filtro":      cfg.incluir_filtro,
+        "incluir_visor":       cfg.incluir_visor,
+        "incluir_gbc_entrada": cfg.incluir_gbc_entrada,
+        "incluir_gbc_saida":   cfg.incluir_gbc_saida,
     }
 
 

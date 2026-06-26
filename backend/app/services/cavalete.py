@@ -100,6 +100,11 @@ def analisar_cavalete(
     trecho_sifao_gbc_m: float,      # contra-sifão → GBC sucção
     # ── Tanque de líquido (opcional) ─────────────────────────────────────
     tanque_conexao: str | None = None,
+    # ── Flags de inclusão (Configurações) ────────────────────────────────
+    incluir_filtro:      bool = True,
+    incluir_visor:       bool = True,
+    incluir_gbc_entrada: bool = True,
+    incluir_gbc_saida:   bool = True,
 ) -> dict:
 
     itens_liquido: list[dict] = []
@@ -125,52 +130,66 @@ def analisar_cavalete(
     # 2. Linha de líquido corrida (com luvas de passagem)
     itens_liquido += _luvas_passagem(dl, comprimento_liquido_m)
 
-    # 3. Linha → GBC líquido (GBC bitola = diametro_liquido, passante)
-    r = _reducao(condensadora_cx_liquido if not tanque_conexao else tanque_conexao, dl,
-                 "Condensadora/Tanque → Linha de Líquido")
-    if r: itens_liquido.insert(0, r)
-
-    # 4. GBC saída (dl) → Filtro
-    if filtro_tipo == 'rosca':
-        itens_liquido.append(_porca(filtro_conexao, "Entrada Filtro Secador"))
-        # Redução de linha para bitola da porca se necessário já está implícita na porca
+    # 3. Condensadora/Tanque → GBC entrada (se incluir_gbc_entrada)
+    origem_linha = condensadora_cx_liquido if not tanque_conexao else tanque_conexao
+    if incluir_gbc_entrada:
+        r = _reducao(origem_linha, dl, "Condensadora/Tanque → GBC Entrada (linha líquido)")
+        if r: itens_liquido.insert(0, r)
+        bitola_apos_gbc_entrada = dl
     else:
-        r = _reducao(dl, filtro_conexao, "GBC → Filtro Secador")
-        if r: itens_liquido.append(r)
+        r = _reducao(origem_linha, dl, "Condensadora/Tanque → Linha de Líquido")
+        if r: itens_liquido.insert(0, r)
+        bitola_apos_gbc_entrada = dl
 
-    # 5. Filtro saída → Solenoide (solenoide é passante, solda)
-    r = _reducao(filtro_conexao, solenoide_conexao, "Filtro Secador → Solenoide")
+    # Bitola corrente após GBC entrada
+    bitola_corrente = bitola_apos_gbc_entrada
+
+    # 4. GBC saída → Filtro (se incluir_filtro)
+    if incluir_filtro:
+        if filtro_tipo == 'rosca':
+            r = _reducao(bitola_corrente, filtro_conexao, "Linha → Filtro Secador")
+            if r: itens_liquido.append(r)
+            itens_liquido.append(_porca(filtro_conexao, "Entrada Filtro Secador"))
+            bitola_corrente = filtro_conexao
+        else:
+            r = _reducao(bitola_corrente, filtro_conexao, "GBC → Filtro Secador")
+            if r: itens_liquido.append(r)
+            bitola_corrente = filtro_conexao
+
+    # 5. → Solenoide (sempre presente, passante)
+    r = _reducao(bitola_corrente, solenoide_conexao, "Filtro/GBC → Solenoide")
     if r: itens_liquido.append(r)
+    bitola_corrente = solenoide_conexao
 
-    # 6. Solenoide saída → Visor
-    if visor_tipo == 'rosca':
-        itens_liquido.append(_porca(visor_conexao, "Entrada Visor de Líquido"))
-        r = _reducao(solenoide_conexao, visor_conexao, "Solenoide → Visor (ajuste linha)")
-        if r: itens_liquido.append(r)
-    else:
-        r = _reducao(solenoide_conexao, visor_conexao, "Solenoide → Visor de Líquido")
-        if r: itens_liquido.append(r)
+    # 6. Solenoide → Visor (se incluir_visor)
+    if incluir_visor:
+        if visor_tipo == 'rosca':
+            r = _reducao(bitola_corrente, visor_conexao, "Solenoide → Visor (ajuste linha)")
+            if r: itens_liquido.append(r)
+            itens_liquido.append(_porca(visor_conexao, "Entrada Visor de Líquido"))
+            itens_liquido.append(_porca(visor_conexao, "Saída Visor de Líquido"))
+            bitola_corrente = visor_conexao
+        else:
+            r = _reducao(bitola_corrente, visor_conexao, "Solenoide → Visor de Líquido")
+            if r: itens_liquido.append(r)
+            bitola_corrente = visor_conexao
 
-    # 7. Visor saída → VET (VET é flange + porca)
-    # Se visor bitola ≠ entrada VET → luva de redução antes da porca
-    r = _reducao(visor_conexao, vet_entrada, "Visor → VET")
+    # Filtro rosca — porca de saída (só se filtro incluído e rosca)
+    if incluir_filtro and filtro_tipo == 'rosca':
+        itens_liquido.append(_porca(filtro_conexao, "Saída Filtro Secador"))
+
+    # 7. → VET (flange + porca, sempre presente)
+    r = _reducao(bitola_corrente, vet_entrada, "Componente anterior → VET")
     if r: itens_liquido.append(r)
     itens_liquido.append(_porca(vet_entrada, "Entrada VET (flange)"))
     itens_liquido.append(_porca(vet_saida,  "Saída VET (flange)"))
 
-    # 8. Trecho VET → Evaporador (bitola = vet_saida)
+    # 8. Trecho VET → Evaporador
     itens_liquido += _luvas_passagem(vet_saida, trecho_vet_evap_m)
 
-    # 9. Trecho → Evaporador entrada
+    # 9. → Evaporador entrada
     r = _reducao(vet_saida, evaporador_cx_liquido, "Trecho VET → Entrada Evaporador")
-    if r:
-        itens_liquido.append(r)
-
-    # 10. Filtro rosca — porca de saída
-    if filtro_tipo == 'rosca':
-        itens_liquido.append(_porca(filtro_conexao, "Saída Filtro Secador"))
-    if visor_tipo == 'rosca':
-        itens_liquido.append(_porca(visor_conexao, "Saída Visor de Líquido"))
+    if r: itens_liquido.append(r)
 
     # ══════════════════════════════════════════════════════════════════════
     # LINHA DE SUCÇÃO
@@ -198,13 +217,17 @@ def analisar_cavalete(
     # 5. Trecho Contra-sifão → GBC sucção
     itens_succao += _luvas_passagem(ds, trecho_sifao_gbc_m)
 
-    # 6. GBC sucção (bitola = ds, passante — sem redução)
+    # 6. GBC sucção (bitola = ds, passante — sem redução, se incluir_gbc_saida)
+    # Não gera item adicional pois é passante; a flag controla apenas se consta no orçamento
 
     # 7. Linha de sucção corrida (com luvas de passagem)
     itens_succao += _luvas_passagem(ds, comprimento_succao_m)
 
-    # 8. Linha → Condensadora entrada
-    r = _reducao(ds, condensadora_cx_succao, "Linha Sucção → Condensadora")
+    # 8. Linha → Condensadora entrada (com GBC saída se incluído)
+    if incluir_gbc_saida:
+        r = _reducao(ds, condensadora_cx_succao, "Linha Sucção → GBC Saída → Condensadora")
+    else:
+        r = _reducao(ds, condensadora_cx_succao, "Linha Sucção → Condensadora")
     if r: itens_succao.append(r)
 
     # ══════════════════════════════════════════════════════════════════════
@@ -217,9 +240,13 @@ def analisar_cavalete(
         "linha_succao":  itens_succao,
         "resumo":        resumo,
         "configuracao": {
-            "tipo_conexao_filtro": filtro_tipo,
-            "tipo_conexao_visor":  visor_tipo,
-            "diametro_liquido":    dl,
-            "diametro_succao":     ds,
+            "tipo_conexao_filtro":  filtro_tipo,
+            "tipo_conexao_visor":   visor_tipo,
+            "diametro_liquido":     dl,
+            "diametro_succao":      ds,
+            "incluir_filtro":       incluir_filtro,
+            "incluir_visor":        incluir_visor,
+            "incluir_gbc_entrada":  incluir_gbc_entrada,
+            "incluir_gbc_saida":    incluir_gbc_saida,
         }
     }

@@ -32,6 +32,11 @@ class CavaleteRequest(BaseModel):
     trecho_sifao_gbc_m:   float = Field(0.5)
     # Tanque (opcional)
     tanque_conexao: str | None = None
+    # Flags de inclusão (Configurações)
+    incluir_filtro:      bool = Field(True)
+    incluir_visor:       bool = Field(True)
+    incluir_gbc_entrada: bool = Field(True)
+    incluir_gbc_saida:   bool = Field(True)
 
 
 @router.post("/cavalete/analisar")

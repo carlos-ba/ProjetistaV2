@@ -183,6 +183,10 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       trecho_subida_m:         cfg.trecho_subida,
       trecho_sifao_gbc_m:      cfg.trecho_sifao_gbc,
       tanque_conexao:          tanque?.tanque?.conexao ?? null,
+      incluir_filtro:          cfg.incluir_filtro ?? true,
+      incluir_visor:           cfg.incluir_visor ?? true,
+      incluir_gbc_entrada:     cfg.incluir_gbc_entrada ?? true,
+      incluir_gbc_saida:       cfg.incluir_gbc_saida ?? true,
     }).then(res => {
       setCavaleteResult(res.data);
       setCavaleteIncluido(true);

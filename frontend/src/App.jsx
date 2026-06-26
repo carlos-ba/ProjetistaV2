@@ -36,12 +36,16 @@ function AppContent({ catalogo }) {
   const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 4 — tubulação
   const [resultadoTubulacao, setResultadoTubulacao] = useState(null); // resultado completo do Card 4 (bitolas, distância)
   const [configuracoesMontagem, setConfiguracoesMontagem] = useState({
-    tipo_filtro:       'solda',
-    tipo_visor:        'solda',
-    trecho_vet_evap:   0.5,
-    trecho_evap_sifao: 0.5,
-    trecho_subida:     1.0,
-    trecho_sifao_gbc:  0.5,
+    tipo_filtro:        'solda',
+    tipo_visor:         'solda',
+    trecho_vet_evap:    0.5,
+    trecho_evap_sifao:  0.5,
+    trecho_subida:      1.0,
+    trecho_sifao_gbc:   0.5,
+    incluir_filtro:     true,
+    incluir_visor:      true,
+    incluir_gbc_entrada: true,
+    incluir_gbc_saida:   true,
   });
   const [passoAtual, setPassoAtual] = useState(1);
   const [passoExpandido, setPassoExpandido] = useState(1);
@@ -63,12 +67,16 @@ function AppContent({ catalogo }) {
       const ativo = r.data.find(p => p.ativo) || r.data[0];
       if (ativo) {
         setConfiguracoesMontagem({
-          tipo_filtro:       ativo.tipo_filtro,
-          tipo_visor:        ativo.tipo_visor,
-          trecho_vet_evap:   parseFloat(ativo.trecho_vet_evap),
-          trecho_evap_sifao: parseFloat(ativo.trecho_evap_sifao),
-          trecho_subida:     parseFloat(ativo.trecho_subida),
-          trecho_sifao_gbc:  parseFloat(ativo.trecho_sifao_gbc),
+          tipo_filtro:         ativo.tipo_filtro,
+          tipo_visor:          ativo.tipo_visor,
+          trecho_vet_evap:     parseFloat(ativo.trecho_vet_evap),
+          trecho_evap_sifao:   parseFloat(ativo.trecho_evap_sifao),
+          trecho_subida:       parseFloat(ativo.trecho_subida),
+          trecho_sifao_gbc:    parseFloat(ativo.trecho_sifao_gbc),
+          incluir_filtro:      ativo.incluir_filtro ?? true,
+          incluir_visor:       ativo.incluir_visor ?? true,
+          incluir_gbc_entrada: ativo.incluir_gbc_entrada ?? true,
+          incluir_gbc_saida:   ativo.incluir_gbc_saida ?? true,
         });
       }
     }).catch(() => {});
@@ -532,12 +540,16 @@ function AppContent({ catalogo }) {
             <ConfiguracoesPage
               onFechar={() => setMostrandoConfiguracoes(false)}
               onPerfilAtivo={(perfil) => setConfiguracoesMontagem({
-                tipo_filtro:       perfil.tipo_filtro,
-                tipo_visor:        perfil.tipo_visor,
-                trecho_vet_evap:   parseFloat(perfil.trecho_vet_evap),
-                trecho_evap_sifao: parseFloat(perfil.trecho_evap_sifao),
-                trecho_subida:     parseFloat(perfil.trecho_subida),
-                trecho_sifao_gbc:  parseFloat(perfil.trecho_sifao_gbc),
+                tipo_filtro:         perfil.tipo_filtro,
+                tipo_visor:          perfil.tipo_visor,
+                trecho_vet_evap:     parseFloat(perfil.trecho_vet_evap),
+                trecho_evap_sifao:   parseFloat(perfil.trecho_evap_sifao),
+                trecho_subida:       parseFloat(perfil.trecho_subida),
+                trecho_sifao_gbc:    parseFloat(perfil.trecho_sifao_gbc),
+                incluir_filtro:      perfil.incluir_filtro ?? true,
+                incluir_visor:       perfil.incluir_visor ?? true,
+                incluir_gbc_entrada: perfil.incluir_gbc_entrada ?? true,
+                incluir_gbc_saida:   perfil.incluir_gbc_saida ?? true,
               })}
             />
           )}

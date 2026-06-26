@@ -19,3 +19,7 @@ class ConfiguracaoMontagem(Base, TimestampMixin):
     trecho_evap_sifao: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0.50"))
     trecho_subida: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("1.00"))
     trecho_sifao_gbc: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0.50"))
+    incluir_filtro:      Mapped[bool] = mapped_column(Boolean, default=True)
+    incluir_visor:       Mapped[bool] = mapped_column(Boolean, default=True)
+    incluir_gbc_entrada: Mapped[bool] = mapped_column(Boolean, default=True)
+    incluir_gbc_saida:   Mapped[bool] = mapped_column(Boolean, default=True)
