@@ -8,6 +8,7 @@ import CalculadoraGabinete from './components/CalculadoraGabinete.jsx';
 import CalculadoraCargaTermica from './components/CalculadoraCargaTermica.jsx';
 import SelecaoEquipamentos from './components/SelecaoEquipamentos.jsx';
 import ComponentesFluxo from './components/ComponentesFluxo.jsx';
+import ConfiguracoesMontagem from './components/ConfiguracoesMontagem.jsx';
 import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
@@ -34,6 +35,14 @@ function AppContent({ catalogo }) {
   const [itensAcessorios, setItensAcessorios] = useState([]);   // step 5 — componentes de fluxo
   const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 4 — tubulação
   const [resultadoTubulacao, setResultadoTubulacao] = useState(null); // resultado completo do Card 4 (bitolas, distância)
+  const [configuracoesMontagem, setConfiguracoesMontagem] = useState({
+    tipo_filtro:       'solda',
+    tipo_visor:        'solda',
+    trecho_vet_evap:   0.5,
+    trecho_evap_sifao: 0.5,
+    trecho_subida:     1.0,
+    trecho_sifao_gbc:  0.5,
+  });
   const [passoAtual, setPassoAtual] = useState(1);
   const [passoExpandido, setPassoExpandido] = useState(1);
   const [passoSelecionado, setPassoSelecionado] = useState(1);
@@ -237,6 +246,11 @@ function AppContent({ catalogo }) {
     setItensAcessorios([]);
     setItensTubulacao([]);
     setResultadoTubulacao(null);
+    setConfiguracoesMontagem({
+      tipo_filtro: 'solda', tipo_visor: 'solda',
+      trecho_vet_evap: 0.5, trecho_evap_sifao: 0.5,
+      trecho_subida: 1.0, trecho_sifao_gbc: 0.5,
+    });
     setPassoAtual(1);
     setProjetoAtual(null);
     setGabineteCalculado(false);
@@ -616,6 +630,10 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
+              <ConfiguracoesMontagem
+                config={configuracoesMontagem}
+                onChange={setConfiguracoesMontagem}
+              />
               <ComponentesFluxo
                 key={projetoKey}
                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
@@ -623,7 +641,9 @@ function AppContent({ catalogo }) {
                 tempEvap={getUltimoEquipamento()?.temp_evap || -10}
                 tempAmb={tempExternaCalculo}
                 evaporador={getEvaporador()}
+                condensadora={getCondensadora()}
                 dadosTubulacao={resultadoTubulacao}
+                configuracoesMontagem={configuracoesMontagem}
                 aoFinalizar={receberComponentesFluxo}
               />
             </EtapaCard>

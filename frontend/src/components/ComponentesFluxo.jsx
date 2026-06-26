@@ -13,7 +13,7 @@ const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', cone
 
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, dadosTubulacao, aoFinalizar }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
   const [modo, setModo] = useState('automatico');
@@ -42,6 +42,10 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   // ── Tanque de líquido ─────────────────────────────────────────────────
   const [tanqueResult,      setTanqueResult]      = useState(null);
   const [tanqueSelecionado, setTanqueSelecionado] = useState(true);
+
+  // ── Cavalete de componentes ───────────────────────────────────────────
+  const [cavaleteResult,      setCavaleteResult]      = useState(null);
+  const [cavaleteIncluido,    setCavaleteIncluido]    = useState(true);
 
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
@@ -144,6 +148,44 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     }).then(res => {
       setTanqueResult(res.data);
       setTanqueSelecionado(true);
+      // Encadeia análise do cavalete
+      analisarCavaleteAuto(res.data);
+    }).catch(() => {});
+  };
+
+  const analisarCavaleteAuto = (tanque) => {
+    if (!dadosTubulacao || !configuracoesMontagem) return;
+    if (!condensadora?.conexao_liquido || !evaporador?.conexao_liquido) return;
+    if (!acessorioResult) return;
+
+    const lm = parseFloat(comprimentoLiquido) || 0;
+    const sm = parseFloat(comprimentoSuccao)  || 0;
+    const cfg = configuracoesMontagem;
+
+    api.post('/api/v1/cavalete/analisar', {
+      condensadora_cx_liquido: condensadora.conexao_liquido,
+      condensadora_cx_succao:  condensadora.conexao_succao,
+      evaporador_cx_liquido:   evaporador.conexao_liquido,
+      evaporador_cx_succao:    evaporador.conexao_succao,
+      diametro_liquido:        dadosTubulacao.diametro_liquido,
+      diametro_succao:         dadosTubulacao.diametro_succao,
+      filtro_conexao:          acessorioResult.filtro_secador.conexao,
+      filtro_tipo:             cfg.tipo_filtro,
+      solenoide_conexao:       solenoidResult?.conexao || dadosTubulacao.diametro_liquido,
+      visor_conexao:           acessorioResult.visor_liquido.conexao,
+      visor_tipo:              cfg.tipo_visor,
+      vet_entrada:             '3/8"',
+      vet_saida:               '1/2"',
+      comprimento_liquido_m:   lm,
+      comprimento_succao_m:    sm,
+      trecho_vet_evap_m:       cfg.trecho_vet_evap,
+      trecho_evap_sifao_m:     cfg.trecho_evap_sifao,
+      trecho_subida_m:         cfg.trecho_subida,
+      trecho_sifao_gbc_m:      cfg.trecho_sifao_gbc,
+      tanque_conexao:          tanque?.tanque?.conexao ?? null,
+    }).then(res => {
+      setCavaleteResult(res.data);
+      setCavaleteIncluido(true);
     }).catch(() => {});
   };
 
@@ -204,6 +246,18 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         quantidade: 1, unidade: 'un',
         detalhe: `Vol. total ${t.volume_total_l} L | Vol. útil ${t.volume_util_l} L (NBR 16.069) | ${t.conexao}`,
         custo_unitario: 0, preco: 0,
+      });
+    }
+
+    if (cavaleteResult && cavaleteIncluido) {
+      cavaleteResult.resumo.forEach(it => {
+        itens.push({
+          item: it.item,
+          quantidade: it.quantidade,
+          unidade: it.unidade,
+          detalhe: it.detalhe || 'Cavalete de montagem',
+          custo_unitario: 0, preco: 0,
+        });
       });
     }
 
@@ -536,6 +590,81 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 aviso={tanqueResult.aviso}
                 corBorda="violet"
               />
+            )}
+
+            {/* ── Cavalete de Componentes ── */}
+            {cavaleteResult && (
+              <div className="border-2 border-orange-300 rounded-xl overflow-hidden">
+                <div className="bg-orange-50 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔧</span>
+                    <div>
+                      <p className="text-xs font-black text-orange-800 uppercase tracking-wide">Cavalete — Conexões e Reduções</p>
+                      <p className="text-[10px] text-orange-500">{cavaleteResult.resumo.length} itens identificados</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setCavaleteIncluido(prev => !prev)}
+                    className={`text-[10px] font-bold px-3 py-1 rounded-full border transition-all ${cavaleteIncluido ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-400 border-orange-300'}`}
+                  >
+                    {cavaleteIncluido ? '✓ Incluído' : 'Excluído'}
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* Linha de Líquido */}
+                  <div>
+                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Linha de Líquido</p>
+                    <div className="space-y-1">
+                      {cavaleteResult.linha_liquido.map((it, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-orange-50">
+                          <span className="text-gray-700">{it.item}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-gray-400">{it.detalhe}</span>
+                            <span className="font-bold text-orange-700 w-6 text-right">{it.quantidade}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Linha de Sucção */}
+                  <div>
+                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Linha de Sucção</p>
+                    <div className="space-y-1">
+                      {cavaleteResult.linha_succao.map((it, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-orange-50">
+                          <span className="text-gray-700">{it.item}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-gray-400">{it.detalhe}</span>
+                            <span className="font-bold text-orange-700 w-6 text-right">{it.quantidade}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Resumo consolidado */}
+                  <div className="bg-orange-50 rounded-lg p-3">
+                    <p className="text-[10px] font-black text-orange-700 uppercase tracking-widest mb-2">Resumo Consolidado</p>
+                    <div className="space-y-1">
+                      {cavaleteResult.resumo.map((it, i) => (
+                        <div key={i} className="flex justify-between text-xs">
+                          <span className="text-gray-700">{it.item}</span>
+                          <span className="font-black text-orange-800">{it.quantidade} {it.unidade}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-gray-400">
+                    Conexão filtro: <b className="capitalize">{cavaleteResult.configuracao.tipo_conexao_filtro}</b> |
+                    Visor: <b className="capitalize">{cavaleteResult.configuracao.tipo_conexao_visor}</b> |
+                    Linha líquido: <b>{cavaleteResult.configuracao.diametro_liquido}</b> |
+                    Linha sucção: <b>{cavaleteResult.configuracao.diametro_succao}</b>
+                  </div>
+                </div>
+              </div>
             )}
 
             <button onClick={finalizar}
