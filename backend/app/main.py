@@ -22,7 +22,10 @@ def _run_migrations():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _run_migrations()
+    # Roda em thread separada: env.py usa asyncio.run() que não pode ser
+    # chamado dentro de um loop já ativo (o loop do FastAPI/uvicorn)
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_migrations)
     yield
 
 from app.core.config import settings
