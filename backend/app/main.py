@@ -15,9 +15,13 @@ from alembic import command as alembic_command
 
 def _run_migrations():
     import os
-    ini = os.path.join(os.path.dirname(__file__), '..', 'alembic.ini')
-    cfg = AlembicConfig(os.path.abspath(ini))
-    alembic_command.upgrade(cfg, 'head')
+    import logging
+    try:
+        ini = os.path.join(os.path.dirname(__file__), '..', 'alembic.ini')
+        cfg = AlembicConfig(os.path.abspath(ini))
+        alembic_command.upgrade(cfg, 'head')
+    except Exception as exc:
+        logging.getLogger(__name__).error("Falha ao rodar migrations no startup: %s", exc)
 
 
 @asynccontextmanager

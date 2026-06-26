@@ -361,11 +361,16 @@ function AppContent({ catalogo }) {
   };
 
   const carregarProjeto = (projeto) => {
-    const d = projeto.dados_completos;
-    if (d.gabinete) setDadosDoGabinete(d.gabinete);
+    const d = projeto.dados_completos || {};
+    setProjetoKey(k => k + 1); // força remount de todos os cards
+    if (d.gabinete) {
+      setDadosDoGabinete(d.gabinete);
+      setGabineteCalculado(true);
+      gabineteCalculadoRef.current = true;
+    }
     if (d.carga_termica) setCargaCalculada(d.carga_termica);
     if (d.orcamento) setItensOrcamento(d.orcamento);
-    if (d.configuracoes?.passo_atual) setPassoAtual(d.configuracoes.passo_atual);
+    setPassoAtual(d.configuracoes?.passo_atual || (d.gabinete ? 2 : 1));
     setProjetoAtual({ id: projeto.id, nome: projeto.nome, cliente: projeto.cliente });
     setMostrandoHistorico(false);
     alert(`Projeto "${projeto.nome}" carregado com sucesso!`);

@@ -11,7 +11,9 @@ from app.schemas.projeto import ProjetoCreate, ProjetoUpdate
 async def create_projeto(db: AsyncSession, projeto_in: ProjetoCreate, owner_id: UUID | None = None) -> Projeto:
     db_projeto = Projeto(
         nome=projeto_in.nome,
+        cliente=projeto_in.cliente,
         status=projeto_in.status,
+        dados_completos=projeto_in.dados_completos or {},
         owner_id=owner_id,
     )
     db.add(db_projeto)
@@ -40,8 +42,12 @@ async def get_projetos(db: AsyncSession, skip: int = 0, limit: int = 100, owner_
 async def update_projeto(db: AsyncSession, db_projeto: Projeto, projeto_in: ProjetoUpdate) -> Projeto:
     if projeto_in.nome is not None:
         db_projeto.nome = projeto_in.nome
+    if projeto_in.cliente is not None:
+        db_projeto.cliente = projeto_in.cliente
     if projeto_in.status is not None:
         db_projeto.status = projeto_in.status
+    if projeto_in.dados_completos is not None:
+        db_projeto.dados_completos = projeto_in.dados_completos
     await db.flush()
     await db.refresh(db_projeto)
     return db_projeto
