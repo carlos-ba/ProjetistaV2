@@ -39,6 +39,10 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [comprimentoLiquido, setComprimentoLiquido] = useState('');
   const [comprimentoSuccao,  setComprimentoSuccao]  = useState('');
 
+  // ── Tanque de líquido ─────────────────────────────────────────────────
+  const [tanqueResult,      setTanqueResult]      = useState(null);
+  const [tanqueSelecionado, setTanqueSelecionado] = useState(true);
+
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
   const [tempAmb, setTempAmb] = useState(tempAmbProp);
@@ -130,7 +134,17 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       comprimento_liquido_m:  lm,
       bitola_succao:          dadosTubulacao.diametro_succao,
       comprimento_succao_m:   sm,
-    }).then(res => setCargaFluido(res.data)).catch(() => {});
+    }).then(res => {
+      setCargaFluido(res.data);
+      // Seleciona tanque de líquido automaticamente com base na carga calculada
+      return api.post('/api/v1/tanque-liquido/selecionar', {
+        fluido,
+        carga_total_kg: res.data.carga_total_kg,
+      });
+    }).then(res => {
+      setTanqueResult(res.data);
+      setTanqueSelecionado(true);
+    }).catch(() => {});
   };
 
   // Separadores automáticos (banco)
@@ -179,6 +193,16 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         item: `Visor de Líquido ${v.modelo}`,
         quantidade: 1, unidade: 'un',
         detalhe: `${v.fabricante} | ${v.conexao} | ${v.tipo}`,
+        custo_unitario: 0, preco: 0,
+      });
+    }
+
+    if (tanqueResult && tanqueSelecionado) {
+      const t = tanqueResult.tanque;
+      itens.push({
+        item: `Tanque de Líquido ${t.fabricante} ${t.modelo}`,
+        quantidade: 1, unidade: 'un',
+        detalhe: `Vol. total ${t.volume_total_l} L | Vol. útil ${t.volume_util_l} L (NBR 16.069) | ${t.conexao}`,
         custo_unitario: 0, preco: 0,
       });
     }
@@ -497,6 +521,21 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   <p className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1 border border-amber-200">{cargaFluido.nota}</p>
                 )}
               </div>
+            )}
+
+            {/* ── Tanque de Líquido ── */}
+            {tanqueResult && (
+              <CardAuto
+                selecionado={tanqueSelecionado}
+                onToggle={() => setTanqueSelecionado(prev => !prev)}
+                categoria="Tanque de Líquido"
+                titulo={`${tanqueResult.tanque.fabricante} ${tanqueResult.tanque.modelo}`}
+                detalhe={`Vol. total ${tanqueResult.tanque.volume_total_l} L | Vol. útil ${tanqueResult.tanque.volume_util_l} L | Conexão ${tanqueResult.tanque.conexao}`}
+                nota={`🔵 NBR 16.069 — vol. necessário ${tanqueResult.volume_necessario_l} L | carga ${tanqueResult.carga_total_kg} kg`}
+                badge={tanqueResult.tanque.fabricante}
+                aviso={tanqueResult.aviso}
+                corBorda="violet"
+              />
             )}
 
             <button onClick={finalizar}
