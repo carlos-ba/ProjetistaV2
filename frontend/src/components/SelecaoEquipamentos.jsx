@@ -92,18 +92,21 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
   const adicionarAoRascunho = (item) => {
     const qtd = quantidades[item.id] || 1;
     setSelecionados(prev => [...prev, {
-      nome:           `${item.modelo} (${item.fabricante})`,
-      preco:          item.preco,
-      qtde:           qtd,
-      detalhe:        `${item.capacidade_real} kcal/h`,
-      capacidade_real: item.capacidade_real,
-      vazao_ar:       item.vazao_ar,
+      nome:              `${item.modelo} (${item.fabricante})`,
+      preco:             item.preco,
+      qtde:              qtd,
+      detalhe:           `${item.capacidade_real} kcal/h`,
+      capacidade_real:   item.capacidade_real,
+      vazao_ar:          item.vazao_ar,
       fluido,
-      temp_evap:      evap,
-      temp_cond:      cond,
-      modelo:         item.modelo,
-      id:             item.id,
-      categoria:      abaAtiva,
+      temp_evap:         evap,
+      temp_cond:         cond,
+      modelo:            item.modelo,
+      id:                item.id,
+      categoria:         abaAtiva,
+      volume_interno_kg: item.volume_interno_kg ?? null,
+      conexao_liquido:   item.conexao_liquido   ?? null,
+      conexao_succao:    item.conexao_succao     ?? null,
     }]);
   };
 
