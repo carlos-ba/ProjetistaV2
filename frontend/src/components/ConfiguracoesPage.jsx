@@ -1,0 +1,229 @@
+import React, { useState, useEffect } from 'react';
+import api from '../api';
+
+const DEFAULTS = {
+  nome: 'Novo Perfil',
+  tipo_filtro: 'solda',
+  tipo_visor: 'solda',
+  trecho_vet_evap: 0.5,
+  trecho_evap_sifao: 0.5,
+  trecho_subida: 1.0,
+  trecho_sifao_gbc: 0.5,
+};
+
+const TRECHOS = [
+  { campo: 'trecho_vet_evap',   label: 'VET → Evaporador' },
+  { campo: 'trecho_evap_sifao', label: 'Evaporador → Sifão' },
+  { campo: 'trecho_subida',     label: 'Sifão → Contra-sifão (subida)' },
+  { campo: 'trecho_sifao_gbc',  label: 'Contra-sifão → GBC sucção' },
+];
+
+export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
+  const [perfis, setPerfis]         = useState([]);
+  const [editando, setEditando]     = useState(null); // null | perfil obj
+  const [novoForm, setNovoForm]     = useState(null); // null | form obj
+  const [salvando, setSalvando]     = useState(false);
+  const [erro, setErro]             = useState('');
+
+  const carregar = () =>
+    api.get('/api/v1/configuracoes/montagem').then(r => setPerfis(r.data)).catch(() => {});
+
+  useEffect(() => { carregar(); }, []);
+
+  const ativar = async (id) => {
+    await api.patch(`/api/v1/configuracoes/montagem/${id}/ativar`);
+    await carregar();
+    const ativos = perfis.find(p => p.id === id);
+    if (ativos && onPerfilAtivo) onPerfilAtivo(ativos);
+  };
+
+  const salvarEdicao = async () => {
+    if (!editando) return;
+    setSalvando(true); setErro('');
+    try {
+      await api.put(`/api/v1/configuracoes/montagem/${editando.id}`, editando);
+      await carregar();
+      setEditando(null);
+    } catch { setErro('Erro ao salvar.'); }
+    finally { setSalvando(false); }
+  };
+
+  const criarPerfil = async () => {
+    if (!novoForm) return;
+    setSalvando(true); setErro('');
+    try {
+      await api.post('/api/v1/configuracoes/montagem', novoForm);
+      await carregar();
+      setNovoForm(null);
+    } catch { setErro('Erro ao criar perfil.'); }
+    finally { setSalvando(false); }
+  };
+
+  const deletar = async (id) => {
+    if (!window.confirm('Excluir este perfil?')) return;
+    await api.delete(`/api/v1/configuracoes/montagem/${id}`);
+    carregar();
+  };
+
+  const FormPerfil = ({ form, setForm, onSalvar, onCancelar, titulo }) => (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <p className="text-xs font-black text-slate-700 uppercase tracking-wide">{titulo}</p>
+
+      <div>
+        <label className="text-[10px] font-bold text-slate-500 uppercase">Nome do Perfil</label>
+        <input
+          className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400"
+          value={form.nome}
+          onChange={e => setForm({ ...form, nome: e.target.value })}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {[{ campo: 'tipo_filtro', label: 'Filtro Secador' }, { campo: 'tipo_visor', label: 'Visor de Líquido' }].map(({ campo, label }) => (
+          <div key={campo}>
+            <label className="text-[10px] font-bold text-slate-500 uppercase">{label}</label>
+            <select
+              value={form[campo]}
+              onChange={e => setForm({ ...form, [campo]: e.target.value })}
+              className="w-full mt-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+            >
+              <option value="solda">Solda</option>
+              <option value="rosca">Rosca (flange + porca)</option>
+            </select>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Trechos de Montagem (metros)</p>
+        <div className="space-y-2">
+          {TRECHOS.map(({ campo, label }) => (
+            <div key={campo} className="flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-600">{label}</span>
+              <input
+                type="number" min="0.1" step="0.1"
+                value={form[campo]}
+                onChange={e => setForm({ ...form, [campo]: parseFloat(e.target.value) || 0 })}
+                className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {erro && <p className="text-xs text-red-500">{erro}</p>}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={onSalvar} disabled={salvando}
+          className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 disabled:opacity-50"
+        >
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+        <button
+          onClick={onCancelar}
+          className="px-4 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/40" onClick={onFechar} />
+
+      {/* Painel lateral direito */}
+      <div className="relative ml-auto w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-800">
+          <div>
+            <p className="text-sm font-black text-white">Configurações de Montagem</p>
+            <p className="text-[10px] text-slate-400">Perfis de padrão por tipo de instalação</p>
+          </div>
+          <button onClick={onFechar} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Lista de perfis */}
+          {perfis.map(p => (
+            <div key={p.id} className={`rounded-xl border-2 p-4 ${p.ativo ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {p.ativo && <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">Ativo</span>}
+                  <p className="text-sm font-bold text-slate-800">{p.nome}</p>
+                </div>
+                <div className="flex gap-1">
+                  {!p.ativo && (
+                    <button onClick={() => ativar(p.id)}
+                      className="text-[10px] px-2 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700">
+                      Ativar
+                    </button>
+                  )}
+                  <button onClick={() => setEditando({ ...p })}
+                    className="text-[10px] px-2 py-1 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+                    Editar
+                  </button>
+                  {perfis.length > 1 && (
+                    <button onClick={() => deletar(p.id)}
+                      className="text-[10px] px-2 py-1 border border-red-200 rounded-lg text-red-500 hover:bg-red-50">
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Resumo do perfil */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-slate-600">
+                <span>Filtro: <b className="capitalize">{p.tipo_filtro}</b></span>
+                <span>Visor: <b className="capitalize">{p.tipo_visor}</b></span>
+                <span>VET→Evap: <b>{p.trecho_vet_evap} m</b></span>
+                <span>Evap→Sifão: <b>{p.trecho_evap_sifao} m</b></span>
+                <span>Subida: <b>{p.trecho_subida} m</b></span>
+                <span>C-Sifão→GBC: <b>{p.trecho_sifao_gbc} m</b></span>
+              </div>
+
+              {/* Form de edição inline */}
+              {editando?.id === p.id && (
+                <div className="mt-4">
+                  <FormPerfil
+                    form={editando} setForm={setEditando}
+                    onSalvar={salvarEdicao} onCancelar={() => setEditando(null)}
+                    titulo="Editar Perfil"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Form novo perfil */}
+          {novoForm ? (
+            <FormPerfil
+              form={novoForm} setForm={setNovoForm}
+              onSalvar={criarPerfil} onCancelar={() => setNovoForm(null)}
+              titulo="Novo Perfil"
+            />
+          ) : (
+            <button
+              onClick={() => setNovoForm({ ...DEFAULTS })}
+              className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-bold text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-all"
+            >
+              + Novo Perfil de Montagem
+            </button>
+          )}
+
+          <div className="text-[10px] text-slate-400 bg-slate-50 rounded-lg p-3">
+            <b>Dica:</b> O perfil <b>Ativo</b> é carregado automaticamente ao iniciar qualquer projeto.
+            Você pode ter perfis diferentes para cada tipo de instalação (industrial, comercial, etc.)
+            e alternar conforme o projeto.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

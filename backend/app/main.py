@@ -28,6 +28,7 @@ from app.api.routes_acessorios import router as acessorios_router
 from app.api.routes_carga_fluido import router as carga_fluido_router
 from app.api.routes_tanque_liquido import router as tanque_liquido_router
 from app.api.routes_cavalete import router as cavalete_router
+from app.api.routes_configuracoes import router as configuracoes_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -62,3 +63,4 @@ app.include_router(acessorios_router)
 app.include_router(carga_fluido_router)
 app.include_router(tanque_liquido_router)
 app.include_router(cavalete_router)
+app.include_router(configuracoes_router)

@@ -8,7 +8,7 @@ import CalculadoraGabinete from './components/CalculadoraGabinete.jsx';
 import CalculadoraCargaTermica from './components/CalculadoraCargaTermica.jsx';
 import SelecaoEquipamentos from './components/SelecaoEquipamentos.jsx';
 import ComponentesFluxo from './components/ComponentesFluxo.jsx';
-import ConfiguracoesMontagem from './components/ConfiguracoesMontagem.jsx';
+import ConfiguracoesPage from './components/ConfiguracoesPage.jsx';
 import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
@@ -52,9 +52,27 @@ function AppContent({ catalogo }) {
   const [listaProjetos, setListaProjetos] = useState([]);
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
   const [mostrandoCotacoes, setMostrandoCotacoes] = useState(false);
+  const [mostrandoConfiguracoes, setMostrandoConfiguracoes] = useState(false);
 
   // --- FUNÇÕES DE INTERLIGAÇÃO (PONTES) ---
   const { useCallback, useEffect } = React;
+
+  // Carrega perfil de montagem ativo no boot
+  useEffect(() => {
+    api.get('/api/v1/configuracoes/montagem').then(r => {
+      const ativo = r.data.find(p => p.ativo) || r.data[0];
+      if (ativo) {
+        setConfiguracoesMontagem({
+          tipo_filtro:       ativo.tipo_filtro,
+          tipo_visor:        ativo.tipo_visor,
+          trecho_vet_evap:   parseFloat(ativo.trecho_vet_evap),
+          trecho_evap_sifao: parseFloat(ativo.trecho_evap_sifao),
+          trecho_subida:     parseFloat(ativo.trecho_subida),
+          trecho_sifao_gbc:  parseFloat(ativo.trecho_sifao_gbc),
+        });
+      }
+    }).catch(() => {});
+  }, []);
 
   // Reconstrói materiais do orçamento sempre que qualquer fonte muda.
   // Ordem: gabinete (painéis) → acessórios (VET, separador) → tubulação (tubos, isolamento)
@@ -470,7 +488,8 @@ function AppContent({ catalogo }) {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <CopyPlus className="w-4 h-4" /> Cotações
           </div>
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+          <div onClick={() => setMostrandoConfiguracoes(true)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <Settings className="w-4 h-4" /> Configurações
           </div>
         </nav>
@@ -507,6 +526,21 @@ function AppContent({ catalogo }) {
           
           {/* PAINEL DE COTAÇÕES */}
           <PainelCotacoes aberto={mostrandoCotacoes} aoFechar={() => setMostrandoCotacoes(false)} />
+
+          {/* MODAL CONFIGURAÇÕES DE MONTAGEM */}
+          {mostrandoConfiguracoes && (
+            <ConfiguracoesPage
+              onFechar={() => setMostrandoConfiguracoes(false)}
+              onPerfilAtivo={(perfil) => setConfiguracoesMontagem({
+                tipo_filtro:       perfil.tipo_filtro,
+                tipo_visor:        perfil.tipo_visor,
+                trecho_vet_evap:   parseFloat(perfil.trecho_vet_evap),
+                trecho_evap_sifao: parseFloat(perfil.trecho_evap_sifao),
+                trecho_subida:     parseFloat(perfil.trecho_subida),
+                trecho_sifao_gbc:  parseFloat(perfil.trecho_sifao_gbc),
+              })}
+            />
+          )}
 
           {/* MODAL DE HISTÓRICO */}
           {mostrandoHistorico && (
@@ -630,10 +664,6 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 5 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <ConfiguracoesMontagem
-                config={configuracoesMontagem}
-                onChange={setConfiguracoesMontagem}
-              />
               <ComponentesFluxo
                 key={projetoKey}
                 cargaAlvo={getUltimoEquipamento()?.capacidade_real || cargaCalculada}
