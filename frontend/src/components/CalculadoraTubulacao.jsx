@@ -16,14 +16,16 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
   const [deltaT,         setDeltaT]        = useState(initialValues?.deltaT         ?? 6);
   const [padrao,         setPadrao]        = useState(initialValues?.padrao         ?? 'H');
   const [isolarLiquido,  setIsolarLiquido] = useState(initialValues?.isolarLiquido  ?? false);
+  const [paredeliquido,  setParedeliquido]  = useState(initialValues?.paredeiquido  ?? 'fina');
+  const [paredeSuccao,   setParedeSuccao]  = useState(initialValues?.paredeSuccao   ?? 'fina');
 
   const [sugestao,       setSugestao]      = useState(null);
   const [bitolas,        setBitolas]       = useState(null);
   const [resultado,      setResultado]     = useState(initialValues?.resultado ?? null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido, resultado });
-  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido, resultado]);
+    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido, paredeliquido, paredeSuccao, resultado });
+  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido, paredeliquido, paredeSuccao, resultado]);
   const [erro,           setErro]          = useState('');
   const [loading,        setLoading]       = useState(false);
 
@@ -65,6 +67,8 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
     padrao_isolamento:   padrao,
     isolar_liquido:      isolarLiquido,
     num_circuitos:       base.qtde || 1,
+    parede_liquido:      paredeliquido,
+    parede_succao:       paredeSuccao,
   });
 
   const calcularBitolas = async () => {
@@ -251,20 +255,53 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                 <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">3</span>
                 <span className="text-sm font-black text-slate-700 uppercase tracking-wide">Conexões e Acessórios</span>
               </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
 
-                  <div className="flex items-end pb-6">
-                    <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${isolarLiquido ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
-                      <div>
-                        <span className="font-bold block">Isolar Líquido</span>
-                        <span className="text-[10px] opacity-70">Linha {bitolas.diametro_liquido}</span>
-                      </div>
-                      <input type="checkbox" checked={isolarLiquido}
-                        onChange={e => { setIsolarLiquido(e.target.checked); setResultado(null); }}
-                        className="w-4 h-4 accent-blue-600" />
-                    </label>
+                {/* Espessura de parede — Líquido */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-wide">Espessura de Parede — Líquido ({bitolas.diametro_liquido})</span>
+                  <div className="flex gap-2">
+                    {[
+                      { id: 'fina',   label: 'Parede Fina',   sub: '1/32" — 0,79 mm' },
+                      { id: 'grossa', label: 'Parede Grossa',  sub: '1/16" — 1,59 mm' },
+                    ].map(op => (
+                      <button key={op.id} onClick={() => { setParedeliquido(op.id); setResultado(null); }}
+                        className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-bold transition-all ${paredeliquido === op.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300'}`}>
+                        {op.label}
+                        <div className="text-[10px] font-normal opacity-80">{op.sub}</div>
+                      </button>
+                    ))}
                   </div>
+                </div>
+
+                {/* Espessura de parede — Sucção */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-teal-500 uppercase tracking-wide">Espessura de Parede — Sucção ({bitolas.diametro_succao})</span>
+                  <div className="flex gap-2">
+                    {[
+                      { id: 'fina',   label: 'Parede Fina',   sub: '1/32" — 0,79 mm' },
+                      { id: 'grossa', label: 'Parede Grossa',  sub: '1/16" — 1,59 mm' },
+                    ].map(op => (
+                      <button key={op.id} onClick={() => { setParedeSuccao(op.id); setResultado(null); }}
+                        className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-bold transition-all ${paredeSuccao === op.id ? 'border-teal-600 bg-teal-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300'}`}>
+                        {op.label}
+                        <div className="text-[10px] font-normal opacity-80">{op.sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Isolar Líquido */}
+                <div>
+                  <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${isolarLiquido ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
+                    <div>
+                      <span className="font-bold block">Isolar Líquido</span>
+                      <span className="text-[10px] opacity-70">Linha {bitolas.diametro_liquido}</span>
+                    </div>
+                    <input type="checkbox" checked={isolarLiquido}
+                      onChange={e => { setIsolarLiquido(e.target.checked); setResultado(null); }}
+                      className="w-4 h-4 accent-blue-600" />
+                  </label>
                 </div>
               </div>
             </div>
@@ -329,14 +366,22 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                   </div>
                   <div className="divide-y divide-slate-100">
                     {resultado.lista_materiais.map((m, i) => (
-                      <div key={i} className="flex items-center justify-between px-4 py-2">
-                        <div>
+                      <div key={i} className="flex items-start justify-between px-4 py-2 gap-4">
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-700">{m.item}</p>
-                          <p className="text-[10px] text-slate-400">{m.detalhe}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{m.detalhe}</p>
                         </div>
-                        <span className="text-sm font-black text-slate-900 ml-4 whitespace-nowrap">
-                          {m.quantidade} {m.unidade}
-                        </span>
+                        <div className="flex items-center gap-3 flex-shrink-0 text-right">
+                          <div>
+                            <span className="text-sm font-black text-slate-900">{m.quantidade} {m.unidade}</span>
+                          </div>
+                          {m.quantidade_kg != null && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-center">
+                              <div className="text-xs font-black text-amber-800">{m.quantidade_kg.toFixed(2)} kg</div>
+                              <div className="text-[9px] text-amber-500 font-medium">{m.peso_por_metro?.toFixed(4)} kg/m</div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

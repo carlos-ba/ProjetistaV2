@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.schemas.tubulacao import TubulacaoRequest, TubulacaoResponse, ItemTubulacao
 from app.models.isolamento import IsolamentoTubulacao
+from app.models.peso_tubo_cobre import PesoTuboCobre
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TABELAS ASHRAE — Capacidade máxima da LINHA DE SUCÇÃO em kcal/h
@@ -228,16 +229,37 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
     padrao_sugerido, just_sugerido = sugerir_padrao(req.temp_evap)
     padrao = req.padrao_isolamento.upper()
 
+    # ── Pesos por metro (tabela Forming Tubing) ───────────────────────────────
+    async def _peso_tubo(bitola: str, parede: str) -> tuple[float | None, float | None]:
+        row = (await db.execute(
+            select(PesoTuboCobre).where(PesoTuboCobre.bitola_pol == bitola)
+        )).scalar_one_or_none()
+        if row is None:
+            return None, None
+        kg_m = row.parede_fina if parede == "fina" else row.parede_grossa
+        kg_total = round(kg_m * qtd_tubo, 3) if kg_m is not None else None
+        return kg_m, kg_total
+
+    peso_liq_m, peso_liq_total = await _peso_tubo(diam_liquido, req.parede_liquido)
+    peso_suc_m, peso_suc_total = await _peso_tubo(diam_succao,  req.parede_succao)
+
+    parede_liq_desc = "parede fina 0,79mm (1/32\")" if req.parede_liquido == "fina" else "parede grossa 1,59mm (1/16\")"
+    parede_suc_desc = "parede fina 0,79mm (1/32\")" if req.parede_succao  == "fina" else "parede grossa 1,59mm (1/16\")"
+
     materiais: list[ItemTubulacao] = [
         ItemTubulacao(
             item=f'Tubo Cobre {diam_liquido} (Líquido)',
             quantidade=qtd_tubo, unidade="m",
-            detalhe="Linha de alta pressão — ASHRAE",
+            detalhe=f"Linha de alta pressão — ASHRAE | {parede_liq_desc}",
+            peso_por_metro=peso_liq_m,
+            quantidade_kg=peso_liq_total,
         ),
         ItemTubulacao(
             item=f'Tubo Cobre {diam_succao} (Sucção)',
             quantidade=qtd_tubo, unidade="m",
-            detalhe=nota_succao,
+            detalhe=nota_succao + f" | {parede_suc_desc}",
+            peso_por_metro=peso_suc_m,
+            quantidade_kg=peso_suc_total,
         ),
     ]
 
