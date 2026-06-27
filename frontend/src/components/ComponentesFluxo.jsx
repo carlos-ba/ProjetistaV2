@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import CavaleteIlustracao from './CavaleteIlustracao';
-
 
 const CATEGORIAS_MANUAL = [
   'Válvula de Expansão Termostática',
@@ -14,10 +12,10 @@ const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', cone
 
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
-  const [modo, setModo] = useState('automatico');
+  const [modo, setModo] = useState(initialValues?.modo ?? 'automatico');
 
   // ── Modo Automático — componentes do banco ────────────────────────────
   const [componentes,  setComponentes]  = useState([]);
@@ -27,33 +25,42 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // ── Solenoide (cálculo por Kv) ────────────────────────────────────────
   const [solenoidResult,      setSolenoidResult]      = useState(null);
-  const [solenoidSelecionado, setSolenoidSelecionado] = useState(true);
+  const [solenoidSelecionado, setSolenoidSelecionado] = useState(initialValues?.solenoidSelecionado ?? true);
 
   // ── Filtro Secador + Visor de Líquido ─────────────────────────────────
-  const [temTanqueLiquido,  setTemTanqueLiquido]  = useState(true);
+  const [temTanqueLiquido,  setTemTanqueLiquido]  = useState(initialValues?.temTanqueLiquido ?? true);
   const [acessorioResult,   setAcessorioResult]   = useState(null);
-  const [filtroSelecionado, setFiltroSelecionado] = useState(true);
-  const [visorSelecionado,  setVisorSelecionado]  = useState(true);
+  const [filtroSelecionado, setFiltroSelecionado] = useState(initialValues?.filtroSelecionado ?? true);
+  const [visorSelecionado,  setVisorSelecionado]  = useState(initialValues?.visorSelecionado  ?? true);
 
   // ── Estimativa de carga de fluido ─────────────────────────────────────
   const [cargaFluido,        setCargaFluido]        = useState(null);
-  const [comprimentoLiquido, setComprimentoLiquido] = useState('');
-  const [comprimentoSuccao,  setComprimentoSuccao]  = useState('');
+  const [comprimentoLiquido, setComprimentoLiquido] = useState(initialValues?.comprimentoLiquido ?? '');
+  const [comprimentoSuccao,  setComprimentoSuccao]  = useState(initialValues?.comprimentoSuccao  ?? '');
 
   // ── Tanque de líquido ─────────────────────────────────────────────────
   const [tanqueResult,      setTanqueResult]      = useState(null);
-  const [tanqueSelecionado, setTanqueSelecionado] = useState(true);
+  const [tanqueSelecionado, setTanqueSelecionado] = useState(initialValues?.tanqueSelecionado ?? true);
 
   // ── Cavalete de componentes ───────────────────────────────────────────
   const [cavaleteResult,      setCavaleteResult]      = useState(null);
-  const [cavaleteIncluido,    setCavaleteIncluido]    = useState(true);
+  const [cavaleteIncluido,    setCavaleteIncluido]    = useState(initialValues?.cavaleteIncluido ?? true);
 
   // ── Modo Engenharia ───────────────────────────────────────────────────
-  const [linhasManuais, setLinhasManuais] = useState([novaLinhaManual()]);
+  const [linhasManuais, setLinhasManuais] = useState(initialValues?.linhasManuais ?? [novaLinhaManual()]);
   const [tempAmb, setTempAmb] = useState(tempAmbProp);
+
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais });
+  }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
   const tempCond = tempAmb + 10;
 
   React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
+
+  // Notifica App.jsx sempre que o resultado do cavalete ou tanque muda
+  React.useEffect(() => {
+    if (onCavaleteChange) onCavaleteChange(cavaleteResult, tanqueSelecionado && !!tanqueResult);
+  }, [cavaleteResult, tanqueSelecionado, tanqueResult]);
 
   const cargaKw        = (cargaAlvo / 860).toFixed(2);
   const fluidoSuportado = FLUIDOS_SUPORTADOS.some(f => fluido?.toUpperCase() === f);
@@ -266,6 +273,17 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       });
     }
 
+    if (cargaFluido) {
+      const fluido = evaporador?.fluido || condensadora?.fluido || 'Fluido';
+      itens.push({
+        item: `Carga de Fluido ${fluido}`,
+        quantidade: cargaFluido.carga_total_kg,
+        unidade: 'kg',
+        detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
+        custo_unitario: 0, preco: 0,
+      });
+    }
+
     if (aoFinalizar) aoFinalizar(itens);
   };
 
@@ -427,12 +445,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </div>
                 <button
                   onClick={() => setTemTanqueLiquido(prev => !prev)}
-                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${
+                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
                     temTanqueLiquido ? 'bg-teal-500' : 'bg-slate-300'
                   }`}
                 >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    temTanqueLiquido ? 'translate-x-6' : 'translate-x-0.5'
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    temTanqueLiquido ? 'translate-x-5' : 'translate-x-0'
                   }`} />
                 </button>
               </div>
@@ -670,17 +688,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* ── Ilustração do Cavalete ── */}
-            {cavaleteResult && (
-              <CavaleteIlustracao
-                condensadora={condensadora}
-                evaporador={evaporador}
-                configuracoesMontagem={configuracoesMontagem}
-                cavaleteResult={cavaleteResult}
-                temTanque={tanqueSelecionado && !!tanqueResult}
-              />
             )}
 
             <button onClick={finalizar}

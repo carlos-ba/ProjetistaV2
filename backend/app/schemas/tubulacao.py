@@ -11,9 +11,6 @@ class TubulacaoRequest(BaseModel):
     padrao_isolamento: str = "H"
     isolar_liquido: bool = False
     num_circuitos: int = 1              # nº de unidades condensadoras (cada uma = 1 circuito)
-    # Conexões
-    num_curvas_90: int | None = None    # None = automático por distância
-    incluir_sifao: bool = True          # sifão + contra-sifão na sucção (saída evap)
 
 
 class ItemTubulacao(BaseModel):
@@ -30,8 +27,6 @@ class TubulacaoResponse(BaseModel):
     temp_evap_calculada: float
     padrao_isolamento_usado: str
     sugestao_padrao: str
-    curvas_90_usadas: int              # qtde de curvas 90° (auto ou informado)
-    origem_curvas: str                 # "automático" ou "informado pelo técnico"
     lista_materiais: list[ItemTubulacao]
 
 

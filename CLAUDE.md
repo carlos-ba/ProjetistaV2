@@ -185,10 +185,50 @@ O catálogo (fabricantes de painel, portas) é carregado **no `App.jsx`** antes 
 
 ---
 
-## Regras de Desenvolvimento
+## Fluxo de Trabalho Obrigatório (SEGUIR SEMPRE)
 
-1. **Deploy local primeiro** — acumular mudanças, testar localmente, depois um único push
-2. **Não usar `--reload` em produção** — apenas em desenvolvimento local
+```
+EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
+```
+
+**NUNCA editar diretamente em produção. NUNCA fazer push sem testar local primeiro.**
+
+### Passo a passo
+
+1. **Editar** os arquivos em `C:\projetos\ProjetistaV2\`
+2. **Subir o backend local** (nova aba do terminal):
+   ```powershell
+   cd C:\projetos\ProjetistaV2\backend
+   C:\projetos\ProjetistaV2\.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000
+   ```
+3. **Subir o frontend local** (nova aba do terminal):
+   ```powershell
+   cd C:\projetos\ProjetistaV2\frontend
+   npm run dev
+   ```
+4. **Testar** em `http://localhost:5173` — verificar TODOS os pontos alterados
+5. **Confirmar** com o usuário que está tudo ok
+6. **Commit** com mensagem descritiva:
+   ```powershell
+   cd C:\projetos\ProjetistaV2
+   git add backend/... frontend/...
+   git commit -m "fix: descrição do que foi corrigido"
+   ```
+7. **Push** para produção (Render + Vercel auto-deploy):
+   ```powershell
+   git push origin main
+   ```
+
+### Regras derivadas
+
+- Acumular mudanças relacionadas no mesmo commit — não fazer um push por arquivo
+- Jamais usar `--no-verify` para pular verificações
+- Se o teste local falhar, corrigir antes de qualquer push
+- `--reload` só no backend local; produção usa o comando do Render sem `--reload`
+
+---
+
+## Regras de Desenvolvimento
 3. **Fluidos suportados no motor de solenoide:** R404A e R22. Para outros, redirecionar ao CoolSelector
 4. **T.Condensação calculada como:** T.Amb + 10°C (padrão de mercado brasileiro)
 5. **Catálogo de componentes no banco:** separadores de líquido e óleo vêm do banco via `/api/v1/componentes`. VET, filtro secador, solenoide e visor são calculados/selecionados pelo próprio sistema (solenoide já implementado)

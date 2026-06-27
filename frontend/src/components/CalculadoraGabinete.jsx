@@ -2,28 +2,32 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import VisualizadorProjeto from './VisualizadorProjeto';
 
-const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [] }) => {
+const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange }) => {
   // Dimensões da câmara
-  const [comprimento, setComprimento] = useState('');
-  const [largura, setLargura] = useState('');
-  const [altura, setAltura] = useState('');
-  const [temperaturaInterna, setTemperaturaInterna] = useState('');
-  const [tipoPiso, setTipoPiso] = useState('painel');
-  const [espessuraConcreto, setEspessuraConcreto] = useState('');
+  const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
+  const [largura, setLargura] = useState(initialValues?.largura ?? '');
+  const [altura, setAltura] = useState(initialValues?.altura ?? '');
+  const [temperaturaInterna, setTemperaturaInterna] = useState(initialValues?.temperaturaInterna ?? '');
+  const [tipoPiso, setTipoPiso] = useState(initialValues?.tipoPiso ?? 'painel');
+  const [espessuraConcreto, setEspessuraConcreto] = useState(initialValues?.espessuraConcreto ?? '');
 
   // Seleção de painel do catálogo
-  const [fabricanteSelecionado, setFabricanteSelecionado] = useState('');
-  const [paineisFabricante, setPaineisFabricante] = useState([]);   // todos os painéis do fabricante
+  const [fabricanteSelecionado, setFabricanteSelecionado] = useState(initialValues?.fabricanteSelecionado ?? '');
+  const [paineisFabricante, setPaineisFabricante] = useState([]);
   const [nucleos, setNucleos] = useState([]);
-  const [nucleoSelecionado, setNucleoSelecionado] = useState('');
+  const [nucleoSelecionado, setNucleoSelecionado] = useState(initialValues?.nucleoSelecionado ?? '');
   const [espessuras, setEspessuras] = useState([]);
-  const [espessuraSelecionada, setEspessuraSelecionada] = useState('');
+  const [espessuraSelecionada, setEspessuraSelecionada] = useState(initialValues?.espessuraSelecionada ?? '');
   const [larguras, setLarguras] = useState([]);
-  const [larguraSelecionada, setLarguraSelecionada] = useState('');
-  const [painelSelecionado, setPainelSelecionado] = useState(null);  // objeto completo
+  const [larguraSelecionada, setLarguraSelecionada] = useState(initialValues?.larguraSelecionada ?? '');
+  const [painelSelecionado, setPainelSelecionado] = useState(null);
 
   // ── Portas frigoríficas ───────────────────────────────────────────────
-  const [portasSelecionadas, setPortasSelecionadas] = useState([]); // [{porta, qtde}]
+  const [portasSelecionadas, setPortasSelecionadas] = useState(initialValues?.portasSelecionadas ?? []);
+
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada, portasSelecionadas });
+  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada, portasSelecionadas]);
 
   const [resultado, setResultado] = useState(null);
   const [statusCalculo, setStatusCalculo] = useState(null);

@@ -10,14 +10,16 @@ const PADROES = [
   { id: 'T', faixa: '32–45 mm',   desc: '< -35°C'       },
 ];
 
-const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar }) => {
-  const [distancia,      setDistancia]     = useState(5);
-  const [altaEficiencia, setAltaEficiencia]= useState(false);
-  const [deltaT,         setDeltaT]        = useState(6);
-  const [padrao,         setPadrao]        = useState('H');
-  const [isolarLiquido,  setIsolarLiquido] = useState(false);
-  const [numCurvas90,    setNumCurvas90]   = useState('');
-  const [incluirSifao,   setIncluirSifao]  = useState(true);
+const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialValues, onValoresChange }) => {
+  const [distancia,      setDistancia]     = useState(initialValues?.distancia      ?? 5);
+  const [altaEficiencia, setAltaEficiencia]= useState(initialValues?.altaEficiencia ?? false);
+  const [deltaT,         setDeltaT]        = useState(initialValues?.deltaT         ?? 6);
+  const [padrao,         setPadrao]        = useState(initialValues?.padrao         ?? 'H');
+  const [isolarLiquido,  setIsolarLiquido] = useState(initialValues?.isolarLiquido  ?? false);
+
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido });
+  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido]);
   const [sugestao,       setSugestao]      = useState(null);
   const [bitolas,        setBitolas]       = useState(null);
   const [resultado,      setResultado]     = useState(null);
@@ -62,8 +64,6 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar }) => {
     padrao_isolamento:   padrao,
     isolar_liquido:      isolarLiquido,
     num_circuitos:       base.qtde || 1,
-    num_curvas_90:       numCurvas90 !== '' ? parseInt(numCurvas90) : null,
-    incluir_sifao:       incluirSifao,
   });
 
   const calcularBitolas = async () => {
@@ -226,40 +226,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar }) => {
                 <span className="text-sm font-black text-slate-700 uppercase tracking-wide">Conexões e Acessórios</span>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">
-                      Curvas 90°
-                      <span className="font-normal text-slate-400 ml-1 normal-case">(vazio = automático)</span>
-                    </label>
-                    <input
-                      type="number" min="0" value={numCurvas90}
-                      onChange={e => { setNumCurvas90(e.target.value); setResultado(null); }}
-                      placeholder={`Auto (${
-                        parseFloat(distancia) <= 10 ? 2 :
-                        parseFloat(distancia) <= 20 ? 4 :
-                        parseFloat(distancia) <= 40 ? 6 :
-                        parseFloat(distancia) <= 60 ? 8 : 10
-                      } estimado)`}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                    />
-                    <p className="text-[10px] text-slate-400">
-                      Curvas 45° = metade das 90° | Uniões = igual às 90°
-                    </p>
-                  </div>
-
-                  <div className="flex items-end pb-6">
-                    <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${incluirSifao ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
-                      <div>
-                        <span className="font-bold block">Sifão + Contra-sifão</span>
-                        <span className="text-[10px] opacity-70">Sucção {bitolas.diametro_succao}</span>
-                      </div>
-                      <input type="checkbox" checked={incluirSifao}
-                        onChange={e => { setIncluirSifao(e.target.checked); setResultado(null); }}
-                        className="w-4 h-4 accent-blue-600" />
-                    </label>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                   <div className="flex items-end pb-6">
                     <label className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm ${isolarLiquido ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
@@ -327,13 +294,6 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar }) => {
             {/* ETAPA 3 — Lista de materiais */}
             {resultado && (
               <div className="space-y-4 animate-in zoom-in-95 duration-300">
-
-                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
-                  <span className="font-bold">Conexões: </span>
-                  {resultado.curvas_90_usadas} curvas 90° + {Math.floor(resultado.curvas_90_usadas / 2)} curvas 45°
-                  {incluirSifao && ' + sifão + contra-sifão (sucção)'}
-                  <span className="text-blue-400 ml-2">— {resultado.origem_curvas}</span>
-                </div>
 
                 <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
                   <div className="px-4 py-2 bg-slate-100 border-b border-slate-200">

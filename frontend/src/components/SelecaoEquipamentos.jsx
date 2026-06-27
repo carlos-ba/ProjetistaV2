@@ -6,20 +6,24 @@ const TIPOS = [
   { id: 'Evaporadora',          label: 'Evaporadora',     icone: '❄️' },
 ];
 
-const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaTChange, aoFinalizar }) => {
-  const [cargaTotal, setCargaTotal] = useState(2000);
-  const [numMaquinas, setNumMaquinas] = useState(1);
-  const [deltaT, setDeltaT] = useState('');
-  const [evap, setEvap] = useState('');
-  const [cond, setCond] = useState(tempAmb + 10);
-  const [fluido, setFluido] = useState('R22');
-  const [abaAtiva, setAbaAtiva] = useState('Unidade Condensadora');
+const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaTChange, aoFinalizar, initialValues, onValoresChange }) => {
+  const [cargaTotal, setCargaTotal] = useState(initialValues?.cargaTotal ?? 2000);
+  const [numMaquinas, setNumMaquinas] = useState(initialValues?.numMaquinas ?? 1);
+  const [deltaT, setDeltaT] = useState(initialValues?.deltaT ?? '');
+  const [evap, setEvap] = useState(initialValues?.evap ?? '');
+  const [cond, setCond] = useState(initialValues?.cond ?? tempAmb + 10);
+  const [fluido, setFluido] = useState(initialValues?.fluido ?? 'R22');
+  const [abaAtiva, setAbaAtiva] = useState(initialValues?.abaAtiva ?? 'Unidade Condensadora');
 
   // resultados separados por tipo
   const [resultadosUC,   setResultadosUC]   = useState([]);
   const [resultadosEvap, setResultadosEvap] = useState([]);
-  const [quantidades,    setQuantidades]    = useState({});
-  const [selecionados,   setSelecionados]   = useState([]);
+  const [quantidades,    setQuantidades]    = useState(initialValues?.quantidades ?? {});
+  const [selecionados,   setSelecionados]   = useState(initialValues?.selecionados ?? []);
+
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados });
+  }, [cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados]);
   const [loading,        setLoading]        = useState(false);
   const [erro,           setErro]           = useState('');
 

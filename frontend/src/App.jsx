@@ -15,6 +15,7 @@ import PainelResumoLateral from './components/PainelResumoLateral.jsx';
 import PainelInsights from './components/PainelInsights.jsx';
 import PainelCotacoes from './components/PainelCotacoes.jsx';
 import EtapaCard from './components/EtapaCard.jsx';
+import CavaleteIlustracao from './components/CavaleteIlustracao.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
 import { Separator } from './components/ui/separator.jsx';
@@ -25,6 +26,11 @@ function AppContent({ catalogo }) {
   const { user, logout } = useAuth();
   const [dadosDoGabinete, setDadosDoGabinete] = useState(null);
   const [gabineteCalculado, setGabineteCalculado] = useState(false);
+  const [inputsGabinete,     setInputsGabinete]     = useState(null);
+  const [inputsCargaTermica, setInputsCargaTermica] = useState(null);
+  const [inputsEquipamentos, setInputsEquipamentos] = useState(null);
+  const [inputsTubulacao,    setInputsTubulacao]    = useState(null);
+  const [inputsComponentes,  setInputsComponentes]  = useState(null);
   const gabineteCalculadoRef = React.useRef(false); // rastreia transição false→true
   const [projetoKey, setProjetoKey] = useState(0); // força remount dos componentes ao novo projeto
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
@@ -35,6 +41,8 @@ function AppContent({ catalogo }) {
   const [itensAcessorios, setItensAcessorios] = useState([]);   // step 5 — componentes de fluxo
   const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 4 — tubulação
   const [resultadoTubulacao, setResultadoTubulacao] = useState(null); // resultado completo do Card 4 (bitolas, distância)
+  const [cavaleteResult, setCavaleteResult] = useState(null);        // resultado do cavalete (Card 5)
+  const [temTanqueCavalte, setTemTanqueCavalte] = useState(false);   // se o sistema tem tanque de líquido
   const [configuracoesMontagem, setConfiguracoesMontagem] = useState({
     tipo_filtro:        'solda',
     tipo_visor:         'solda',
@@ -173,6 +181,11 @@ function AppContent({ catalogo }) {
     setProximaEtapa({ numero: 6, label: 'Gerador de Orçamento' });
   }, []);
 
+  const receberCavaleteChange = useCallback((result, temTanque) => {
+    setCavaleteResult(result);
+    setTemTanqueCavalte(temTanque);
+  }, []);
+
   // ── Wizard helpers ────────────────────────────────────────────────────
   const etapaDisponivel = (n) => ({
     1: true,
@@ -272,6 +285,13 @@ function AppContent({ catalogo }) {
     setItensAcessorios([]);
     setItensTubulacao([]);
     setResultadoTubulacao(null);
+    setCavaleteResult(null);
+    setTemTanqueCavalte(false);
+    setInputsGabinete(null);
+    setInputsCargaTermica(null);
+    setInputsEquipamentos(null);
+    setInputsTubulacao(null);
+    setInputsComponentes(null);
     setConfiguracoesMontagem({
       tipo_filtro: 'solda', tipo_visor: 'solda',
       trecho_vet_evap: 0.5, trecho_evap_sifao: 0.5,
@@ -295,6 +315,11 @@ function AppContent({ catalogo }) {
     cliente: cliente || 'Cliente Avulso',
     dados_completos: {
       gabinete: dadosDoGabinete,
+      inputs_gabinete: inputsGabinete,
+      inputs_carga_termica: inputsCargaTermica,
+      inputs_equipamentos: inputsEquipamentos,
+      inputs_tubulacao: inputsTubulacao,
+      inputs_componentes: inputsComponentes,
       carga_termica: cargaCalculada,
       orcamento: itensOrcamento,
       configuracoes: { passo_atual: passoAtual }
@@ -362,7 +387,6 @@ function AppContent({ catalogo }) {
 
   const carregarProjeto = (projeto) => {
     const d = projeto.dados_completos || {};
-    setProjetoKey(k => k + 1); // força remount de todos os cards
     if (d.gabinete) {
       setDadosDoGabinete(d.gabinete);
       setGabineteCalculado(true);
@@ -370,9 +394,15 @@ function AppContent({ catalogo }) {
     }
     if (d.carga_termica) setCargaCalculada(d.carga_termica);
     if (d.orcamento) setItensOrcamento(d.orcamento);
+    setInputsGabinete(d.inputs_gabinete || null);
+    setInputsCargaTermica(d.inputs_carga_termica || null);
+    setInputsEquipamentos(d.inputs_equipamentos || null);
+    setInputsTubulacao(d.inputs_tubulacao || null);
+    setInputsComponentes(d.inputs_componentes || null);
     setPassoAtual(d.configuracoes?.passo_atual || (d.gabinete ? 2 : 1));
     setProjetoAtual({ id: projeto.id, nome: projeto.nome, cliente: projeto.cliente });
     setMostrandoHistorico(false);
+    setProjetoKey(k => k + 1); // força remount DEPOIS de setar todos os initialValues
     alert(`Projeto "${projeto.nome}" carregado com sucesso!`);
   };
 
@@ -618,6 +648,8 @@ function AppContent({ catalogo }) {
                 aoFinalizar={receberDadosGabinete}
                 fabricantes={catalogo.fabricantes}
                 portasCatalogo={catalogo.portasCatalogo}
+                initialValues={inputsGabinete}
+                onValoresChange={setInputsGabinete}
               />
             </EtapaCard>
 
@@ -632,7 +664,7 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 2 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} />
+              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} initialValues={inputsCargaTermica} onValoresChange={setInputsCargaTermica} />
             </EtapaCard>
 
             {/* 3. Seleção de Equipamentos */}
@@ -653,6 +685,8 @@ function AppContent({ catalogo }) {
                 tempAmb={tempExternaCalculo}
                 onDeltaTChange={setDeltaTCalculado}
                 aoFinalizar={receberEquipamentosFinalizados}
+                initialValues={inputsEquipamentos}
+                onValoresChange={setInputsEquipamentos}
               />
             </EtapaCard>
 
@@ -667,7 +701,7 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 4 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} />
+              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} initialValues={inputsTubulacao} onValoresChange={setInputsTubulacao} />
             </EtapaCard>
 
             {/* 5. Componentes e Acessórios */}
@@ -692,6 +726,9 @@ function AppContent({ catalogo }) {
                 dadosTubulacao={resultadoTubulacao}
                 configuracoesMontagem={configuracoesMontagem}
                 aoFinalizar={receberComponentesFluxo}
+                onCavaleteChange={receberCavaleteChange}
+                initialValues={inputsComponentes}
+                onValoresChange={setInputsComponentes}
               />
             </EtapaCard>
 
@@ -718,6 +755,15 @@ function AppContent({ catalogo }) {
 
         </div>
       </main>
+
+      {/* Diagrama Cavalete — flutuante global, disponível em qualquer card */}
+      <CavaleteIlustracao
+        condensadora={getCondensadora()}
+        evaporador={getEvaporador()}
+        configuracoesMontagem={configuracoesMontagem}
+        cavaleteResult={cavaleteResult}
+        temTanque={temTanqueCavalte}
+      />
 
       {/* Painel Lateral Direito */}
       <aside className="print:hidden flex flex-col min-h-0 flex-shrink-0">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import PainelInsights from './PainelInsights';
 
-const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
+const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange }) => {
   // --- VALIDAÇÃO: Verificar se gabinete foi configurado ---
   if (!dadosIniciais) {
     return (
@@ -33,18 +33,18 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
   const [categorias, setCategorias] = useState([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
   const [produtoSelecionado, setProdutoSelecionado] = useState('');
-  const [movimentacao, setMovimentacao] = useState(0);
-  const [tempEntrada, setTempEntrada] = useState(5);
-  const [tempoResfriamento, setTempoResfriamento] = useState(24);
+  const [movimentacao, setMovimentacao] = useState(initialValues?.movimentacao ?? 0);
+  const [tempEntrada, setTempEntrada] = useState(initialValues?.tempEntrada ?? 5);
+  const [tempoResfriamento, setTempoResfriamento] = useState(initialValues?.tempoResfriamento ?? 24);
 
-  const [metodoInfiltracao, setMetodoInfiltracao] = useState('simplificado');
-  const [urExterna, setUrExterna] = useState(60);
-  const [urInterna, setUrInterna] = useState(90);
+  const [metodoInfiltracao, setMetodoInfiltracao] = useState(initialValues?.metodoInfiltracao ?? 'simplificado');
+  const [urExterna, setUrExterna] = useState(initialValues?.urExterna ?? 60);
+  const [urInterna, setUrInterna] = useState(initialValues?.urInterna ?? 90);
 
-  const [iluminacao, setIluminacao] = useState(0);
-  const [pessoas, setPessoas] = useState(0);
-  const [motor, setMotor] = useState(0);
-  const [horasFuncionamento, setHorasFuncionamento] = useState(18);
+  const [iluminacao, setIluminacao] = useState(initialValues?.iluminacao ?? 0);
+  const [pessoas, setPessoas] = useState(initialValues?.pessoas ?? 0);
+  const [motor, setMotor] = useState(initialValues?.motor ?? 0);
+  const [horasFuncionamento, setHorasFuncionamento] = useState(initialValues?.horasFuncionamento ?? 18);
 
   const [produtoDetalhe, setProdutoDetalhe] = useState(null);
 
@@ -53,8 +53,12 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar }) => {
   const [loading, setLoading] = useState(false);
   const [statusCalculo, setStatusCalculo] = useState(null); // 'pronto', 'modificado'
 
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado]);
+
   // Produtos filtrados com base na categoria
-  const produtosFiltrados = categoriaSelecionada 
+  const produtosFiltrados = categoriaSelecionada
     ? produtos.filter(p => (p.tipo?.nome ?? p.tipo) === categoriaSelecionada)
     : [];
 

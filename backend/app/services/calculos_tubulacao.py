@@ -1,6 +1,5 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import math
-import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -160,83 +159,6 @@ def _selecionar_liquido(fluido: str, capacidade: float, fator: float) -> str:
     return "Consultar Engenharia"
 
 
-# ── Tabela de conexões por faixa de distância (Opção 2) ───────────────────
-# Valores baseados em prática de mercado (ASHRAE / NBR)
-def _curvas_auto(distancia: float) -> int:
-    """Estimativa automática de curvas 90° pela distância total."""
-    if distancia <= 10:  return 2
-    if distancia <= 20:  return 4
-    if distancia <= 40:  return 6
-    if distancia <= 60:  return 8
-    return 10
-
-
-def _calcular_conexoes(
-    diam_succao:  str,
-    diam_liquido: str,
-    distancia:    float,
-    num_curvas_90: int | None,
-    incluir_sifao: bool,
-) -> tuple[list[ItemTubulacao], int, str]:
-    """
-    Retorna (lista_conexoes, curvas_usadas, origem).
-
-    Regras:
-    - Curvas 90°, 45°, uniões e reduções são iguais nas duas linhas
-    - Sifão e contra-sifão: somente na sucção (saída do evaporador)
-    - Curvas 45° ≈ metade das 90°
-    - Uniões = mesmo número das 90°
-    - Reduções: 1 para distâncias curtas, 2 para longas
-    """
-    if num_curvas_90 is not None:
-        curvas_90 = num_curvas_90
-        origem    = "informado pelo técnico"
-    else:
-        curvas_90 = _curvas_auto(distancia)
-        origem    = "automático (tabela por distância)"
-
-    curvas_45 = max(0, curvas_90 // 2)
-    unioes    = curvas_90
-    reducoes  = 1 if distancia <= 30 else 2
-
-    conexoes: list[ItemTubulacao] = []
-
-    def add(item, qtd, detalhe):
-        if qtd > 0:
-            conexoes.append(ItemTubulacao(item=item, quantidade=qtd,
-                                          unidade="un", detalhe=detalhe))
-
-    # ── Curvas 90° ────────────────────────────────────────────────────────
-    add(f'Curva 90° {diam_succao} (Sucção)',   curvas_90,
-        f'Mudança de direção | {origem}')
-    add(f'Curva 90° {diam_liquido} (Líquido)', curvas_90,
-        f'Mudança de direção | {origem}')
-
-    # ── Curvas 45° ────────────────────────────────────────────────────────
-    add(f'Curva 45° {diam_succao} (Sucção)',   curvas_45,
-        f'Desvio suave | {origem}')
-    add(f'Curva 45° {diam_liquido} (Líquido)', curvas_45,
-        f'Desvio suave | {origem}')
-
-    # ── Uniões / Luvas ────────────────────────────────────────────────────
-    add(f'União/Luva {diam_succao} (Sucção)',   unioes,
-        'Emenda de tubos | linha de sucção')
-    add(f'União/Luva {diam_liquido} (Líquido)', unioes,
-        'Emenda de tubos | linha de líquido')
-
-    # ── Reduções (transição entre bitolas) ────────────────────────────────
-    if diam_succao != diam_liquido:
-        add(f'Redução {diam_succao} × {diam_liquido}', reducoes,
-            'Transição sucção → líquido')
-
-    # ── Sifão e contra-sifão (sucção — saída do evaporador) ───────────────
-    if incluir_sifao:
-        add(f'Sifão {diam_succao} (Sucção)', 1,
-            'Saída do evaporador — evita retorno de óleo ao compressor')
-        add(f'Contra-sifão {diam_succao} (Sucção)', 1,
-            'Saída do evaporador — previne bolsas de líquido na linha')
-
-    return conexoes, curvas_90, origem
 
 
 async def _buscar_isolamento(db: AsyncSession, bitola: str, padrao: str) -> tuple[str, float] | None:
@@ -291,10 +213,7 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
     # Cada unidade condensadora = 1 circuito independente (sucção + líquido + conexões)
     circuitos  = max(1, req.num_circuitos)
     qtd_tubo_1 = math.ceil(req.distancia * 1.1)   # +10% para conexões e curvas (por circuito)
-    qtd_tubo   = qtd_tubo_1 * circuitos            # total para todos os circuitos
-    match      = re.search(r"(\d+)", diam_succao)
-    valor_diam = int(match.group()) if match else 1
-    qtd_solda  = math.ceil((qtd_tubo_1 / 5) * (valor_diam / 2)) * circuitos
+    qtd_tubo   = qtd_tubo_1 * circuitos
 
     # ── Notas técnicas ────────────────────────────────────────────────────────
     cap_interp = _interpolar_cap(fluido_tabela, _SUCCAO_CAP.get(fluido_tabela, _SUCCAO_CAP[_FLUIDO_FALLBACK]), req.temp_evap, diam_succao)
@@ -355,34 +274,6 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
                 detalhe=f"Consultar catálogo para bitola {diam_liquido}",
             ))
 
-    # ── Conexões (curvas, uniões, reduções, sifão) — por circuito ────────
-    conexoes_1, curvas_usadas, origem_curvas = _calcular_conexoes(
-        diam_succao   = diam_succao,
-        diam_liquido  = diam_liquido,
-        distancia     = req.distancia,
-        num_curvas_90 = req.num_curvas_90,
-        incluir_sifao = req.incluir_sifao,
-    )
-    # Multiplica conexões pelo número de circuitos
-    conexoes: list[ItemTubulacao] = []
-    sufixo = f" × {circuitos} circuitos" if circuitos > 1 else ""
-    for c in conexoes_1:
-        conexoes.append(ItemTubulacao(
-            item=c.item,
-            quantidade=c.quantidade * circuitos,
-            unidade=c.unidade,
-            detalhe=c.detalhe + sufixo,
-        ))
-    materiais.extend(conexoes)
-
-    # ── Solda: emendas de tubo + uma por conexão ──────────────────────────
-    qtd_solda_total = qtd_solda + len(conexoes_1) * circuitos
-    nota_circ = f" | {circuitos} circuito(s)" if circuitos > 1 else ""
-    materiais.append(ItemTubulacao(
-        item="Solda Prata 15% / Foscoper",
-        quantidade=qtd_solda_total, unidade="vareta",
-        detalhe=f"{qtd_solda} emendas de tubo + {len(conexoes_1) * circuitos} conexões ({diam_succao}){nota_circ}",
-    ))
 
     return TubulacaoResponse(
         diametro_liquido=diam_liquido,
@@ -391,7 +282,5 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
         temp_evap_calculada=req.temp_evap,
         padrao_isolamento_usado=padrao,
         sugestao_padrao=just_sugerido,
-        curvas_90_usadas=curvas_usadas,
-        origem_curvas=origem_curvas,
         lista_materiais=materiais,
     )
