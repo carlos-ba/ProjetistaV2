@@ -200,14 +200,18 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       const detalheQtd = (typeof rawQtd === 'string' && isNaN(parseFloat(rawQtd)))
         ? rawQtd : null;
 
+      // Tubos de cobre: unidade comercial é kg, metros ficam em qtde_metros
+      const ehTuboCobre = m.unidade === 'm' && m.quantidade_kg != null;
+
       return {
         tipo_item: m.item?.toLowerCase().includes('válvula') || m.item?.toLowerCase().includes('separador')
                      ? 'Componente' : 'Material',
         ref_id:    m.id || null,
         descricao: m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
         detalhe:   [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : detalheQtd].filter(Boolean).join(' — '),
-        qtde:      qtd,
-        unidade:   m.unidade || 'un',
+        qtde:      ehTuboCobre ? m.quantidade_kg : qtd,
+        unidade:   ehTuboCobre ? 'kg' : (m.unidade || 'un'),
+        qtde_metros: ehTuboCobre ? qtd : null,
       };
     }),
     ...complementosPreenchidos.map(c => ({

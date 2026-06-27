@@ -68,6 +68,7 @@ class CotacaoItem(Base):
     detalhe: Mapped[Optional[str]] = mapped_column(String(250), nullable=True)
     qtde: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=1)
     unidade: Mapped[str] = mapped_column(String(10), nullable=False, default="un")
+    qtde_metros: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 3), nullable=True)
 
     # O que o fornecedor devolveu (preenchido na importação — Fase 2)
     preco_unitario: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)

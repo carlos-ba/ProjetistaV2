@@ -183,6 +183,7 @@ async def baixar_excel_cotacao(
             "detalhe": i.detalhe or "",
             "qtde": float(i.qtde),
             "unidade": i.unidade,
+            "qtde_metros": float(i.qtde_metros) if i.qtde_metros else None,
         }
         for i in cotacao.itens
     ]

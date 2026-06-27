@@ -45,6 +45,7 @@ class CotacaoItemCreate(BaseModel):
     detalhe: str | None = None
     qtde: float = 1
     unidade: str = "un"
+    qtde_metros: float | None = None   # preenchido para tubos de cobre (qtde em kg, metros aqui)
 
 
 class CotacaoCreate(BaseModel):
@@ -66,6 +67,7 @@ class CotacaoItemOut(BaseModel):
     detalhe: str | None
     qtde: float
     unidade: str
+    qtde_metros: float | None
     preco_unitario: float | None
     marca_modelo_cotado: str | None
     prazo_entrega_dias: int | None
