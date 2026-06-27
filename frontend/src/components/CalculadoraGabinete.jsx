@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../api';
 import VisualizadorProjeto from './VisualizadorProjeto';
 
-const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange }) => {
+const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange, jaFinalizado = false }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
   const [largura, setLargura] = useState(initialValues?.largura ?? '');
@@ -11,26 +11,57 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   const [tipoPiso, setTipoPiso] = useState(initialValues?.tipoPiso ?? 'painel');
   const [espessuraConcreto, setEspessuraConcreto] = useState(initialValues?.espessuraConcreto ?? '');
 
-  // Seleção de painel do catálogo
+  // Seleção de painel do catálogo — apenas os 4 valores selecionados são estado
   const [fabricanteSelecionado, setFabricanteSelecionado] = useState(initialValues?.fabricanteSelecionado ?? '');
   const [paineisFabricante, setPaineisFabricante] = useState([]);
-  const [nucleos, setNucleos] = useState([]);
-  const [nucleoSelecionado, setNucleoSelecionado] = useState(initialValues?.nucleoSelecionado ?? '');
-  const [espessuras, setEspessuras] = useState([]);
+  const [nucleoSelecionado,  setNucleoSelecionado]  = useState(initialValues?.nucleoSelecionado  ?? '');
   const [espessuraSelecionada, setEspessuraSelecionada] = useState(initialValues?.espessuraSelecionada ?? '');
-  const [larguras, setLarguras] = useState([]);
   const [larguraSelecionada, setLarguraSelecionada] = useState(initialValues?.larguraSelecionada ?? '');
-  const [painelSelecionado, setPainelSelecionado] = useState(null);
+
+  // Listas derivadas — calculadas automaticamente de paineisFabricante + seleções
+  const nucleos = useMemo(() =>
+    [...new Set(paineisFabricante.map(p => p.nucleo))].sort(),
+    [paineisFabricante]
+  );
+  const espessuras = useMemo(() => {
+    if (!nucleoSelecionado) return [];
+    return [...new Set(
+      paineisFabricante.filter(p => p.nucleo === nucleoSelecionado).map(p => p.espessura_mm)
+    )].sort((a, b) => a - b);
+  }, [paineisFabricante, nucleoSelecionado]);
+  const larguras = useMemo(() => {
+    if (!nucleoSelecionado || !espessuraSelecionada) return [];
+    return [...new Set(
+      paineisFabricante
+        .filter(p => p.nucleo === nucleoSelecionado && Number(p.espessura_mm) === Number(espessuraSelecionada))
+        .map(p => p.largura_mm)
+    )].sort((a, b) => a - b);
+  }, [paineisFabricante, nucleoSelecionado, espessuraSelecionada]);
+  const painelSelecionado = useMemo(() => {
+    if (!larguraSelecionada) return null;
+    return paineisFabricante.find(p =>
+      p.nucleo === nucleoSelecionado &&
+      Number(p.espessura_mm) === Number(espessuraSelecionada) &&
+      Number(p.largura_mm) === Number(larguraSelecionada)
+    ) ?? null;
+  }, [paineisFabricante, nucleoSelecionado, espessuraSelecionada, larguraSelecionada]);
 
   // ── Portas frigoríficas ───────────────────────────────────────────────
   const [portasSelecionadas, setPortasSelecionadas] = useState(initialValues?.portasSelecionadas ?? []);
 
-  useEffect(() => {
-    if (onValoresChange) onValoresChange({ comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada, portasSelecionadas });
-  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada, portasSelecionadas]);
+  const [resultado, setResultado] = useState(initialValues?.resultado ?? null);
+  const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
-  const [resultado, setResultado] = useState(null);
-  const [statusCalculo, setStatusCalculo] = useState(null);
+  // Snapshot — salva apenas os 4 valores selecionados (as listas são derivadas)
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({
+      comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
+      fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
+      portasSelecionadas, resultado,
+    });
+  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
+      fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
+      portasSelecionadas, resultado]);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -69,69 +100,51 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       prev.map(p => p.porta.id === id ? { ...p, qtde: Math.max(1, parseInt(qtde) || 1) } : p)
     );
 
-  // ── Ao escolher fabricante: carregar painéis e extrair núcleos ────────
+  // ── Fabricante: só carrega dados da API. Seleções downstream são preservadas.
   useEffect(() => {
-    if (!fabricanteSelecionado) {
-      setPaineisFabricante([]); setNucleos([]);
-      setNucleoSelecionado(''); setEspessuras([]);
-      setEspessuraSelecionada(''); setLarguras([]);
-      setLarguraSelecionada(''); setPainelSelecionado(null);
-      return;
-    }
+    if (!fabricanteSelecionado) { setPaineisFabricante([]); return; }
     api.get(`/api/v1/catalogo/paineis?fabricante_id=${fabricanteSelecionado}`)
-      .then(r => {
-        setPaineisFabricante(r.data);
-        const ns = [...new Set(r.data.map(p => p.nucleo))].sort();
-        setNucleos(ns);
-        setNucleoSelecionado('');
-        setEspessuras([]); setEspessuraSelecionada('');
-        setLarguras([]); setLarguraSelecionada('');
-        setPainelSelecionado(null);
-      })
+      .then(r => setPaineisFabricante(r.data))
       .catch(() => setPaineisFabricante([]));
   }, [fabricanteSelecionado]);
 
-  // ── Ao escolher núcleo: filtrar espessuras ────────────────────────────
-  useEffect(() => {
-    if (!nucleoSelecionado) { setEspessuras([]); setEspessuraSelecionada(''); return; }
-    const filtrados = paineisFabricante.filter(p => p.nucleo === nucleoSelecionado);
-    const es = [...new Set(filtrados.map(p => p.espessura_mm))].sort((a, b) => a - b);
-    setEspessuras(es);
-    setEspessuraSelecionada('');
-    setLarguras([]); setLarguraSelecionada('');
-    setPainelSelecionado(null);
-  }, [nucleoSelecionado, paineisFabricante]);
+  // ── Flag: enquanto true, mudanças de estado são do carregamento, não do usuário ──
+  const carregandoDoArquivo = React.useRef(jaFinalizado);
 
-  // ── Ao escolher espessura: filtrar larguras ───────────────────────────
-  useEffect(() => {
-    if (!espessuraSelecionada) { setLarguras([]); setLarguraSelecionada(''); return; }
+  // ── Handlers que resetam downstream quando o usuário muda a seleção ──
+  const handleFabricanteChange = (v) => {
+    carregandoDoArquivo.current = false;
+    setFabricanteSelecionado(v);
+    setNucleoSelecionado('');
+    setEspessuraSelecionada('');
+    setLarguraSelecionada('');
+  };
+  const handleNucleoChange = (v) => {
+    carregandoDoArquivo.current = false;
+    setNucleoSelecionado(v);
+    setEspessuraSelecionada('');
+    setLarguraSelecionada('');
+  };
+  const handleEspessuraChange = (v) => {
+    carregandoDoArquivo.current = false;
+    setEspessuraSelecionada(v);
     const filtrados = paineisFabricante.filter(
-      p => p.nucleo === nucleoSelecionado && Number(p.espessura_mm) === Number(espessuraSelecionada)
+      p => p.nucleo === nucleoSelecionado && Number(p.espessura_mm) === Number(v)
     );
     const ls = [...new Set(filtrados.map(p => p.largura_mm))].sort((a, b) => a - b);
-    setLarguras(ls);
     setLarguraSelecionada(ls.length === 1 ? String(ls[0]) : '');
-    setPainelSelecionado(ls.length === 1 ? filtrados[0] : null);
-  }, [espessuraSelecionada, nucleoSelecionado, paineisFabricante]);
-
-  // ── Ao escolher largura: definir painel final ─────────────────────────
-  useEffect(() => {
-    if (!larguraSelecionada) { setPainelSelecionado(null); return; }
-    const p = paineisFabricante.find(
-      p => p.nucleo === nucleoSelecionado &&
-           p.espessura_mm === parseInt(espessuraSelecionada) &&
-           Number(p.largura_mm) === Number(larguraSelecionada)
-    );
-    setPainelSelecionado(p || null);
-  }, [larguraSelecionada, espessuraSelecionada, nucleoSelecionado, paineisFabricante]);
+  };
+  const handleLarguraChange = (v) => { carregandoDoArquivo.current = false; setLarguraSelecionada(v); };
+  const handleInputChange = (setter) => (e) => { carregandoDoArquivo.current = false; setter(e.target.value); };
 
   // ── Detecta edição após cálculo → reseta resultado ───────────────────
   const primeiroRender = React.useRef(true);
   React.useEffect(() => {
     if (primeiroRender.current) { primeiroRender.current = false; return; }
+    if (carregandoDoArquivo.current) return; // mudança vinda do carregamento do arquivo, ignora
     if (statusCalculo === 'pronto') {
       setStatusCalculo('modificado');
-      setResultado(null); // limpa resultado → remove lista_corte → sem scroll indesejado
+      setResultado(null);
     }
   }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto]);
 
@@ -295,7 +308,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="p-6" onFocus={() => { carregandoDoArquivo.current = false; }} onInput={() => { carregandoDoArquivo.current = false; }}>
 
         {/* Dimensões */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -304,13 +317,13 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             ['Altura (m)',      altura,      setAltura,      'Ex: 3.00']].map(([label, val, set, ph]) => (
             <div key={label} className="space-y-1">
               <label className="text-sm font-semibold text-slate-700 block">{label}</label>
-              <input type="number" value={val} onChange={e => set(e.target.value)} placeholder={ph}
+              <input type="number" value={val} onChange={handleInputChange(set)} placeholder={ph}
                 className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
           ))}
           <div className="space-y-1">
             <label className="text-sm font-semibold text-slate-700 block">Temperatura Interna (°C)</label>
-            <input type="number" value={temperaturaInterna} onChange={e => setTemperaturaInterna(e.target.value)} placeholder="Ex: -18"
+            <input type="number" value={temperaturaInterna} onChange={handleInputChange(setTemperaturaInterna)} placeholder="Ex: -18"
               className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
         </div>
@@ -325,7 +338,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             {/* Fabricante */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase block">Fabricante</label>
-              <select value={fabricanteSelecionado} onChange={e => setFabricanteSelecionado(e.target.value)}
+              <select value={fabricanteSelecionado} onChange={e => handleFabricanteChange(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white text-slate-900 focus:ring-2 focus:ring-violet-400 outline-none text-sm">
                 <option value="">Selecione...</option>
                 {fabricantes.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
@@ -335,7 +348,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             {/* Núcleo */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase block">Núcleo Isolante</label>
-              <select value={nucleoSelecionado} onChange={e => setNucleoSelecionado(e.target.value)}
+              <select value={nucleoSelecionado} onChange={e => handleNucleoChange(e.target.value)}
                 disabled={!fabricanteSelecionado || nucleos.length === 0}
                 className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white text-slate-900 focus:ring-2 focus:ring-violet-400 outline-none text-sm disabled:opacity-40">
                 <option value="">Selecione...</option>
@@ -346,7 +359,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             {/* Espessura */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase block">Espessura (mm)</label>
-              <select value={espessuraSelecionada} onChange={e => setEspessuraSelecionada(e.target.value)}
+              <select value={espessuraSelecionada} onChange={e => handleEspessuraChange(e.target.value)}
                 disabled={!nucleoSelecionado || espessuras.length === 0}
                 className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white text-slate-900 focus:ring-2 focus:ring-violet-400 outline-none text-sm disabled:opacity-40">
                 <option value="">Selecione...</option>
@@ -357,7 +370,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             {/* Largura */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase block">Largura do Painel (mm)</label>
-              <select value={larguraSelecionada} onChange={e => setLarguraSelecionada(e.target.value)}
+              <select value={larguraSelecionada} onChange={e => handleLarguraChange(e.target.value)}
                 disabled={!espessuraSelecionada || larguras.length === 0}
                 className="w-full px-3 py-2 rounded-lg border border-violet-300 bg-white text-slate-900 focus:ring-2 focus:ring-violet-400 outline-none text-sm disabled:opacity-40">
                 <option value="">Selecione...</option>
@@ -396,7 +409,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-slate-700 block">Tipo de Piso</label>
-            <select value={tipoPiso} onChange={e => setTipoPiso(e.target.value)}
+            <select value={tipoPiso} onChange={e => { carregandoDoArquivo.current = false; setTipoPiso(e.target.value); }}
               className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="painel">Piso em Painel</option>
               <option value="convencional">Piso Isolado (Concreto)</option>
@@ -495,6 +508,17 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           )}
         </div>
 
+        {/* Banner projeto carregado */}
+        {jaFinalizado && !resultado && statusCalculo === 'pronto' && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="text-sm font-semibold text-green-800">Gabinete calculado — dados carregados do arquivo</p>
+              <p className="text-xs text-green-600">Clique em "Recalcular" para atualizar os resultados detalhados</p>
+            </div>
+          </div>
+        )}
+
         {/* Botão calcular */}
         <button id="btn-calcular-gabinete" onClick={calcular} disabled={loading}
           className={`w-full py-4 rounded-xl font-bold text-lg shadow-md transition-all flex items-center justify-center gap-2 ${
@@ -502,11 +526,14 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
               ? 'bg-slate-300 cursor-not-allowed'
               : statusCalculo === 'modificado'
                 ? 'bg-amber-500 hover:bg-amber-600 text-white ring-4 ring-amber-100'
-                : 'bg-[#7B2D8B] hover:bg-purple-800 text-white hover:-translate-y-0.5'
+                : statusCalculo === 'pronto' && !resultado
+                  ? 'bg-green-600 hover:bg-green-700 text-white hover:-translate-y-0.5'
+                  : 'bg-[#7B2D8B] hover:bg-purple-800 text-white hover:-translate-y-0.5'
           }`}>
           {loading ? (
             <><svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Calculando...</>
           ) : statusCalculo === 'modificado' ? '⚠️ RECALCULAR PROJETO 🔄'
+          : statusCalculo === 'pronto' && !resultado ? '🔄 Recalcular Projeto'
           : 'CALCULAR PROJETO ➡️'}
         </button>
 

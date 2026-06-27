@@ -10,19 +10,20 @@ const PADROES = [
   { id: 'T', faixa: '32–45 mm',   desc: '< -35°C'       },
 ];
 
-const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialValues, onValoresChange }) => {
+const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
   const [distancia,      setDistancia]     = useState(initialValues?.distancia      ?? 5);
   const [altaEficiencia, setAltaEficiencia]= useState(initialValues?.altaEficiencia ?? false);
   const [deltaT,         setDeltaT]        = useState(initialValues?.deltaT         ?? 6);
   const [padrao,         setPadrao]        = useState(initialValues?.padrao         ?? 'H');
   const [isolarLiquido,  setIsolarLiquido] = useState(initialValues?.isolarLiquido  ?? false);
 
-  useEffect(() => {
-    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido });
-  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido]);
   const [sugestao,       setSugestao]      = useState(null);
   const [bitolas,        setBitolas]       = useState(null);
-  const [resultado,      setResultado]     = useState(null);
+  const [resultado,      setResultado]     = useState(initialValues?.resultado ?? null);
+
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido, resultado });
+  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido, resultado]);
   const [erro,           setErro]          = useState('');
   const [loading,        setLoading]       = useState(false);
 
@@ -101,6 +102,16 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Banner dados alterados upstream */}
+        {invalidado && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Equipamentos foram alterados</p>
+              <p className="text-xs text-amber-600">Recalcule as bitolas de tubulação para o novo dimensionamento</p>
+            </div>
+          </div>
+        )}
 
         {/* Equipamentos do sistema */}
         <div className="space-y-2">
@@ -185,11 +196,26 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
             </div>
           </div>
 
+          {/* Banner projeto carregado */}
+          {jaFinalizado && !resultado && (
+            <div className="mb-2 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+              <span className="text-2xl">✅</span>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Tubulação dimensionada — dados carregados do arquivo</p>
+                <p className="text-xs text-green-600">Clique em "Recalcular" para atualizar os resultados detalhados</p>
+              </div>
+            </div>
+          )}
+
           <button onClick={calcularBitolas} disabled={loading}
             className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${
-              loading ? 'bg-slate-300' : 'bg-gradient-to-br from-blue-600 to-indigo-700 hover:shadow-blue-200 hover:-translate-y-0.5'
+              loading ? 'bg-slate-300'
+              : jaFinalizado && !resultado ? 'bg-green-600 hover:bg-green-700 hover:-translate-y-0.5'
+              : 'bg-gradient-to-br from-blue-600 to-indigo-700 hover:shadow-blue-200 hover:-translate-y-0.5'
             }`}>
-            {loading && !bitolas ? 'Calculando...' : 'CALCULAR BITOLAS ➡️'}
+            {loading && !bitolas ? 'Calculando...'
+              : jaFinalizado && !resultado ? '🔄 Recalcular Bitolas'
+              : 'CALCULAR BITOLAS ➡️'}
           </button>
         </div>
 

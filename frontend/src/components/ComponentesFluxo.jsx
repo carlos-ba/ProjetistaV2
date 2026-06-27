@@ -12,7 +12,7 @@ const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', cone
 
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
 
   // ── Modo de seleção ───────────────────────────────────────────────────
   const [modo, setModo] = useState(initialValues?.modo ?? 'automatico');
@@ -201,6 +201,17 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     }).catch(() => {});
   };
 
+  // Auto-gera cavalete ao carregar projeto do arquivo
+  // Aguarda acessorioResult (vindo da API automática) e então dispara a cadeia completa
+  const jaFinalizadoRef = React.useRef(jaFinalizado);
+  useEffect(() => {
+    if (!jaFinalizadoRef.current) return;
+    if (!acessorioResult) return;
+    if (!dadosTubulacao || !comprimentoLiquido || !comprimentoSuccao) return;
+    jaFinalizadoRef.current = false; // executa só uma vez
+    estimarCargaFluido();
+  }, [acessorioResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Separadores automáticos (banco)
   const separadorLiqAuto = componentes.find(c =>
     c.categoria?.toLowerCase().includes('separador de líquido') ||
@@ -385,6 +396,17 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       </div>
 
       <div className="p-6">
+
+        {/* Banner dados alterados upstream */}
+        {invalidado && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Tubulação foi recalculada</p>
+              <p className="text-xs text-amber-600">Revise os componentes e confirme novamente para atualizar o orçamento</p>
+            </div>
+          </div>
+        )}
 
         {/* ── Seletor de modo ── */}
         <div className="mb-6 bg-slate-50 rounded-xl border border-slate-200 p-1 flex gap-1">
@@ -690,6 +712,15 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
               </div>
             )}
 
+            {jaFinalizado && (
+              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+                <span className="text-2xl">✅</span>
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Acessórios carregados do arquivo</p>
+                  <p className="text-xs text-green-600">Confirme para ir ao orçamento ou altere os componentes se necessário</p>
+                </div>
+              </div>
+            )}
             <button onClick={finalizar}
               className="w-full py-4 bg-[#7B2D8B] text-white rounded-xl font-bold hover:bg-purple-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
               CONFIRMAR ACESSÓRIOS E IR PARA ORÇAMENTO ➡️

@@ -6,7 +6,7 @@ const TIPOS = [
   { id: 'Evaporadora',          label: 'Evaporadora',     icone: '❄️' },
 ];
 
-const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaTChange, aoFinalizar, initialValues, onValoresChange }) => {
+const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaTChange, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
   const [cargaTotal, setCargaTotal] = useState(initialValues?.cargaTotal ?? 2000);
   const [numMaquinas, setNumMaquinas] = useState(initialValues?.numMaquinas ?? 1);
   const [deltaT, setDeltaT] = useState(initialValues?.deltaT ?? '');
@@ -33,6 +33,29 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
   useEffect(() => {
     if (cargaInicial && cargaInicial > 0) setCargaTotal(Math.round(cargaInicial));
   }, [cargaInicial]);
+
+  // Ao restaurar projeto salvo: re-executa a busca automaticamente se havia parâmetros salvos
+  useEffect(() => {
+    if (!initialValues?.deltaT || !initialValues?.evap) return;
+    const evapVal = parseFloat(initialValues.evap);
+    if (isNaN(evapVal)) return;
+    const params = {
+      carga_termica_total: Math.round((initialValues.cargaTotal ?? 2000) / (initialValues.numMaquinas ?? 1)),
+      temp_evaporacao:     evapVal,
+      temp_condensacao:    initialValues.cond ?? 45,
+      fluido:              initialValues.fluido ?? 'R22',
+    };
+    Promise.all([
+      api.post('/api/v1/selecao', { ...params, tipo: 'Unidade Condensadora' }),
+      api.post('/api/v1/selecao', { ...params, tipo: 'Evaporadora' }),
+    ]).then(([resUC, resEvap]) => {
+      setResultadosUC(resUC.data);
+      setResultadosEvap(resEvap.data);
+      const qtds = {};
+      [...resUC.data, ...resEvap.data].forEach(i => { qtds[i.id] = initialValues.numMaquinas ?? 1; });
+      setQuantidades(prev => ({ ...qtds, ...prev })); // preserva quantidades salvas
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setCond(tempAmb + 10);
@@ -140,6 +163,17 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       </div>
 
       <div className="p-6">
+
+        {/* Banner dados alterados upstream */}
+        {invalidado && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Carga térmica foi recalculada</p>
+              <p className="text-xs text-amber-600">Verifique se os equipamentos selecionados ainda são adequados e confirme novamente</p>
+            </div>
+          </div>
+        )}
 
         {/* Parâmetros */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -357,6 +391,15 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
               </table>
             </div>
 
+            {jaFinalizado && selecionados.length > 0 && (
+              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+                <span className="text-2xl">✅</span>
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Equipamentos selecionados — dados carregados do arquivo</p>
+                  <p className="text-xs text-green-600">Confirme para continuar ou altere a seleção se necessário</p>
+                </div>
+              </div>
+            )}
             <button onClick={finalizarEtapa}
               className="w-full py-4 bg-[#7B2D8B] hover:bg-purple-800 text-white font-black rounded-xl shadow-lg shadow-purple-200 transition-all hover:-translate-y-1 active:translate-y-0">
               FINALIZAR SELEÇÃO E CONTINUAR ➡️

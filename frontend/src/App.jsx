@@ -31,6 +31,7 @@ function AppContent({ catalogo }) {
   const [inputsEquipamentos, setInputsEquipamentos] = useState(null);
   const [inputsTubulacao,    setInputsTubulacao]    = useState(null);
   const [inputsComponentes,  setInputsComponentes]  = useState(null);
+  const [inputsOrcamento,    setInputsOrcamento]    = useState(null);
   const gabineteCalculadoRef = React.useRef(false); // rastreia transição false→true
   const [projetoKey, setProjetoKey] = useState(0); // força remount dos componentes ao novo projeto
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
@@ -55,6 +56,11 @@ function AppContent({ catalogo }) {
     incluir_gbc_entrada: true,
     incluir_gbc_saida:   true,
   });
+  // Rastrea quais cards precisam ser refeitos porque algo upstream mudou
+  const [invalidados, setInvalidados] = useState({ 2: false, 3: false, 4: false, 5: false, 6: false });
+  // Bloqueia invalidação durante carregamento de arquivo (callbacks automáticos de sync não devem invalidar)
+  const carregandoProjetoRef = React.useRef(false);
+
   const [passoAtual, setPassoAtual] = useState(1);
   const [passoExpandido, setPassoExpandido] = useState(1);
   const [passoSelecionado, setPassoSelecionado] = useState(1);
@@ -131,6 +137,10 @@ function AppContent({ catalogo }) {
         setPassoSelecionado(2);
         setProximaEtapa({ numero: 2, label: 'Cálculo de Carga Térmica' });
       }
+      // Card 1 foi realmente recalculado → avisar cards dependentes
+      if (!carregandoProjetoRef.current) {
+        setInvalidados(p => ({ ...p, 2: true, 3: true, 4: true, 5: true, 6: true }));
+      }
     } else {
       gabineteCalculadoRef.current = false;
       setGabineteCalculado(false);
@@ -145,13 +155,16 @@ function AppContent({ catalogo }) {
       setItensOrcamento(prev => ({ ...prev, imagem_projeto: dadosCompletos.imagem_projeto }));
     }
     
-    setPassoAtual(prev => (prev < 2 ? 2 : prev));
+    setPassoAtual(prev => prev < 2 ? 2 : prev);
   }, []);
 
   // 2. Recebe da Carga Térmica (Módulo 2)
   const receberResultadoCarga = useCallback((valorKcal, tempExt) => {
     setCargaCalculada(valorKcal);
-    if (tempExt) setTempExternaCalculo(tempExt); // guarda T.Amb do Card 2
+    if (tempExt) setTempExternaCalculo(tempExt);
+    if (!carregandoProjetoRef.current) {
+      setInvalidados(p => ({ ...p, 2: false, 3: true, 4: true, 5: true, 6: true }));
+    }
     setPassoAtual(prev => Math.max(prev, 3));
     setPassoSelecionado(3);
     setProximaEtapa({ numero: 3, label: 'Seleção de Equipamentos' });
@@ -161,6 +174,9 @@ function AppContent({ catalogo }) {
     setItensOrcamento(prev => ({ ...prev, equipamentos }));
     setItensAcessorios([]);
     setItensTubulacao([]);
+    if (!carregandoProjetoRef.current) {
+      setInvalidados(p => ({ ...p, 3: false, 4: true, 5: true, 6: true }));
+    }
     setPassoAtual(prev => Math.max(prev, 4));
     setPassoSelecionado(4);
     setProximaEtapa({ numero: 4, label: 'Dimensionamento de Tubulação' });
@@ -169,6 +185,9 @@ function AppContent({ catalogo }) {
   const receberDadosTubulacao = useCallback((listaTubos, resultadoCompleto) => {
     setItensTubulacao(listaTubos);
     if (resultadoCompleto) setResultadoTubulacao(resultadoCompleto);
+    if (!carregandoProjetoRef.current) {
+      setInvalidados(p => ({ ...p, 4: false, 5: true, 6: true }));
+    }
     setPassoAtual(prev => Math.max(prev, 5));
     setPassoSelecionado(5);
     setProximaEtapa({ numero: 5, label: 'Componentes e Acessórios' });
@@ -176,6 +195,9 @@ function AppContent({ catalogo }) {
 
   const receberComponentesFluxo = useCallback((listaAcessorios) => {
     setItensAcessorios(listaAcessorios);
+    if (!carregandoProjetoRef.current) {
+      setInvalidados(p => ({ ...p, 5: false, 6: true }));
+    }
     setPassoAtual(prev => Math.max(prev, 6));
     setPassoSelecionado(6);
     setProximaEtapa({ numero: 6, label: 'Gerador de Orçamento' });
@@ -292,11 +314,13 @@ function AppContent({ catalogo }) {
     setInputsEquipamentos(null);
     setInputsTubulacao(null);
     setInputsComponentes(null);
+    setInputsOrcamento(null);
     setConfiguracoesMontagem({
       tipo_filtro: 'solda', tipo_visor: 'solda',
       trecho_vet_evap: 0.5, trecho_evap_sifao: 0.5,
       trecho_subida: 1.0, trecho_sifao_gbc: 0.5,
     });
+    setInvalidados({ 2: false, 3: false, 4: false, 5: false, 6: false });
     setPassoAtual(1);
     setProjetoAtual(null);
     setGabineteCalculado(false);
@@ -322,6 +346,11 @@ function AppContent({ catalogo }) {
       inputs_componentes: inputsComponentes,
       carga_termica: cargaCalculada,
       orcamento: itensOrcamento,
+      itens_gabinete: itensGabinete,
+      itens_acessorios: itensAcessorios,
+      itens_tubulacao: itensTubulacao,
+      resultado_tubulacao: resultadoTubulacao,
+      dados_cliente: inputsOrcamento?.dadosCliente ?? null,
       configuracoes: { passo_atual: passoAtual }
     }
   });
@@ -386,23 +415,60 @@ function AppContent({ catalogo }) {
   };
 
   const carregarProjeto = (projeto) => {
+    // Bloqueia invalidação durante carregamento — callbacks automáticos de sync não devem disparar banners
+    carregandoProjetoRef.current = true;
     const d = projeto.dados_completos || {};
+
     if (d.gabinete) {
       setDadosDoGabinete(d.gabinete);
       setGabineteCalculado(true);
       gabineteCalculadoRef.current = true;
     }
     if (d.carga_termica) setCargaCalculada(d.carga_termica);
-    if (d.orcamento) setItensOrcamento(d.orcamento);
+    if (d.resultado_tubulacao) setResultadoTubulacao(d.resultado_tubulacao);
+
+    // Restaura listas de materiais antes de setItensOrcamento para evitar
+    // que o useEffect de reconstrução (itensGabinete+itensAcessorios+itensTubulacao)
+    // apague os materiais salvos logo após o load
+    const ig = d.itens_gabinete   || [];
+    const ia = d.itens_acessorios || [];
+    const it = d.itens_tubulacao  || [];
+    setItensGabinete(ig);
+    setItensAcessorios(ia);
+    setItensTubulacao(it);
+
+    // Se não há listas salvas mas há orcamento.materiais, preserva direto
+    if (d.orcamento) {
+      const mat = (ig.length || ia.length || it.length)
+        ? [...ig, ...ia, ...it]
+        : (d.orcamento.materiais || []);
+      setItensOrcamento({ ...d.orcamento, materiais: mat });
+    }
+
     setInputsGabinete(d.inputs_gabinete || null);
     setInputsCargaTermica(d.inputs_carga_termica || null);
     setInputsEquipamentos(d.inputs_equipamentos || null);
     setInputsTubulacao(d.inputs_tubulacao || null);
     setInputsComponentes(d.inputs_componentes || null);
-    setPassoAtual(d.configuracoes?.passo_atual || (d.gabinete ? 2 : 1));
+    setInputsOrcamento(d.dados_cliente ? { dadosCliente: d.dados_cliente } : null);
+    setInvalidados({ 2: false, 3: false, 4: false, 5: false, 6: false });
+
+    // Avança automaticamente para o card mais avançado com dados
+    const temOrcamento = !!(d.orcamento?.materiais?.length || d.orcamento?.equipamentos?.length || ia.length);
+    const passoFinal = temOrcamento                                                              ? 6
+      : (it.length || d.resultado_tubulacao)                                                     ? 5
+      : (d.orcamento?.equipamentos?.length || d.inputs_equipamentos?.selecionados?.length)       ? 4
+      : d.carga_termica                                                                          ? 3
+      : d.gabinete                                                                               ? 2
+      : 1;
+    setPassoAtual(passoFinal);
+    setPassoSelecionado(passoFinal);
+    setPassoExpandido(passoFinal);
     setProjetoAtual({ id: projeto.id, nome: projeto.nome, cliente: projeto.cliente });
     setMostrandoHistorico(false);
-    setProjetoKey(k => k + 1); // força remount DEPOIS de setar todos os initialValues
+    setProjetoKey(k => k + 1);
+    // Libera após 3s — tempo suficiente para todos os efeitos automáticos (API dos cards) terminarem
+    setTimeout(() => { carregandoProjetoRef.current = false; }, 3000);
     alert(`Projeto "${projeto.nome}" carregado com sucesso!`);
   };
 
@@ -650,6 +716,7 @@ function AppContent({ catalogo }) {
                 portasCatalogo={catalogo.portasCatalogo}
                 initialValues={inputsGabinete}
                 onValoresChange={setInputsGabinete}
+                jaFinalizado={!!dadosDoGabinete}
               />
             </EtapaCard>
 
@@ -664,7 +731,7 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 2 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} initialValues={inputsCargaTermica} onValoresChange={setInputsCargaTermica} />
+              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} initialValues={inputsCargaTermica} onValoresChange={setInputsCargaTermica} jaFinalizado={!!cargaCalculada} invalidado={invalidados[2]} />
             </EtapaCard>
 
             {/* 3. Seleção de Equipamentos */}
@@ -687,6 +754,8 @@ function AppContent({ catalogo }) {
                 aoFinalizar={receberEquipamentosFinalizados}
                 initialValues={inputsEquipamentos}
                 onValoresChange={setInputsEquipamentos}
+                jaFinalizado={!!(itensOrcamento?.equipamentos?.length)}
+                invalidado={invalidados[3]}
               />
             </EtapaCard>
 
@@ -701,7 +770,7 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 4 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} initialValues={inputsTubulacao} onValoresChange={setInputsTubulacao} />
+              <CalculadoraTubulacao key={projetoKey} evaporador={getEvaporador()} condensadora={getCondensadora()} aoFinalizar={receberDadosTubulacao} initialValues={inputsTubulacao} onValoresChange={setInputsTubulacao} jaFinalizado={!!(itensTubulacao?.length || resultadoTubulacao)} invalidado={invalidados[4]} />
             </EtapaCard>
 
             {/* 5. Componentes e Acessórios */}
@@ -729,6 +798,8 @@ function AppContent({ catalogo }) {
                 onCavaleteChange={receberCavaleteChange}
                 initialValues={inputsComponentes}
                 onValoresChange={setInputsComponentes}
+                jaFinalizado={!!(itensAcessorios?.length)}
+                invalidado={invalidados[5]}
               />
             </EtapaCard>
 
@@ -748,6 +819,11 @@ function AppContent({ catalogo }) {
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
                 projetoAtual={projetoAtual}
+                initialValues={inputsOrcamento}
+                onClienteChange={(nome) => setProjetoAtual(p => p ? { ...p, cliente: nome } : p)}
+                onValoresChange={setInputsOrcamento}
+                invalidado={invalidados[6]}
+                aoConfirmar={() => setInvalidados(p => ({ ...p, 6: false }))}
               />
             </EtapaCard>
 

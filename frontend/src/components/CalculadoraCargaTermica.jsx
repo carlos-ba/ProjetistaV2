@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 import PainelInsights from './PainelInsights';
 
-const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange }) => {
+const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
   // --- VALIDAÇÃO: Verificar se gabinete foi configurado ---
   if (!dadosIniciais) {
     return (
@@ -30,9 +30,12 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [tipoPiso, setTipoPiso] = useState('nenhum');
 
   const [produtos, setProdutos] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
-  const [produtoSelecionado, setProdutoSelecionado] = useState('');
+  const categorias = useMemo(
+    () => [...new Set(produtos.map(p => p.tipo?.nome ?? p.tipo).filter(Boolean))].sort(),
+    [produtos]
+  );
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState(initialValues?.categoriaSelecionada ?? '');
+  const [produtoSelecionado, setProdutoSelecionado] = useState(initialValues?.produtoSelecionado ?? '');
   const [movimentacao, setMovimentacao] = useState(initialValues?.movimentacao ?? 0);
   const [tempEntrada, setTempEntrada] = useState(initialValues?.tempEntrada ?? 5);
   const [tempoResfriamento, setTempoResfriamento] = useState(initialValues?.tempoResfriamento ?? 24);
@@ -48,14 +51,14 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
 
   const [produtoDetalhe, setProdutoDetalhe] = useState(null);
 
-  const [resultado, setResultado] = useState(null);
+  const [resultado, setResultado] = useState(initialValues?.resultado ?? null);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
-  const [statusCalculo, setStatusCalculo] = useState(null); // 'pronto', 'modificado'
+  const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado });
-  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado]);
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, resultado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, resultado]);
 
   // Produtos filtrados com base na categoria
   const produtosFiltrados = categoriaSelecionada
@@ -69,10 +72,6 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
         const res = await api.get('/api/v1/catalogo/perfis-produto');
         const items = res.data?.results ?? res.data ?? [];
         setProdutos(items);
-        
-        // Extrair categorias únicas
-        const cats = [...new Set(items.map(p => p.tipo?.nome ?? p.tipo).filter(Boolean))].sort();
-        setCategorias(cats);
       } catch (e) {
         console.error("Erro ao carregar produtos:", e);
       }
@@ -91,8 +90,17 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   }, [produtoSelecionado, produtos]);
 
   // Sincronizar com Gabinete
+  // Monitorar mudanças para invalidar o cálculo (Sinalizador Amarelo)
+  const carregandoDoArquivo = React.useRef(jaFinalizado);
+
+  const primeirosDadosIniciais = React.useRef(true);
   useEffect(() => {
     if (dadosIniciais) {
+      if (!primeirosDadosIniciais.current) {
+        // Card 1 recalculou após o load inicial → libera detecção e invalida este card
+        carregandoDoArquivo.current = false;
+      }
+      primeirosDadosIniciais.current = false;
       if (dadosIniciais.comprimento) setComprimento(dadosIniciais.comprimento);
       if (dadosIniciais.largura) setLargura(dadosIniciais.largura);
       if (dadosIniciais.altura) setAltura(dadosIniciais.altura);
@@ -102,9 +110,10 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       if (dadosIniciais.tipo_piso) setTipoPiso(dadosIniciais.tipo_piso);
     }
   }, [dadosIniciais]);
-
-  // Monitorar mudanças para invalidar o cálculo (Sinalizador Amarelo)
+  const primeiroRender = React.useRef(true);
   useEffect(() => {
+    if (primeiroRender.current) { primeiroRender.current = false; return; }
+    if (carregandoDoArquivo.current) return;
     if (statusCalculo === 'pronto') {
       setStatusCalculo('modificado');
     }
@@ -178,7 +187,19 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
         )}
       </div>
 
-      <div className="p-6">
+      <div className="p-6" onFocus={() => { carregandoDoArquivo.current = false; }} onInput={() => { carregandoDoArquivo.current = false; }}>
+
+        {/* Banner dados do gabinete alterados */}
+        {invalidado && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Dados do gabinete foram alterados</p>
+              <p className="text-xs text-amber-600">Recalcule a carga térmica para atualizar o projeto</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Dimensões */}
           <div className="space-y-2">
@@ -377,21 +398,47 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
           </div>
         </div>
 
-        <button 
-          onClick={calcular} 
+        {/* Banner dados alterados upstream */}
+        {invalidado && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Dados do gabinete foram alterados</p>
+              <p className="text-xs text-amber-600">Recalcule a carga térmica para atualizar o projeto</p>
+            </div>
+          </div>
+        )}
+
+        {/* Banner projeto carregado */}
+        {jaFinalizado && !resultado && statusCalculo === 'pronto' && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="text-sm font-semibold text-green-800">Carga térmica calculada — dados carregados do arquivo</p>
+              <p className="text-xs text-green-600">Clique em "Recalcular" para atualizar os resultados detalhados</p>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={calcular}
           disabled={loading}
           className={`w-full py-4 rounded-xl font-bold text-lg shadow-md transition-all flex items-center justify-center gap-2 ${
-            loading 
-              ? 'bg-slate-300 cursor-not-allowed' 
+            loading
+              ? 'bg-slate-300 cursor-not-allowed'
               : statusCalculo === 'modificado'
                 ? 'bg-amber-500 hover:bg-amber-600 text-white ring-4 ring-amber-100'
-                : 'bg-[#7B2D8B] hover:bg-purple-800 text-white hover:-translate-y-0.5 active:translate-y-0'
+                : statusCalculo === 'pronto' && !resultado
+                  ? 'bg-green-600 hover:bg-green-700 text-white hover:-translate-y-0.5'
+                  : 'bg-[#7B2D8B] hover:bg-purple-800 text-white hover:-translate-y-0.5 active:translate-y-0'
           }`}
         >
           {loading ? (
             'Calculando...'
           ) : statusCalculo === 'modificado' ? (
             <>⚠️ ATUALIZAR CÁLCULO 🔄</>
+          ) : statusCalculo === 'pronto' && !resultado ? (
+            '🔄 Recalcular Carga Térmica'
           ) : (
             'CALCULAR CARGA E PROSSEGUIR ➡️'
           )}

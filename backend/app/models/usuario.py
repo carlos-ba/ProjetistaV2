@@ -24,3 +24,4 @@ class Usuario(Base, TimestampMixin):
     password_reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     projetos: Mapped[List["Projeto"]] = relationship(back_populates="owner")
+    clientes: Mapped[List["Cliente"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

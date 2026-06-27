@@ -15,6 +15,7 @@ from app.models.calculo import Calculo
 from app.models.cotacao import Fornecedor, Cotacao, CotacaoItem
 from app.models.proposta import PropostaComercial
 from app.models.configuracao_montagem import ConfiguracaoMontagem
+from app.models.cliente import Cliente
 
 __all__ = [
     "Base",
@@ -36,4 +37,5 @@ __all__ = [
     "CotacaoItem",
     "PropostaComercial",
     "ConfiguracaoMontagem",
+    "Cliente",
 ]

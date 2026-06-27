@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.api.routes_auth import router as auth_router
 from app.api.routes_health import router as health_router
 from app.api.routes_projetos import router as projetos_router
+from app.api.routes_clientes import router as clientes_router
 from app.api.routes_calculos import router as calculos_router
 from app.api.routes_gabinete import router as gabinete_router
 from app.api.routes_carga_termica import router as carga_termica_router
@@ -72,6 +73,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(projetos_router)
+app.include_router(clientes_router)
 app.include_router(calculos_router)
 app.include_router(gabinete_router)
 app.include_router(carga_termica_router)

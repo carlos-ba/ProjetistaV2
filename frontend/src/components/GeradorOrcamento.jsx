@@ -30,7 +30,7 @@ const agruparItens = (itens) => {
 // ── Linha de complemento em branco ───────────────────────────────────────
 const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '' });
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, invalidado = false, aoConfirmar }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -46,7 +46,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [orcamento,    setOrcamento]    = useState(null);
   const [erro,         setErro]         = useState(null);
   const [loading,      setLoading]      = useState(false);
-  const [dadosCliente, setDadosCliente] = useState({ nome: '', cnpj: '', contato: '', celular: '', email: '' });
+  const [dadosCliente, setDadosCliente] = useState(
+    initialValues?.dadosCliente ?? { nome: '', cnpj: '', contato: '', celular: '', email: '' }
+  );
+  const [clientes,        setClientes]        = useState([]);
+  const [clienteSalvoId,  setClienteSalvoId]  = useState(null);
+  const [buscaCliente,    setBuscaCliente]    = useState('');
+  const [mostrarLista,    setMostrarLista]    = useState(false);
+  const [modoNovoCliente, setModoNovoCliente] = useState(false);
 
   // Reinicia checkboxes quando dadosAutomaticos muda
   useEffect(() => {
@@ -70,8 +77,54 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const removerComplemento = (i) => setComplementos(complementos.filter((_, j) => j !== i));
   const complementosPreenchidos = complementos.filter(c => c.descricao.trim());
 
+  useEffect(() => {
+    if (onValoresChange) onValoresChange({ dadosCliente });
+  }, [dadosCliente]);
+
+  // ── Clientes cadastrados ──────────────────────────────────────────────
+  useEffect(() => {
+    api.get('/api/v1/clientes').then(r => setClientes(r.data)).catch(() => {});
+  }, []);
+
+  const clientesFiltrados = clientes.filter(c =>
+    c.nome.toLowerCase().includes(buscaCliente.toLowerCase()) ||
+    (c.cnpj || '').includes(buscaCliente) ||
+    (c.email || '').toLowerCase().includes(buscaCliente.toLowerCase())
+  );
+
+  const selecionarCliente = (c) => {
+    setDadosCliente({ nome: c.nome, cnpj: c.cnpj || '', contato: c.contato || '', celular: c.celular || '', email: c.email || '' });
+    setClienteSalvoId(c.id);
+    setMostrarLista(false);
+    setBuscaCliente('');
+    setModoNovoCliente(false);
+    if (onClienteChange) onClienteChange(c.nome);
+  };
+
+  const salvarCliente = async () => {
+    try {
+      if (clienteSalvoId) {
+        const r = await api.patch(`/api/v1/clientes/${clienteSalvoId}`, dadosCliente);
+        setClientes(prev => prev.map(c => c.id === clienteSalvoId ? r.data : c));
+      } else {
+        const r = await api.post('/api/v1/clientes', dadosCliente);
+        setClientes(prev => [...prev, r.data]);
+        setClienteSalvoId(r.data.id);
+      }
+      setModoNovoCliente(false);
+      alert('Cliente salvo com sucesso!');
+    } catch {
+      alert('Erro ao salvar cliente.');
+    }
+  };
+
   // ── Dados do cliente ─────────────────────────────────────────────────
-  const handleClienteChange = (e) => setDadosCliente(p => ({ ...p, [e.target.name]: e.target.value }));
+  const handleClienteChange = (e) => {
+    const { name, value } = e.target;
+    setDadosCliente(p => ({ ...p, [name]: value }));
+    setClienteSalvoId(null);
+    if (name === 'nome' && onClienteChange) onClienteChange(value);
+  };
 
   // ── Gerar orçamento ───────────────────────────────────────────────────
   const gerarOrcamento = async () => {
@@ -175,6 +228,22 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
+
+      {/* Banner dados alterados — orçamento desatualizado */}
+      {invalidado && (
+        <div className="p-4 bg-red-50 border-2 border-red-300 rounded-2xl flex items-start gap-3 print:hidden">
+          <span className="text-3xl mt-0.5">🔴</span>
+          <div className="flex-1">
+            <p className="font-bold text-red-800">Orçamento desatualizado</p>
+            <p className="text-sm text-red-600 mt-0.5">Dados do projeto foram alterados. Revise os cards modificados e gere o orçamento novamente para ter os valores corretos.</p>
+          </div>
+          {aoConfirmar && (
+            <button onClick={aoConfirmar} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold border border-red-300 transition-all whitespace-nowrap">
+              Entendido
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ══ 1. LISTA COM CHECKBOXES ══ */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm print:hidden">
@@ -372,16 +441,52 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
             {/* Dados do Cliente */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <h4 className="text-sm font-bold text-slate-700 uppercase tracking-tight border-b pb-2 mb-4 flex items-center gap-2">
-                👤 Dados do Cliente
-              </h4>
+              <div className="flex items-center justify-between border-b pb-2 mb-4">
+                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                  👤 Dados do Cliente
+                  {clienteSalvoId && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">Cadastrado</span>}
+                </h4>
+                <div className="flex gap-2">
+                  <button onClick={() => { setMostrarLista(p => !p); setModoNovoCliente(false); }}
+                    className="text-xs px-3 py-1 rounded-lg bg-indigo-100 text-indigo-700 font-semibold hover:bg-indigo-200">
+                    {mostrarLista ? 'Fechar' : '🔍 Buscar cliente'}
+                  </button>
+                  <button onClick={() => { setModoNovoCliente(true); setMostrarLista(false); setDadosCliente({ nome: '', cnpj: '', contato: '', celular: '', email: '' }); setClienteSalvoId(null); }}
+                    className="text-xs px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-semibold hover:bg-emerald-200">
+                    + Novo
+                  </button>
+                </div>
+              </div>
+
+              {/* Busca de cliente existente */}
+              {mostrarLista && (
+                <div className="mb-4">
+                  <input value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
+                    placeholder="Buscar por nome, CNPJ ou e-mail..."
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none mb-2" autoFocus />
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+                    {clientesFiltrados.length === 0
+                      ? <p className="text-xs text-slate-400 p-3 text-center">Nenhum cliente encontrado</p>
+                      : clientesFiltrados.map(c => (
+                        <button key={c.id} onClick={() => selecionarCliente(c)}
+                          className="w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors">
+                          <p className="text-sm font-semibold text-slate-800">{c.nome}</p>
+                          <p className="text-xs text-slate-500">{[c.cnpj, c.email].filter(Boolean).join(' · ')}</p>
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Formulário de dados */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
-                  { name: 'nome',    label: 'Nome / Razão Social', ph: 'Frigorífico Silva LTDA',  span: 1 },
-                  { name: 'cnpj',    label: 'CNPJ / CPF',          ph: '00.000.000/0001-00',       span: 1 },
-                  { name: 'contato', label: 'Pessoa de Contato',   ph: 'João Silva',               span: 1 },
-                  { name: 'celular', label: 'Celular / WhatsApp',  ph: '(00) 00000-0000',          span: 1 },
-                  { name: 'email',   label: 'E-mail',              ph: 'cliente@email.com',         span: 2 },
+                  { name: 'nome',    label: 'Nome / Razão Social', ph: 'Frigorífico Silva LTDA', span: 1 },
+                  { name: 'cnpj',    label: 'CNPJ / CPF',          ph: '00.000.000/0001-00',      span: 1 },
+                  { name: 'contato', label: 'Pessoa de Contato',   ph: 'João Silva',              span: 1 },
+                  { name: 'celular', label: 'Celular / WhatsApp',  ph: '(00) 00000-0000',         span: 1 },
+                  { name: 'email',   label: 'E-mail',              ph: 'cliente@email.com',        span: 2 },
                 ].map(f => (
                   <div key={f.name} className={`space-y-1 ${f.span === 2 ? 'md:col-span-2' : ''}`}>
                     <label className="text-[10px] font-bold text-slate-500 uppercase">{f.label}</label>
@@ -391,6 +496,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   </div>
                 ))}
               </div>
+
+              {/* Botão salvar cliente */}
+              {dadosCliente.nome.trim() && (
+                <div className="mt-3 flex justify-end">
+                  <button onClick={salvarCliente}
+                    className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 text-white font-semibold hover:bg-slate-900">
+                    {clienteSalvoId ? '💾 Atualizar cadastro' : '💾 Salvar cliente'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
