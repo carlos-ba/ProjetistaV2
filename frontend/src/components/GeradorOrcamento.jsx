@@ -13,14 +13,21 @@ const agruparItens = (itens) => {
     "Outros": [],
   };
   itens.forEach(l => {
+    if (l.categoria === 'equipamento') { cats["Equipamentos Principais"].push(l); return; }
     const n = (l.item || '').toLowerCase();
-    if (n.includes('painel') || n.includes('isolamento') || n.includes('piso') || n.includes('placa'))
+    if (n.includes('painéi') || n.includes('painel') || n.includes('isolamento') ||
+        n.includes('piso') || n.includes('placa') || n.includes('porta') ||
+        n.includes('acessório') || n.includes('acessorio') || n.includes('teto') || n.includes('parede'))
       cats["Painéis e Isolamento"].push(l);
     else if (n.includes('condensadora') || n.includes('evaporador') || n.includes('compressor') || n.includes('(eq)'))
       cats["Equipamentos Principais"].push(l);
-    else if (n.includes('tubo') || n.includes('solda') || n.includes('armacel'))
+    else if (n.includes('tubo') || n.includes('solda') || n.includes('armacel') ||
+             n.includes('luva') || n.includes('porca') || n.includes('sif') ||
+             n.includes('contra-sif'))
       cats["Tubulação e Conexões"].push(l);
-    else if (n.includes('válvula') || n.includes('filtro') || n.includes('separador') || n.includes('visor') || n.includes('pressostato'))
+    else if (n.includes('válvula') || n.includes('valvula') || n.includes('filtro') ||
+             n.includes('separador') || n.includes('visor') || n.includes('pressostato') ||
+             n.includes('tanque') || n.includes('fluido') || n.includes('carga de'))
       cats["Componentes de Fluxo"].push(l);
     else cats["Outros"].push(l);
   });
@@ -30,7 +37,20 @@ const agruparItens = (itens) => {
 // ── Linha de complemento em branco ───────────────────────────────────────
 const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '' });
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, invalidado = false, aoConfirmar }) => {
+const norm = (s) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+const fmt = (v) => (v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const CONDICOES_PADRAO = {
+  pagamento: '40% na aprovação do pedido · 40% na entrega dos materiais · 20% na entrega técnica',
+  validade_dias: 10,
+  prazo_execucao: '30 dias corridos após confirmação do pedido',
+  garantia: '12 meses para os serviços de instalação. Equipamentos: garantia de fábrica do fabricante.',
+  incluso: 'Fornecimento e montagem dos painéis frigoríficos; instalação do sistema de refrigeração; tubulações frigorígenas e elétricas entre evaporador e unidade condensadora; vácuo, carga de fluido e entrega técnica com câmara em temperatura.',
+  nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
+};
+
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -46,6 +66,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [orcamento,    setOrcamento]    = useState(null);
   const [erro,         setErro]         = useState(null);
   const [loading,      setLoading]      = useState(false);
+
+  // ── Verificação de cotação ────────────────────────────────────────────
+  const [cotacaoAviso,        setCotacaoAviso]        = useState(null); // 'nenhuma' | 'aguardando'
+  const [cotacoesEmAndamento, setCotacoesEmAndamento] = useState([]);
+  const [cotacoesProcessadas, setCotacoesProcessadas] = useState([]);
+  const [modalEscolhaCotacao, setModalEscolhaCotacao] = useState(false);
+  const [cotacaoEscolhidaId,  setCotacaoEscolhidaId] = useState(null); // null = melhor preço
+  const [loadingCotacaoCheck, setLoadingCotacaoCheck] = useState(false);
+  const [itensSemPreco,       setItensSemPreco]       = useState([]);
+  const [precosManuals,       setPrecosManuals]       = useState({}); // norm(desc) → string
+  const ultimoPrecoMapRef = useRef(new Map()); // guarda precoMap da última geração
   const [dadosCliente, setDadosCliente] = useState(
     initialValues?.dadosCliente ?? { nome: '', cnpj: '', contato: '', celular: '', email: '' }
   );
@@ -54,6 +85,28 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [buscaCliente,    setBuscaCliente]    = useState('');
   const [mostrarLista,    setMostrarLista]    = useState(false);
   const [modoNovoCliente, setModoNovoCliente] = useState(false);
+
+  // ── Configurações da proposta ─────────────────────────────────────────
+  const [incluirResumoTecnico,   setIncluirResumoTecnico]   = useState(true);
+  const [incluirEquipamentos,    setIncluirEquipamentos]    = useState(true);
+  const [modoFaturamento,        setModoFaturamento]        = useState('empreitada'); // 'empreitada' | 'venda_direta'
+  const [custos, setCustos] = useState({ mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
+  const [margem,         setMargem]         = useState(25);
+  const [imposto,        setImposto]        = useState(6);
+  const [apresentacao,   setApresentacao]   = useState('blocos'); // 'blocos' | 'global'
+  const [moSeparada,     setMoSeparada]     = useState(false);
+  const [resumoObjeto,   setResumoObjeto]   = useState('Fornecimento e instalação de câmara frigorífica completa, conforme dimensionamento técnico.');
+  const [cond,           setCond]           = useState(CONDICOES_PADRAO);
+
+  // Auto-aprovação quando chamado a partir do PainelCotacoes
+  useEffect(() => {
+    if (triggerGerarProposta === 0) return;
+    if (totalItens > 0) {
+      setListaAprovada(true);
+      // Pequeno delay para garantir que o DOM renderizou o carrinho antes de verificar
+      setTimeout(() => verificarEGerar(), 300);
+    }
+  }, [triggerGerarProposta]);
 
   // Reinicia checkboxes quando dadosAutomaticos muda
   useEffect(() => {
@@ -81,9 +134,49 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     if (onValoresChange) onValoresChange({ dadosCliente });
   }, [dadosCliente]);
 
+  // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
+  const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
+  useEffect(() => {
+    api.get('/api/v1/tubulacao/peso-tubo-cobre')
+      .then(r => {
+        const m = {};
+        (r.data || []).forEach(p => { m[p.bitola_pol] = { fina: p.parede_fina, grossa: p.parede_grossa }; });
+        setPesosTubo(m);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Extrai bitola do nome do item: "Tubo Cobre 1/2\" (Líquido)" → "1/2\""
+  const extrairBitola = (nomeItem) => {
+    const m = (nomeItem || '').match(/Tubo Cobre ([^\s(]+)/);
+    return m ? m[1] : null;
+  };
+
+  const calcularKg = (item, quantidade, parede) => {
+    if (item.quantidade_kg != null) return item.quantidade_kg;
+    if (item.peso_por_metro != null) return Math.round(item.peso_por_metro * quantidade * 1000) / 1000;
+    const bitola = extrairBitola(item.item);
+    if (!bitola || !pesosTubo[bitola]) return null;
+    const kgM = parede === 'grossa' ? pesosTubo[bitola].grossa : pesosTubo[bitola].fina;
+    return kgM != null ? Math.round(kgM * quantidade * 1000) / 1000 : null;
+  };
+
   // ── Clientes cadastrados ──────────────────────────────────────────────
   useEffect(() => {
-    api.get('/api/v1/clientes').then(r => setClientes(r.data)).catch(() => {});
+    api.get('/api/v1/clientes').then(r => {
+      const lista = r.data || [];
+      setClientes(lista);
+      // Auto-preenche se o formulário está vazio mas o projeto tem nome de cliente
+      const nomeNoProjeto = projetoAtual?.cliente?.trim();
+      const formularioVazio = !dadosCliente.nome?.trim();
+      if (nomeNoProjeto && formularioVazio) {
+        const match = lista.find(c => c.nome.toLowerCase() === nomeNoProjeto.toLowerCase());
+        if (match) {
+          setDadosCliente({ nome: match.nome, cnpj: match.cnpj || '', contato: match.contato || '', celular: match.celular || '', email: match.email || '' });
+          setClienteSalvoId(match.id);
+        }
+      }
+    }).catch(() => {});
   }, []);
 
   const clientesFiltrados = clientes.filter(c =>
@@ -126,28 +219,123 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     if (name === 'nome' && onClienteChange) onClienteChange(value);
   };
 
-  // ── Gerar orçamento ───────────────────────────────────────────────────
-  const gerarOrcamento = async () => {
+  // ── Gerar orçamento (com mapa de preços opcional) ────────────────────
+  const gerarOrcamentoComPrecos = async (precoMap = new Map(), extras = {}) => {
     setLoading(true); setErro(null);
-    try {
-      const payload = {
-        materiais: materiaisAprovados.map(m => ({
+    const semPreco = [];
+
+    const buscarPreco = (descricao) => {
+      const p = precoMap.get(norm(descricao));
+      if (p == null) semPreco.push(descricao);
+      return p ?? null;
+    };
+
+    const payload = {
+      materiais: materiaisAprovados.map(m => {
+        const descricao = m.comprimento ? `${m.item} ${m.comprimento}m` : m.item;
+        const precoManual = parseFloat(extras[norm(descricao)]) || null;
+        return {
           id: m.id,
-          // Inclui dimensão no nome do item quando disponível
-          item: m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
-          qtde: m.quantidade || m.qtd || 1,
+          item: descricao,
+          qtde: parseFloat(m.quantidade ?? m.qtd ?? 1) || 1,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : null].filter(Boolean).join(' — '),
-        })),
-        equipamentos: equipamentosAprovados.map(e => ({
-          id: e.id, item: e.nome,
-          qtde: e.qtde || 1,
+          preco_unitario: precoManual ?? buscarPreco(descricao),
+        };
+      }),
+      equipamentos: equipamentosAprovados.map(e => {
+        const descricao = e.nome || e.item;
+        const precoManual = parseFloat(extras[norm(descricao)]) || null;
+        return {
+          id: e.id, item: descricao,
+          qtde: parseFloat(e.qtde ?? 1) || 1,
           detalhe: e.detalhe || '',
-        })),
-      };
+          preco_unitario: precoManual ?? buscarPreco(descricao),
+          categoria: 'equipamento',
+        };
+      }),
+    };
+
+    try {
       const r = await api.post('/api/v1/orcamento', payload);
       setOrcamento(r.data);
-    } catch { setErro("Erro ao gerar orçamento."); }
-    finally { setLoading(false); }
+      setItensSemPreco(semPreco);
+      if (semPreco.length > 0) {
+        const init = {};
+        semPreco.forEach(d => { init[norm(d)] = ''; });
+        setPrecosManuals(init);
+      }
+      setModalEscolhaCotacao(false);
+      setCotacaoAviso(null);
+    } catch (err) {
+      const detalhe = err?.response?.data?.detail;
+      const msg = Array.isArray(detalhe)
+        ? detalhe.map(d => `${d.loc?.join('.')}: ${d.msg}`).join(' | ')
+        : (typeof detalhe === 'string' ? detalhe : null);
+      setErro(msg ? `Erro de validação: ${msg}` : "Erro ao gerar orçamento.");
+      console.error('[gerarOrcamento] payload:', payload, 'erro:', err?.response?.data);
+    } finally { setLoading(false); }
+  };
+
+  // ── Verifica cotação antes de gerar ──────────────────────────────────
+  const verificarEGerar = async () => {
+    if (!projetoAtual?.id) return;
+    setCotacaoAviso(null); setItensSemPreco([]); setPrecosManuals({});
+    setLoadingCotacaoCheck(true);
+    try {
+      const r = await api.get(`/api/v1/cotacoes?projeto_id=${projetoAtual.id}`);
+      const cotacoes = (r.data || []).filter(c => c.status !== 'cancelada');
+      const processadas = cotacoes.filter(c => c.status === 'processada');
+
+      if (cotacoes.length === 0) {
+        setCotacaoAviso('nenhuma');
+      } else if (processadas.length === 0) {
+        setCotacoesEmAndamento(cotacoes);
+        setCotacaoAviso('aguardando');
+      } else if (processadas.length === 1) {
+        setCotacaoEscolhidaId(processadas[0].id);
+        await _gerarComCotacoes([processadas[0].id]);
+      } else {
+        setCotacoesProcessadas(processadas);
+        setCotacaoEscolhidaId(null);
+        setModalEscolhaCotacao(true);
+      }
+    } catch {
+      // Falha ao verificar — gera sem preços da cotação
+      await gerarOrcamentoComPrecos();
+    } finally {
+      setLoadingCotacaoCheck(false);
+    }
+  };
+
+  const _gerarComCotacoes = async (ids) => {
+    const cotacoesData = await Promise.all(ids.map(id => api.get(`/api/v1/cotacoes/${id}`)));
+    const precoMap = new Map();
+    for (const r of cotacoesData) {
+      for (const item of (r.data.itens || [])) {
+        if (item.preco_unitario != null && item.preco_unitario > 0) {
+          const key = norm(item.descricao);
+          if (!precoMap.has(key) || item.preco_unitario < precoMap.get(key)) {
+            precoMap.set(key, item.preco_unitario);
+          }
+        }
+      }
+    }
+    ultimoPrecoMapRef.current = precoMap;
+    await gerarOrcamentoComPrecos(precoMap);
+  };
+
+  const confirmarEscolhaCotacao = async () => {
+    if (cotacaoEscolhidaId === null) {
+      // Melhor preço: usa todas as processadas
+      await _gerarComCotacoes(cotacoesProcessadas.map(c => c.id));
+    } else {
+      await _gerarComCotacoes([cotacaoEscolhidaId]);
+    }
+  };
+
+  const recalcularComPrecosManuals = async () => {
+    // Usa o precoMap da última cotação + os preços manuais como override
+    await gerarOrcamentoComPrecos(ultimoPrecoMapRef.current, precosManuals);
   };
 
   // ── Total dos complementos ────────────────────────────────────────────
@@ -157,10 +345,74 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     return s + p * q;
   }, 0);
 
-  const totalGeral = (orcamento?.['custo_total_projeto_R$'] || 0) + totalComplementos;
+  const calcFinanceiro = () => {
+    const custo_materiais = (orcamento?.custo_total_projeto_rs || 0) + totalComplementos;
+    const n = (v) => parseFloat(v) || 0;
+    const custo_servicos = n(custos.mo_paineis) + n(custos.mo_refrigeracao) + n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
+    const taxa = (parseFloat(margem) || 0) + (parseFloat(imposto) || 0);
+    const fator = taxa < 99 ? 1 / (1 - taxa / 100) : 1;
+
+    let preco_venda, preco_materiais_cliente, preco_servicos_cliente;
+    if (modoFaturamento === 'venda_direta') {
+      preco_servicos_cliente = custo_servicos * fator;
+      preco_materiais_cliente = custo_materiais;
+      preco_venda = preco_materiais_cliente + preco_servicos_cliente;
+    } else {
+      const custo_total = custo_materiais + custo_servicos;
+      preco_venda = custo_total * fator;
+      preco_servicos_cliente = custo_servicos * fator;
+      preco_materiais_cliente = preco_venda - preco_servicos_cliente;
+    }
+
+    // Blocos de material para apresentação
+    const blocosMatMap = {};
+    (orcamento?.detalhamento_itens || []).forEach(l => {
+      const nome = (l.item || '').toLowerCase();
+      const ehPainel = l.categoria !== 'equipamento' && (
+        nome.includes('painéi') || nome.includes('painel') || nome.includes('isolamento') ||
+        nome.includes('piso')   || nome.includes('placa')  || nome.includes('porta')       ||
+        nome.includes('acessório') || nome.includes('acessorio') ||
+        nome.includes('teto')   || nome.includes('parede')
+      );
+      const bloco = ehPainel ? 'Painéis, estrutura e materiais' : 'Sistema de refrigeração';
+      blocosMatMap[bloco] = (blocosMatMap[bloco] || 0) + (l.custo_total_rs || 0);
+    });
+    if (totalComplementos > 0) blocosMatMap['Painéis, estrutura e materiais'] = (blocosMatMap['Painéis, estrutura e materiais'] || 0) + totalComplementos;
+    const blocosCliente = Object.entries(blocosMatMap).map(([nome, custo]) => ({
+      nome,
+      valor: modoFaturamento === 'venda_direta' ? custo : custo * fator,
+    }));
+
+    const mo_p = n(custos.mo_paineis), mo_r = n(custos.mo_refrigeracao);
+    const overhead = n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
+    let blocosServicos;
+    if (moSeparada) {
+      blocosServicos = [
+        mo_p   > 0 ? { nome: 'Mão de obra — montagem de painéis',                       valor: mo_p   * fator } : null,
+        mo_r   > 0 ? { nome: 'Mão de obra — montagem de refrigeração e comissionamento', valor: mo_r   * fator } : null,
+        overhead > 0 ? { nome: 'Deslocamento, despesas e outros',                        valor: overhead * fator } : null,
+      ].filter(Boolean);
+      if (blocosServicos.length === 0)
+        blocosServicos = [{ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente }];
+    } else {
+      blocosServicos = [{ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente }];
+    }
+    blocosCliente.push(...blocosServicos);
+
+    const custo_total = custo_materiais + custo_servicos;
+    const faturamento_proprio = modoFaturamento === 'venda_direta' ? preco_servicos_cliente : preco_venda;
+    const custo_proprio = modoFaturamento === 'venda_direta' ? custo_servicos : custo_total;
+    const impostos_valor = faturamento_proprio * ((parseFloat(imposto) || 0) / 100);
+    const lucro_liquido = faturamento_proprio - custo_proprio - impostos_valor;
+
+    return { custo_materiais, custo_servicos, custo_total, preco_venda, preco_materiais_cliente, preco_servicos_cliente, faturamento_proprio, impostos_valor, lucro_liquido, blocosCliente, blocosServicos };
+  };
+
+  const cf = calcFinanceiro();
+  const totalGeral = cf.preco_venda;
 
   // ── PDF ───────────────────────────────────────────────────────────────
-  const gerarPDF = async () => {
+  const gerarPDFCanvas = async () => {
     if (!propostaRef.current) return;
     setLoading(true);
     try {
@@ -176,6 +428,299 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.save(`Orcamento_${dadosCliente.nome?.replace(/\s+/g, '_') || 'Camara'}.pdf`);
     } catch { setErro("Erro ao gerar PDF."); }
     finally { setLoading(false); }
+  };
+
+  const gerarPDF = () => {
+    setLoading(true);
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const PW = 210, PH = 297, ML = 14, MR = 196, CW = MR - ML;
+      let y = 0;
+
+      const novaP = () => { pdf.addPage(); y = 14; };
+      const checar = (h = 10) => { if (y + h > PH - 14) novaP(); };
+
+      const txt = (t, x, yy, opts = {}) => pdf.text(String(t ?? ''), x, yy, opts);
+      const wrap = (t, x, yy, maxW) => { const ls = pdf.splitTextToSize(String(t ?? ''), maxW); pdf.text(ls, x, yy); return ls.length; };
+
+      // ── Cabeçalho ──────────────────────────────────────────────────────
+      pdf.setFillColor(15, 23, 42);
+      pdf.rect(0, 0, PW, 38, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
+      txt('PROPOSTA TÉCNICA COMERCIAL', ML, 10);
+      pdf.setFontSize(18); pdf.setFont('helvetica', 'bold');
+      txt(dadosCliente.nome || 'Cliente não informado', ML, 20);
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+      const objLines = pdf.splitTextToSize(resumoObjeto || '', CW - 40);
+      pdf.text(objLines, ML, 27);
+
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
+      txt('EMISSÃO', MR - 30, 10, { align: 'right' });
+      txt('VALIDADE', MR, 10, { align: 'right' });
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
+      txt(new Date().toLocaleDateString('pt-BR'), MR - 30, 15, { align: 'right' });
+      const valData = new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR');
+      txt(valData, MR, 15, { align: 'right' });
+      pdf.setTextColor(0, 0, 0);
+      y = 46;
+
+      // ── Dados do cliente ──────────────────────────────────────────────
+      pdf.setFillColor(248, 250, 252);
+      pdf.rect(ML, y - 4, CW, 22, 'F');
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('INFORMAÇÕES DO CLIENTE', ML + 2, y); pdf.setTextColor(0);
+      pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+      txt(dadosCliente.nome || '---', ML + 2, y + 5);
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+      if (dadosCliente.cnpj) txt(`CNPJ/CPF: ${dadosCliente.cnpj}`, ML + 2, y + 10);
+      const metade = ML + CW / 2;
+      pdf.setFontSize(7); pdf.setTextColor(100); txt('CONTATO', metade, y); txt('CELULAR', metade + 40, y); txt('E-MAIL', metade + 70, y);
+      pdf.setTextColor(0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+      txt(dadosCliente.contato || '---', metade, y + 5);
+      txt(dadosCliente.celular || '---', metade + 40, y + 5);
+      txt(dadosCliente.email || '---', metade + 70, y + 5);
+      y += 28;
+
+      // ── Resumo técnico ────────────────────────────────────────────────
+      if (incluirResumoTecnico && resumoTecnico) {
+        checar(30);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+        txt('ESPECIFICAÇÕES TÉCNICAS', ML, y); pdf.setTextColor(0); y += 4;
+        const specs = [
+          ['Comprimento', `${resumoTecnico.comprimento} m`],
+          ['Largura', `${resumoTecnico.largura} m`],
+          ['Altura', `${resumoTecnico.altura} m`],
+          ['T. Interna', `${resumoTecnico.temperatura_interna} °C`],
+          ['Isolamento', `${resumoTecnico.nucleo} ${resumoTecnico.espessura}mm`],
+          resumoTecnico.carga_termica ? ['Carga Térmica', `${Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h`] : null,
+        ].filter(Boolean);
+        const colW = CW / specs.length;
+        specs.forEach((s, i) => {
+          const x = ML + i * colW;
+          pdf.setFillColor(241, 245, 249); pdf.rect(x, y, colW - 2, 12, 'F');
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+          txt(s[0].toUpperCase(), x + 2, y + 4);
+          pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+          txt(s[1], x + 2, y + 10);
+        });
+        y += 18;
+      }
+
+      // ── Planta técnica da câmara ─────────────────────────────────────
+      if (dadosAutomaticos?.imagem_projeto) {
+        checar(80);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+        txt('PLANTA TÉCNICA DA CÂMARA FRIGORÍFICA', ML, y); pdf.setTextColor(0); y += 4;
+        const imgW = CW * 0.6;
+        const imgX = ML + (CW - imgW) / 2;
+        pdf.addImage(dadosAutomaticos.imagem_projeto, 'PNG', imgX, y, imgW, 65);
+        y += 70;
+      }
+
+      // ── Escopo ────────────────────────────────────────────────────────
+      if (cond.incluso || cond.nao_incluso) {
+        checar(20);
+        const half = CW / 2 - 2;
+        if (cond.incluso) {
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(34, 197, 94);
+          txt('✓ ESTÁ INCLUÍDO', ML, y); pdf.setTextColor(0);
+          pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+          const nl = wrap(cond.incluso, ML, y + 4, half);
+          if (cond.nao_incluso) {
+            pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(220, 38, 38);
+            txt('✗ NÃO INCLUÍDO', ML + half + 4, y); pdf.setTextColor(0);
+            pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+            wrap(cond.nao_incluso, ML + half + 4, y + 4, half);
+          }
+          y += nl * 3.5 + 10;
+        }
+      }
+
+      // ── Lista de itens ────────────────────────────────────────────────
+      if (incluirEquipamentos) {
+        const grupos = Object.entries(agruparItens(orcamento.detalhamento_itens)).filter(([, it]) => it.length > 0);
+        grupos.forEach(([cat, itens]) => {
+          checar(14);
+          pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+          txt(cat.toUpperCase(), ML, y); pdf.setTextColor(0); y += 5;
+          itens.forEach(l => {
+            checar(8);
+            pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+            const nL = pdf.splitTextToSize(l.item, CW - 55);
+            pdf.text(nL, ML, y);
+            pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
+            pdf.setFontSize(6);
+            if (l.detalhe) { checar(4); pdf.text(pdf.splitTextToSize(l.detalhe, CW - 55), ML, y + nL.length * 4); }
+            pdf.setFontSize(8); pdf.setTextColor(0);
+            txt(`${l.quantidade} ${l.unidade}`, MR - 25, y, { align: 'right' });
+            if (modoFaturamento !== 'venda_direta') {
+              pdf.setFont('helvetica', 'bold');
+              txt(`R$ ${fmt(l.custo_total_rs ?? 0)}`, MR, y, { align: 'right' });
+            }
+            y += (nL.length + (l.detalhe ? 1 : 0)) * 4 + 2;
+          });
+          y += 3;
+        });
+
+        if (complementosPreenchidos.length > 0) {
+          checar(14);
+          pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+          txt('COMPLEMENTOS E MATERIAIS ADICIONAIS', ML, y); pdf.setTextColor(0); y += 5;
+          complementosPreenchidos.forEach(c => {
+            checar(7);
+            pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+            txt(c.descricao, ML, y);
+            txt(`${c.qtde} ${c.unidade}`, MR - 25, y, { align: 'right' });
+            if (c.preco_unit) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde))}`, MR, y, { align: 'right' }); }
+            else { pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt('A cotação', MR, y, { align: 'right' }); pdf.setTextColor(0); }
+            y += 6;
+          });
+        }
+      }
+
+      // ── Investimento ──────────────────────────────────────────────────
+      checar(20);
+      pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('INVESTIMENTO', ML, y); pdf.setTextColor(0); y += 5;
+
+      if (apresentacao === 'blocos') {
+        cf.blocosCliente.forEach(b => {
+          checar(7);
+          pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); txt(b.nome, ML, y);
+          const isServico = b.nome.includes('Mão de obra') || b.nome.includes('Instalação') || b.nome.includes('Deslocamento');
+          if (modoFaturamento === 'venda_direta' && !isServico) { pdf.setTextColor(150); pdf.setFont('helvetica', 'italic'); txt('Dir. fornecedor', MR, y, { align: 'right' }); pdf.setTextColor(0); }
+          else { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(b.valor)}`, MR, y, { align: 'right' }); }
+          y += 6;
+        });
+      } else {
+        checar(12);
+        pdf.setFillColor(241, 245, 249); pdf.rect(ML, y - 3, CW, 12, 'F');
+        pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+        txt('Fornecimento e instalação completos', ML + 3, y + 4);
+        txt(`R$ ${fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}`, MR - 2, y + 4, { align: 'right' });
+        y += 16;
+      }
+
+      // ── Total geral ───────────────────────────────────────────────────
+      checar(18);
+      pdf.setDrawColor(15, 23, 42); pdf.setLineWidth(0.8); pdf.line(ML, y, MR, y); pdf.setLineWidth(0.2);
+      y += 6;
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
+      const notaTotal = modoFaturamento === 'venda_direta'
+        ? '* Materiais faturados diretamente pelo fornecedor. Valor refere-se aos serviços.'
+        : `* Proposta válida até ${valData}. Preços sujeitos a alteração após este prazo.`;
+      wrap(notaTotal, ML, y, CW - 50);
+      pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('INVESTIMENTO TOTAL', MR, y, { align: 'right' });
+      pdf.setFontSize(16); pdf.setTextColor(67, 56, 202);
+      txt(`R$ ${fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}`, MR, y + 8, { align: 'right' });
+      pdf.setTextColor(0); y += 20;
+
+      // ── Condições comerciais + Aceite — sempre numa página nova ─────
+      novaP();
+      pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
+      pdf.setFillColor(248, 250, 252); pdf.rect(ML, y - 1, CW, 4, 'F');
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('CONDIÇÕES COMERCIAIS', ML + 2, y + 2); pdf.setTextColor(0); y += 7;
+      const conds = [
+        ['Condições de Pagamento', cond.pagamento],
+        ['Prazo de Execução', cond.prazo_execucao],
+        ['Garantia', cond.garantia],
+        ['Validade da Proposta', `${cond.validade_dias} dias úteis a partir da emissão`],
+      ].filter(r => r[1]);
+      conds.forEach(([label, val]) => {
+        const ls = pdf.splitTextToSize(val, CW / 2 - 4);
+        checar(ls.length * 3.5 + 8);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100); txt(label.toUpperCase(), ML, y);
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(0); pdf.text(ls, ML, y + 4);
+        y += ls.length * 3.5 + 7;
+      });
+
+      // ── Aceite ────────────────────────────────────────────────────────
+      checar(28);
+      pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 10;
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('APROVAÇÃO E ACEITE', ML, y); pdf.setTextColor(0); y += 10;
+      const halfAce = CW / 2 - 5;
+      pdf.setDrawColor(0); pdf.line(ML, y, ML + halfAce, y);
+      pdf.line(MR - halfAce, y, MR, y);
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
+      txt(dadosCliente.nome || 'Cliente', ML, y + 4);
+      txt('Prestador de Serviços', MR - halfAce, y + 4);
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
+      txt('Aprovação do cliente', ML, y + 8);
+      txt('Data: _____ / _____ / _________', MR - halfAce, y + 8);
+
+      pdf.save(`Proposta_${(dadosCliente.nome || 'Camara').replace(/\s+/g, '_')}.pdf`);
+    } catch (e) { console.error(e); setErro('Erro ao gerar PDF.'); }
+    finally { setLoading(false); }
+  };
+
+  // ── Exportar lista de materiais (PDF / Excel) ────────────────────────
+  const _montarLinhasLista = () => {
+    const linhas = [];
+    equipamentosAprovados.forEach(e => {
+      linhas.push({ item: e.nome || e.item, detalhe: e.detalhe || '', qtde: e.qtde ?? 1, unidade: 'un', tipo: 'Equipamento' });
+    });
+    materiaisAprovados.forEach(m => {
+      linhas.push({ item: m.item, detalhe: m.detalhe || m.descricao || '', qtde: m.quantidade || m.qtd || 1, unidade: m.comprimento ? 'm' : 'un', tipo: 'Material' });
+    });
+    complementos.filter(c => c.descricao).forEach(c => {
+      linhas.push({ item: c.descricao, detalhe: '', qtde: c.qtde || 1, unidade: c.unidade || 'un', tipo: 'Complemento' });
+    });
+    return linhas;
+  };
+
+  const exportarListaExcel = () => {
+    const linhas = _montarLinhasLista();
+    const nome = projetoAtual?.nome || 'Projeto';
+    const header = ['Item', 'Descrição / Detalhe', 'Qtde', 'Unidade', 'Tipo'];
+    const rows = linhas.map(l => [l.item, l.detalhe, l.qtde, l.unidade, l.tipo]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
+    const bom = '﻿'; // BOM para Excel reconhecer UTF-8
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Lista_Materiais_${nome.replace(/\s+/g, '_')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportarListaPDF = () => {
+    const linhas = _montarLinhasLista();
+    const nome = projetoAtual?.nome || 'Projeto';
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pw = pdf.internal.pageSize.getWidth();
+    let y = 18;
+
+    pdf.setFontSize(13); pdf.setFont('helvetica', 'bold');
+    pdf.text('Lista de Materiais — ' + nome, 14, y); y += 7;
+    pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(120); pdf.text(new Date().toLocaleDateString('pt-BR'), 14, y); pdf.setTextColor(0); y += 8;
+
+    pdf.setFillColor(241, 245, 249);
+    pdf.rect(14, y - 4, pw - 28, 6, 'F');
+    pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+    pdf.text('Item / Descrição', 15, y);
+    pdf.text('Qtde', pw - 30, y, { align: 'right' });
+    pdf.text('Un.', pw - 14, y, { align: 'right' });
+    y += 6;
+
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
+    linhas.forEach((l, idx) => {
+      if (y > 280) { pdf.addPage(); y = 18; }
+      if (idx % 2 === 0) { pdf.setFillColor(248, 250, 252); pdf.rect(14, y - 3.5, pw - 28, 6, 'F'); }
+      const itemText = pdf.splitTextToSize(l.item + (l.detalhe ? ` — ${l.detalhe}` : ''), pw - 55);
+      pdf.text(itemText, 15, y);
+      pdf.text(String(l.qtde), pw - 30, y, { align: 'right' });
+      pdf.text(l.unidade, pw - 14, y, { align: 'right' });
+      y += itemText.length > 1 ? itemText.length * 4.5 + 1 : 6;
+    });
+
+    pdf.save(`Lista_Materiais_${nome.replace(/\s+/g, '_')}.pdf`);
   };
 
   // ── Cotação com fornecedor (Fase 1) ───────────────────────────────────
@@ -201,7 +746,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         ? rawQtd : null;
 
       // Tubos de cobre: unidade comercial é kg, metros ficam em qtde_metros
-      const ehTuboCobre = m.unidade === 'm' && m.quantidade_kg != null;
+      // calcularKg usa quantidade_kg salvo, fallback peso_por_metro, fallback tabela do banco
+      const parede = m.detalhe?.includes('grossa') ? 'grossa' : 'fina';
+      const kgTotal = m.unidade === 'm' ? calcularKg(m, qtd, parede) : null;
+      const ehTuboCobre = kgTotal != null;
 
       return {
         tipo_item: m.item?.toLowerCase().includes('válvula') || m.item?.toLowerCase().includes('separador')
@@ -209,7 +757,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         ref_id:    m.id || null,
         descricao: m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
         detalhe:   [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : detalheQtd].filter(Boolean).join(' — '),
-        qtde:      ehTuboCobre ? m.quantidade_kg : qtd,
+        qtde:      ehTuboCobre ? kgTotal : qtd,
         unidade:   ehTuboCobre ? 'kg' : (m.unidade || 'un'),
         qtde_metros: ehTuboCobre ? qtd : null,
       };
@@ -233,21 +781,6 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
 
-      {/* Banner dados alterados — orçamento desatualizado */}
-      {invalidado && (
-        <div className="p-4 bg-red-50 border-2 border-red-300 rounded-2xl flex items-start gap-3 print:hidden">
-          <span className="text-3xl mt-0.5">🔴</span>
-          <div className="flex-1">
-            <p className="font-bold text-red-800">Orçamento desatualizado</p>
-            <p className="text-sm text-red-600 mt-0.5">Dados do projeto foram alterados. Revise os cards modificados e gere o orçamento novamente para ter os valores corretos.</p>
-          </div>
-          {aoConfirmar && (
-            <button onClick={aoConfirmar} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold border border-red-300 transition-all whitespace-nowrap">
-              Entendido
-            </button>
-          )}
-        </div>
-      )}
 
       {/* ══ 1. LISTA COM CHECKBOXES ══ */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm print:hidden">
@@ -356,8 +889,22 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
             {/* Resumo dos itens aprovados (somente leitura) */}
             <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-2 bg-slate-100 border-b border-slate-200">
+              <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Itens do Dimensionamento</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => exportarListaPDF()}
+                    className="text-[10px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    📄 PDF
+                  </button>
+                  <button
+                    onClick={() => exportarListaExcel()}
+                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    📊 Excel
+                  </button>
+                </div>
               </div>
               <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
                 {equipamentosAprovados.map((e, i) => (
@@ -513,6 +1060,132 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             </div>
           </div>
 
+          {/* Configurações da Proposta */}
+          <div className="px-6 pb-4 border-t border-slate-100 pt-5 space-y-6">
+            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">⚙️ Composição da Proposta</h4>
+
+            {/* Modo de faturamento */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Modo de faturamento</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { v: 'empreitada', label: 'Empreitada', desc: 'Você fatura materiais + serviços ao cliente' },
+                  { v: 'venda_direta', label: 'Faturamento direto', desc: 'Cliente compra do fornecedor; você cobra só a instalação' },
+                ].map(opt => (
+                  <label key={opt.v} className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer text-xs transition-all ${modoFaturamento === opt.v ? 'bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200'}`}>
+                    <input type="radio" checked={modoFaturamento === opt.v} onChange={() => setModoFaturamento(opt.v)} className="accent-indigo-600 mt-0.5" />
+                    <span><b>{opt.label}</b><br /><span className="text-slate-500">{opt.desc}</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Mão de obra e custos */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Composição de custos de serviços</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { k: 'mo_paineis',       label: 'MO Painéis (R$)' },
+                  { k: 'mo_refrigeracao',  label: 'MO Refrigeração (R$)' },
+                  { k: 'locomocao',        label: 'Locomoção (R$)' },
+                  { k: 'despesas',         label: 'Despesas (R$)' },
+                  { k: 'outros',           label: 'Outros (R$)' },
+                ].map(f => (
+                  <div key={f.k} className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase">{f.label}</label>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
+                      <input type="number" min="0" step="0.01" value={custos[f.k]}
+                        onChange={e => setCustos(p => ({ ...p, [f.k]: e.target.value }))}
+                        placeholder="0,00"
+                        className="w-full pl-8 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs text-slate-600">
+                <input type="checkbox" checked={moSeparada} onChange={e => setMoSeparada(e.target.checked)} className="accent-indigo-600" />
+                Apresentar MO painéis e MO refrigeração separadas na proposta
+              </label>
+            </div>
+
+            {/* Margem, impostos, apresentação */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Margem (%)</label>
+                <input type="number" min="0" max="98" step="0.5" value={margem}
+                  onChange={e => setMargem(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Impostos (%)</label>
+                <input type="number" min="0" max="50" step="0.5" value={imposto}
+                  onChange={e => setImposto(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Apresentação dos valores</label>
+                <div className="flex gap-2">
+                  {[{ v: 'blocos', l: 'Por blocos' }, { v: 'global', l: 'Valor global' }].map(o => (
+                    <label key={o.v} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs flex-1 justify-center transition-all ${apresentacao === o.v ? 'bg-indigo-50 border-indigo-300 font-bold text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                      <input type="radio" checked={apresentacao === o.v} onChange={() => setApresentacao(o.v)} className="accent-indigo-600" />
+                      {o.l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Objeto da proposta */}
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-slate-500 uppercase">Objeto da proposta</label>
+              <textarea rows={2} value={resumoObjeto} onChange={e => setResumoObjeto(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+            </div>
+
+            {/* Condições comerciais */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Condições comerciais</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { k: 'pagamento',       label: 'Condições de pagamento', rows: 2 },
+                  { k: 'prazo_execucao',  label: 'Prazo de execução',      rows: 1 },
+                  { k: 'garantia',        label: 'Garantia',               rows: 2 },
+                  { k: 'incluso',         label: 'Está incluso',           rows: 3 },
+                  { k: 'nao_incluso',     label: 'Não está incluso',       rows: 3 },
+                ].map(f => (
+                  <div key={f.k} className={`space-y-1 ${f.rows >= 3 ? 'sm:col-span-1' : ''}`}>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase">{f.label}</label>
+                    <textarea rows={f.rows} value={cond[f.k]} onChange={e => setCond(p => ({ ...p, [f.k]: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+                  </div>
+                ))}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Validade da proposta (dias)</label>
+                  <input type="number" min="1" value={cond.validade_dias} onChange={e => setCond(p => ({ ...p, validade_dias: e.target.value }))}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Conteúdo da proposta */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Conteúdo da proposta</p>
+              <div className="flex flex-wrap gap-4">
+                {resumoTecnico && (
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                    <input type="checkbox" checked={incluirResumoTecnico} onChange={e => setIncluirResumoTecnico(e.target.checked)} className="accent-indigo-600" />
+                    Incluir resumo técnico
+                  </label>
+                )}
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                  <input type="checkbox" checked={incluirEquipamentos} onChange={e => setIncluirEquipamentos(e.target.checked)} className="accent-indigo-600" />
+                  Incluir lista detalhada de equipamentos e materiais
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div className="p-6 bg-slate-50 border-t border-slate-100">
             {/* Duas opções para o técnico */}
             <p className="text-center text-xs text-slate-400 mb-4 font-medium uppercase tracking-widest">
@@ -543,20 +1216,140 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
               <span className="text-slate-300 font-bold hidden sm:block">ou</span>
 
-              {/* Opção B: Já tem preços, gera orçamento */}
-              <button onClick={gerarOrcamento} disabled={loading || !projetoSalvo}
+              {/* Opção B: Gera proposta (verifica cotação primeiro) */}
+              <button onClick={verificarEGerar} disabled={loading || loadingCotacaoCheck || !projetoSalvo}
                 title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg hover:-translate-y-0.5 transition-all disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 💰 GERAR PROPOSTA AO CLIENTE
-                <span className="text-[10px] font-normal opacity-80">— já tenho os preços</span>
+                <span className="text-[10px] font-normal opacity-80">— usar preços da cotação</span>
               </button>
             </div>
-            {loading && <p className="text-center text-xs text-slate-400 mt-3 animate-pulse">Processando...</p>}
+            {(loading || loadingCotacaoCheck) && <p className="text-center text-xs text-slate-400 mt-3 animate-pulse">Processando...</p>}
+
+            {/* Aviso: nenhuma cotação */}
+            {cotacaoAviso === 'nenhuma' && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-300 rounded-xl">
+                <p className="font-bold text-amber-800 text-sm">📋 Nenhuma cotação encontrada para este projeto</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Para gerar uma proposta com preços reais, você precisa primeiro gerar a planilha de cotação,
+                  enviá-la ao fornecedor e importar a planilha devolvida com os preços.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button onClick={() => { setCotacaoAviso(null); setModalCotacaoAberto(true); }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600">
+                    📊 Gerar planilha de cotação
+                  </button>
+                  {onAbrirPainelCotacoes && (
+                    <button onClick={() => { setCotacaoAviso(null); onAbrirPainelCotacoes(); }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 font-bold hover:bg-amber-200 border border-amber-300">
+                      Ver painel de cotações
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Aviso: cotação em andamento, sem processada */}
+            {cotacaoAviso === 'aguardando' && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-300 rounded-xl">
+                <p className="font-bold text-blue-800 text-sm">⏳ Aguardando retorno do fornecedor</p>
+                <p className="text-xs text-blue-700 mt-1">
+                  {cotacoesEmAndamento.length === 1
+                    ? `Cotação ${cotacoesEmAndamento[0].codigo} foi enviada mas os preços ainda não foram importados.`
+                    : `${cotacoesEmAndamento.length} cotações enviadas, mas nenhuma teve os preços confirmados ainda.`}
+                  {' '}Quando o fornecedor devolver a planilha, importe-a no painel de cotações.
+                </p>
+                {onAbrirPainelCotacoes && (
+                  <button onClick={() => { setCotacaoAviso(null); onAbrirPainelCotacoes(); }}
+                    className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">
+                    Abrir painel de cotações
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de escolha de cotação (múltiplas processadas) */}
+      {modalEscolhaCotacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+            <h3 className="text-base font-black text-slate-900 mb-1">Escolha a cotação para a proposta</h3>
+            <p className="text-xs text-slate-500 mb-4">Há {cotacoesProcessadas.length} cotações com preços confirmados para este projeto.</p>
+
+            <div className="space-y-2 mb-4">
+              {/* Opção melhor preço */}
+              <label className="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors"
+                style={{ borderColor: cotacaoEscolhidaId === null ? '#4f46e5' : '#e2e8f0', background: cotacaoEscolhidaId === null ? '#eef2ff' : '' }}>
+                <input type="radio" name="cotacao" checked={cotacaoEscolhidaId === null}
+                  onChange={() => setCotacaoEscolhidaId(null)} className="mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-indigo-700">⭐ Usar melhor preço por item</p>
+                  <p className="text-[11px] text-slate-500">Compara todas as cotações e seleciona o menor preço para cada item individualmente.</p>
+                </div>
+              </label>
+
+              {/* Uma por uma */}
+              {cotacoesProcessadas.map(c => (
+                <label key={c.id} className="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors"
+                  style={{ borderColor: cotacaoEscolhidaId === c.id ? '#4f46e5' : '#e2e8f0', background: cotacaoEscolhidaId === c.id ? '#eef2ff' : '' }}>
+                  <input type="radio" name="cotacao" checked={cotacaoEscolhidaId === c.id}
+                    onChange={() => setCotacaoEscolhidaId(c.id)} className="mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{c.codigo}</p>
+                    <p className="text-[11px] text-slate-500">Processada em {c.data_recebimento ? new Date(c.data_recebimento).toLocaleDateString('pt-BR') : '—'}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setModalEscolhaCotacao(false)}
+                className="text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={confirmarEscolhaCotacao} disabled={loading}
+                className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">
+                {loading ? 'Gerando...' : 'Gerar proposta'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {erro && <div className="p-4 bg-red-100 text-red-700 rounded-xl text-center font-bold border border-red-200">{erro}</div>}
+
+      {/* Itens sem preço na cotação — permite entrada manual */}
+      {orcamento && itensSemPreco.length > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl print:hidden">
+          <p className="font-bold text-amber-800 text-sm mb-1">
+            ⚠️ {itensSemPreco.length} {itensSemPreco.length === 1 ? 'item sem preço' : 'itens sem preço'} na cotação
+          </p>
+          <p className="text-xs text-amber-700 mb-3">
+            Os itens abaixo não foram encontrados na cotação ou estão sem valor. Você pode informar o preço manualmente e recalcular.
+          </p>
+          <div className="space-y-2">
+            {itensSemPreco.map(desc => (
+              <div key={desc} className="flex items-center gap-3">
+                <span className="text-xs text-slate-700 flex-1 truncate" title={desc}>{desc}</span>
+                <div className="relative w-32 flex-shrink-0">
+                  <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
+                  <input type="number" min="0" step="0.01"
+                    value={precosManuals[norm(desc)] ?? ''}
+                    onChange={e => setPrecosManuals(p => ({ ...p, [norm(desc)]: e.target.value }))}
+                    placeholder="0,00"
+                    className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={recalcularComPrecosManuals} disabled={loading}
+            className="mt-3 text-xs px-4 py-2 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-50">
+            {loading ? 'Recalculando...' : '🔄 Recalcular proposta com esses preços'}
+          </button>
+        </div>
+      )}
 
       {/* Modal de cotação com fornecedor */}
       <ModalCotacaoFornecedor
@@ -567,105 +1360,329 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         projetoId={projetoAtual?.id || null}
       />
 
-      {/* ══ 3. PROPOSTA FINAL ══ */}
+      {/* ══ 3. RESUMO FINANCEIRO PRIVADO (não imprime) ══ */}
+      {orcamento && (
+        <div className="bg-slate-800 text-white rounded-2xl p-6 print:hidden space-y-5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">🔒 Resumo Financeiro Interno</h4>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-bold uppercase">
+              {modoFaturamento === 'venda_direta' ? 'Faturamento direto' : 'Empreitada'} · Margem {margem}% · Imposto {imposto}%
+            </span>
+          </div>
+
+          {/* Composição de custos de serviços */}
+          {cf.custo_servicos > 0 && (
+            <div className="bg-slate-700/40 rounded-xl p-4">
+              <p className="text-[9px] font-bold text-slate-400 uppercase mb-3">Composição dos custos de serviços</p>
+              <div className="space-y-1.5">
+                {[
+                  { label: 'MO montagem de painéis',          value: parseFloat(custos.mo_paineis)      || 0 },
+                  { label: 'MO montagem de refrigeração',     value: parseFloat(custos.mo_refrigeracao) || 0 },
+                  { label: 'Locomoção',                       value: parseFloat(custos.locomocao)       || 0 },
+                  { label: 'Despesas',                        value: parseFloat(custos.despesas)        || 0 },
+                  { label: 'Outros',                          value: parseFloat(custos.outros)          || 0 },
+                ].filter(r => r.value > 0).map(r => (
+                  <div key={r.label} className="flex justify-between text-xs">
+                    <span className="text-slate-400">{r.label}</span>
+                    <span className="text-slate-200 font-bold tabular-nums">R$ {fmt(r.value)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs border-t border-slate-600 pt-1.5 mt-1.5">
+                  <span className="text-slate-300 font-bold">Total custo serviços</span>
+                  <span className="text-yellow-300 font-black tabular-nums">R$ {fmt(cf.custo_servicos)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">× fator markup (1 / (1 − {margem}% − {imposto}%))</span>
+                  <span className="text-green-300 font-black tabular-nums">R$ {fmt(cf.preco_servicos_cliente)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fluxo financeiro */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {modoFaturamento === 'venda_direta' ? (
+              <>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Materiais (repasse)</p>
+                  <p className="text-sm font-black text-slate-300">R$ {fmt(cf.custo_materiais)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Faturado pelo fornecedor</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Serviços (seu faturamento)</p>
+                  <p className="text-sm font-black text-green-300">R$ {fmt(cf.preco_servicos_cliente)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Custo R$ {fmt(cf.custo_servicos)}</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Impostos s/ serviços</p>
+                  <p className="text-sm font-black text-red-300">R$ {fmt(cf.impostos_valor)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{imposto}% sobre serviços</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro líquido</p>
+                  <p className={`text-sm font-black ${cf.lucro_liquido >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>R$ {fmt(cf.lucro_liquido)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Serviços − custo − impostos</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Custo total</p>
+                  <p className="text-sm font-black text-yellow-300">R$ {fmt(cf.custo_total)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Mat. R$ {fmt(cf.custo_materiais)} + Serv. R$ {fmt(cf.custo_servicos)}</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Preço de venda</p>
+                  <p className="text-sm font-black text-green-300">R$ {fmt(cf.preco_venda)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Custo × fator markup</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Impostos estimados</p>
+                  <p className="text-sm font-black text-red-300">R$ {fmt(cf.impostos_valor)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{imposto}% sobre faturamento</p>
+                </div>
+                <div className="bg-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro líquido</p>
+                  <p className={`text-sm font-black ${cf.lucro_liquido >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>R$ {fmt(cf.lucro_liquido)}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Venda − custo − impostos</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ 4. PROPOSTA FINAL ══ */}
       {orcamento && (
         <div ref={propostaRef} className="bg-white border-2 border-slate-900 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-700 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
-          <div className="bg-slate-900 text-white p-8 flex justify-between items-center print:bg-white print:text-slate-900 print:border-b-2 print:border-slate-900 print:px-0">
-            <div>
-              <h3 className="text-2xl font-black tracking-tighter">PROPOSTA TÉCNICA COMERCIAL</h3>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1 print:text-slate-500">Engenharia de Refrigeração</p>
-            </div>
-            <div className="text-right hidden sm:block">
-              <div className="text-xs text-slate-500 font-bold">DATA</div>
-              <div className="text-sm font-bold">{new Date().toLocaleDateString('pt-BR')}</div>
+
+          {/* Cabeçalho */}
+          <div className="bg-slate-900 text-white px-8 py-6 print:bg-white print:text-slate-900 print:border-b-2 print:border-slate-900 print:px-0">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] print:text-slate-500">Proposta Técnica Comercial</p>
+                <h3 className="text-3xl font-black tracking-tighter mt-1 leading-none">{dadosCliente.nome || 'Cliente não informado'}</h3>
+                <p className="text-slate-300 text-sm mt-1 print:text-slate-600">{resumoObjeto}</p>
+              </div>
+              <div className="text-right flex-shrink-0 ml-6 space-y-1">
+                <div>
+                  <p className="text-[9px] text-slate-400 uppercase font-bold">Emissão</p>
+                  <p className="text-sm font-bold">{new Date().toLocaleDateString('pt-BR')}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-slate-400 uppercase font-bold">Validade</p>
+                  <p className="text-sm font-bold">
+                    {new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="p-8 space-y-10 print:px-0 print:py-6">
-            {/* Cliente */}
+
+            {/* Dados do cliente */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-200 relative print:bg-white print:border-slate-300">
               <button onClick={() => setOrcamento(null)}
                 className="absolute top-4 right-4 bg-white border border-slate-200 p-2 rounded-lg text-xs font-bold text-slate-400 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm print:hidden flex items-center gap-1">
                 ✏️ EDITAR
               </button>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Informações do Cliente</h4>
-                <p className="text-lg font-black text-slate-900">{dadosCliente.nome || 'Nome não informado'}</p>
-                <p className="text-sm text-slate-600 font-bold">CNPJ/CPF: {dadosCliente.cnpj || '---'}</p>
+                <p className="text-lg font-black text-slate-900">{dadosCliente.nome || '---'}</p>
+                {dadosCliente.cnpj && <p className="text-sm text-slate-600">CNPJ/CPF: <b>{dadosCliente.cnpj}</b></p>}
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 md:pt-0 border-t md:border-t-0 md:border-l border-slate-200 md:pl-6">
+              <div className="grid grid-cols-2 gap-3 pt-4 md:pt-0 border-t md:border-t-0 md:border-l border-slate-200 md:pl-6">
                 {[['Contato', dadosCliente.contato], ['Celular', dadosCliente.celular]].map(([l, v]) => (
-                  <div key={l}><p className="text-[10px] font-black text-slate-400 uppercase">{l}</p><p className="text-sm font-bold text-slate-800">{v || '---'}</p></div>
+                  <div key={l}><p className="text-[9px] font-black text-slate-400 uppercase">{l}</p><p className="text-sm font-bold text-slate-800">{v || '---'}</p></div>
                 ))}
-                <div className="col-span-2"><p className="text-[10px] font-black text-slate-400 uppercase">E-mail</p><p className="text-sm font-bold text-slate-800">{dadosCliente.email || '---'}</p></div>
+                <div className="col-span-2"><p className="text-[9px] font-black text-slate-400 uppercase">E-mail</p><p className="text-sm font-bold text-slate-800">{dadosCliente.email || '---'}</p></div>
               </div>
             </div>
 
-            {/* Imagem */}
+            {/* Resumo Técnico */}
+            {incluirResumoTecnico && resumoTecnico && (
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Especificações Técnicas</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                  {[
+                    { l: 'Comprimento', v: resumoTecnico.comprimento, u: 'm' },
+                    { l: 'Largura',     v: resumoTecnico.largura,     u: 'm' },
+                    { l: 'Altura',      v: resumoTecnico.altura,      u: 'm' },
+                    { l: 'T. Interna',  v: resumoTecnico.temperatura_interna, u: '°C' },
+                  ].map(x => (
+                    <div key={x.l} className="bg-white rounded-lg p-3 border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase">{x.l}</p>
+                      <p className="text-lg font-black text-slate-900">{x.v}<span className="text-xs font-normal text-slate-400"> {x.u}</span></p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div className="bg-white rounded-lg p-3 border border-slate-100 flex items-center justify-between">
+                    <p className="text-xs text-slate-500">Isolamento</p>
+                    <p className="text-sm font-bold text-slate-800">{resumoTecnico.nucleo} {resumoTecnico.espessura}mm</p>
+                  </div>
+                  {resumoTecnico.carga_termica && (
+                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100 flex items-center justify-between">
+                      <p className="text-xs text-indigo-500 font-bold">Carga Térmica</p>
+                      <p className="text-sm font-black text-indigo-700">{Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Planta técnica */}
             {dadosAutomaticos?.imagem_projeto && (
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Planta Técnica do Projeto</h4>
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Planta Técnica da Câmara Frigorífica</h4>
                 <img src={dadosAutomaticos.imagem_projeto} alt="Planta" className="max-h-[300px] mx-auto object-contain print:max-h-[400px]" />
               </div>
             )}
 
-            {/* Itens do dimensionamento */}
-            {Object.entries(agruparItens(orcamento.detalhamento_itens)).map(([cat, itens]) =>
-              itens.length > 0 && (
-                <div key={cat}>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">{cat}</h4>
-                  <div className="space-y-4">
-                    {itens.map((l, i) => (
-                      <div key={i} className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-bold text-slate-800 leading-tight">{l.item}</div>
-                          {l.detalhe && <div className="text-xs text-slate-400 mt-0.5">{l.detalhe}</div>}
-                        </div>
-                        <div className="w-24 text-center text-sm text-slate-600 font-medium">{l.quantidade} {l.unidade}</div>
-                        <div className="w-32 text-right font-black text-slate-900">R$ {l['custo_total_R$']?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                      </div>
-                    ))}
+            {/* Escopo */}
+            {(cond.incluso || cond.nao_incluso) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {cond.incluso && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-5">
+                    <h4 className="text-[10px] font-black text-green-700 uppercase tracking-[0.2em] mb-2">✅ Está incluído</h4>
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{cond.incluso}</p>
                   </div>
-                </div>
-              )
-            )}
-
-            {/* Complementos */}
-            {complementosPreenchidos.length > 0 && (
-              <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">Complementos e Materiais Adicionais</h4>
-                <div className="space-y-4">
-                  {complementosPreenchidos.map((c, i) => (
-                    <div key={i} className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-bold text-slate-800 leading-tight">{c.descricao}</div>
-                      </div>
-                      <div className="w-24 text-center text-sm text-slate-600 font-medium">{c.qtde} {c.unidade}</div>
-                      <div className="w-32 text-right font-black text-slate-900">
-                        {c.preco_unit
-                          ? `R$ ${(parseFloat(c.preco_unit) * parseFloat(c.qtde)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                          : <span className="text-slate-400 font-normal italic text-sm">A cotação</span>
-                        }
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                )}
+                {cond.nao_incluso && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                    <h4 className="text-[10px] font-black text-red-700 uppercase tracking-[0.2em] mb-2">❌ Não está incluído</h4>
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{cond.nao_incluso}</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Total */}
-            <div className="pt-8 border-t-4 border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6">
+            {/* Lista detalhada de itens */}
+            {incluirEquipamentos && (
+              <>
+                {Object.entries(agruparItens(orcamento.detalhamento_itens)).map(([cat, itens]) =>
+                  itens.length > 0 && (
+                    <div key={cat}>
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">{cat}</h4>
+                      <div className="space-y-3">
+                        {itens.map((l, i) => (
+                          <div key={i} className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="font-bold text-slate-800 text-sm leading-tight">{l.item}</div>
+                              {l.detalhe && <div className="text-xs text-slate-400 mt-0.5">{l.detalhe}</div>}
+                            </div>
+                            <div className="w-24 text-center text-sm text-slate-600 font-medium">{l.quantidade} {l.unidade}</div>
+                            <div className="w-32 text-right font-black text-slate-900 text-sm">
+                              {modoFaturamento === 'venda_direta'
+                                ? <span className="text-slate-400 font-normal italic text-xs">Dir. fornecedor</span>
+                                : `R$ ${fmt(l.custo_total_rs ?? 0)}`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                )}
+                {complementosPreenchidos.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">Complementos e Materiais Adicionais</h4>
+                    <div className="space-y-3">
+                      {complementosPreenchidos.map((c, i) => (
+                        <div key={i} className="flex justify-between items-start">
+                          <div className="flex-1 font-bold text-slate-800 text-sm">{c.descricao}</div>
+                          <div className="w-24 text-center text-sm text-slate-600 font-medium">{c.qtde} {c.unidade}</div>
+                          <div className="w-32 text-right font-black text-slate-900 text-sm">
+                            {c.preco_unit
+                              ? `R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde))}`
+                              : <span className="text-slate-400 font-normal italic text-xs">A cotação</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Bloco de investimento */}
+            <div>
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">Investimento</h4>
+              {apresentacao === 'blocos' ? (
+                <div className="space-y-3">
+                  {cf.blocosCliente.map((b, i) => (
+                    <div key={i} className="flex justify-between items-center py-2 border-b border-slate-50">
+                      <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
+                      <p className="font-black text-slate-900">
+                        {modoFaturamento === 'venda_direta' && b.nome !== 'Instalação, mobilização e comissionamento' && !b.nome.includes('Mão de obra')
+                          ? <span className="text-slate-400 font-normal italic text-sm">Dir. fornecedor</span>
+                          : `R$ ${fmt(b.valor)}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex justify-between items-center py-4 bg-slate-50 rounded-xl px-5 border border-slate-200">
+                  <div>
+                    <p className="font-bold text-slate-800">Fornecimento e instalação completos</p>
+                    {modoFaturamento === 'venda_direta' && <p className="text-xs text-slate-500">Materiais com faturamento direto ao cliente pelo fornecedor</p>}
+                  </div>
+                  <p className="font-black text-slate-900 text-lg">R$ {fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Total geral */}
+            <div className="pt-6 border-t-4 border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6">
               <p className="text-slate-400 text-xs max-w-xs leading-relaxed print:text-[8px]">
-                * Orçamento válido por 7 dias úteis. Preços baseados em impostos vigentes. Instalação não inclusa salvo menção expressa.
-                {complementosPreenchidos.some(c => !c.preco_unit) && ' Itens "a cotação" não incluídos no total.'}
+                {modoFaturamento === 'venda_direta'
+                  ? '* Materiais e equipamentos serão faturados diretamente pelo fornecedor ao cliente. O valor indicado refere-se aos serviços de instalação.'
+                  : `* Proposta válida até ${new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR')}. Preços sujeitos a alteração após este prazo.`}
+                {modoFaturamento !== 'venda_direta' && complementosPreenchidos.some(c => !c.preco_unit) && ' Itens "a cotação" não incluídos no total.'}
               </p>
               <div className="text-right">
                 <div className="text-slate-500 text-sm font-bold uppercase">Investimento Total</div>
                 <div className="text-4xl font-black text-indigo-600">
-                  R$ {totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}
                 </div>
               </div>
             </div>
+
+            {/* Condições comerciais */}
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Condições Comerciais</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { l: 'Condições de Pagamento', v: cond.pagamento },
+                  { l: 'Prazo de Execução', v: cond.prazo_execucao },
+                  { l: 'Garantia', v: cond.garantia },
+                  { l: 'Validade da Proposta', v: `${cond.validade_dias} dias úteis a partir da emissão` },
+                ].map(r => r.v && (
+                  <div key={r.l}>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">{r.l}</p>
+                    <p className="text-xs text-slate-700 leading-relaxed">{r.v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Aceite */}
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Aprovação e Aceite</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                <div className="space-y-1">
+                  <div className="h-px bg-slate-900 w-full mt-8" />
+                  <p className="text-xs font-bold text-slate-700 mt-1">{dadosCliente.nome || 'Cliente'}</p>
+                  <p className="text-[9px] text-slate-400">Aprovação do cliente</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="h-px bg-slate-900 w-full mt-8" />
+                  <p className="text-xs font-bold text-slate-700 mt-1">Prestador de Serviços</p>
+                  <p className="text-[9px] text-slate-400">Data: _____ / _____ / _________</p>
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* Ações */}
@@ -676,6 +1693,40 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             </button>
             <button onClick={enviarWhatsApp} className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-all">WhatsApp 💬</button>
           </div>
+
+          {/* Aviso de salvar */}
+          {(onSalvarProjeto || onSalvarComo) && (
+            <div className="px-6 pb-6 print:hidden">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-blue-800">
+                    {projetoAtual?.id ? '💾 Projeto atualizado — grave para preservar as alterações' : '💾 Salve o projeto para preservar este dimensionamento'}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    {projetoAtual?.id
+                      ? 'Use "Salvar" para substituir o existente ou "Salvar Como" para criar uma nova versão.'
+                      : 'Use o botão Salvar no topo da tela para guardar este projeto.'}
+                  </p>
+                </div>
+                {projetoAtual?.id && (
+                  <div className="flex gap-2 flex-shrink-0">
+                    {onSalvarProjeto && (
+                      <button onClick={onSalvarProjeto}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-all">
+                        💾 Salvar
+                      </button>
+                    )}
+                    {onSalvarComo && (
+                      <button onClick={onSalvarComo}
+                        className="px-4 py-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-lg font-bold text-sm transition-all">
+                        Salvar Como
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

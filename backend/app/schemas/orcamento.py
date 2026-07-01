@@ -6,6 +6,8 @@ class ItemOrcamento(BaseModel):
     qtde: float
     item: str | None = None
     detalhe: str = ""
+    preco_unitario: float | None = None
+    categoria: str | None = None
 
 
 class OrcamentoRequest(BaseModel):
@@ -20,6 +22,7 @@ class ItemDetalhado(BaseModel):
     custo_unitario_rs: float
     custo_total_rs: float
     detalhe: str
+    categoria: str | None = None
 
 
 class OrcamentoResponse(BaseModel):

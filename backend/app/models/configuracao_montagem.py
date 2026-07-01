@@ -2,10 +2,10 @@ from uuid import UUID
 from decimal import Decimal
 from sqlalchemy import String, Boolean, Numeric, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base
 
 
-class ConfiguracaoMontagem(Base, TimestampMixin):
+class ConfiguracaoMontagem(Base):
     __tablename__ = "configuracao_montagem"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

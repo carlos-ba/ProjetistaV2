@@ -16,6 +16,7 @@ import PainelInsights from './components/PainelInsights.jsx';
 import PainelCotacoes from './components/PainelCotacoes.jsx';
 import EtapaCard from './components/EtapaCard.jsx';
 import CavaleteIlustracao from './components/CavaleteIlustracao.jsx';
+import ModalResumoProjeto from './components/ModalResumoProjeto.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
 import { Separator } from './components/ui/separator.jsx';
@@ -44,18 +45,7 @@ function AppContent({ catalogo }) {
   const [resultadoTubulacao, setResultadoTubulacao] = useState(null); // resultado completo do Card 4 (bitolas, distância)
   const [cavaleteResult, setCavaleteResult] = useState(null);        // resultado do cavalete (Card 5)
   const [temTanqueCavalte, setTemTanqueCavalte] = useState(false);   // se o sistema tem tanque de líquido
-  const [configuracoesMontagem, setConfiguracoesMontagem] = useState({
-    tipo_filtro:        'solda',
-    tipo_visor:         'solda',
-    trecho_vet_evap:    0.5,
-    trecho_evap_sifao:  0.5,
-    trecho_subida:      1.0,
-    trecho_sifao_gbc:   0.5,
-    incluir_filtro:     true,
-    incluir_visor:      true,
-    incluir_gbc_entrada: true,
-    incluir_gbc_saida:   true,
-  });
+  const [configuracoesMontagem, setConfiguracoesMontagem] = useState(null); // null até o perfil ativo ser carregado da API
   // Rastrea quais cards precisam ser refeitos porque algo upstream mudou
   const [invalidados, setInvalidados] = useState({ 2: false, 3: false, 4: false, 5: false, 6: false });
   // Bloqueia invalidação durante carregamento de arquivo (callbacks automáticos de sync não devem invalidar)
@@ -70,7 +60,9 @@ function AppContent({ catalogo }) {
   const [listaProjetos, setListaProjetos] = useState([]);
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
   const [mostrandoCotacoes, setMostrandoCotacoes] = useState(false);
+  const [triggerGerarProposta, setTriggerGerarProposta] = useState(0);
   const [mostrandoConfiguracoes, setMostrandoConfiguracoes] = useState(false);
+  const [resumoProjeto, setResumoProjeto] = useState(null); // { projeto, dados } — exibe modal ao carregar
 
   // --- FUNÇÕES DE INTERLIGAÇÃO (PONTES) ---
   const { useCallback, useEffect } = React;
@@ -469,11 +461,29 @@ function AppContent({ catalogo }) {
     setProjetoKey(k => k + 1);
     // Libera após 3s — tempo suficiente para todos os efeitos automáticos (API dos cards) terminarem
     setTimeout(() => { carregandoProjetoRef.current = false; }, 3000);
-    alert(`Projeto "${projeto.nome}" carregado com sucesso!`);
+    // Abre modal de resumo em vez de alert
+    setResumoProjeto({ projeto, dados: projeto });
+  };
+
+  const irParaOrcamento = () => {
+    setResumoProjeto(null);
+    setPassoExpandido(6);
+    setPassoSelecionado(6);
+    setPassoAtual(prev => Math.max(prev, 6));
   };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden print:bg-white print:h-auto print:overflow-visible">
+
+      {/* Modal de resumo ao carregar projeto */}
+      {resumoProjeto && (
+        <ModalResumoProjeto
+          projeto={resumoProjeto.projeto}
+          dados={resumoProjeto.dados}
+          onIrParaOrcamento={irParaOrcamento}
+          onRevisar={() => setResumoProjeto(null)}
+        />
+      )}
 
       {/* ══ BARRA DE CABEÇALHO ÚNICA — alinha as 3 colunas ══ */}
       <div className="sticky top-0 z-20 flex border-b bg-card print:hidden">
@@ -634,7 +644,18 @@ function AppContent({ catalogo }) {
         <div className="p-6 max-w-4xl mx-auto w-full space-y-4 print:p-0 print:max-w-none print:m-0">
           
           {/* PAINEL DE COTAÇÕES */}
-          <PainelCotacoes aberto={mostrandoCotacoes} aoFechar={() => setMostrandoCotacoes(false)} />
+          <PainelCotacoes
+            aberto={mostrandoCotacoes}
+            aoFechar={() => setMostrandoCotacoes(false)}
+            projetoAtual={projetoAtual}
+            onGerarProposta={() => {
+              setMostrandoCotacoes(false);
+              setPassoExpandido(6);
+              setPassoSelecionado(6);
+              setPassoAtual(prev => Math.max(prev, 6));
+              setTriggerGerarProposta(n => n + 1);
+            }}
+          />
 
           {/* MODAL CONFIGURAÇÕES DE MONTAGEM */}
           {mostrandoConfiguracoes && (
@@ -824,6 +845,20 @@ function AppContent({ catalogo }) {
                 onValoresChange={setInputsOrcamento}
                 invalidado={invalidados[6]}
                 aoConfirmar={() => setInvalidados(p => ({ ...p, 6: false }))}
+                onAbrirPainelCotacoes={() => setMostrandoCotacoes(true)}
+                triggerGerarProposta={triggerGerarProposta}
+                onSalvarProjeto={salvarProjeto}
+                onSalvarComo={salvarComo}
+                resumoTecnico={dadosDoGabinete ? {
+                  comprimento: dadosDoGabinete.comprimento,
+                  largura: dadosDoGabinete.largura,
+                  altura: dadosDoGabinete.altura,
+                  temperatura_interna: dadosDoGabinete.temperatura_interna,
+                  espessura: dadosDoGabinete.espessura,
+                  nucleo: dadosDoGabinete.nucleo,
+                  carga_termica: cargaCalculada,
+                  temp_amb: tempExternaCalculo,
+                } : null}
               />
             </EtapaCard>
 

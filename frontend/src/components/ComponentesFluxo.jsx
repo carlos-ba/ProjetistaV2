@@ -28,10 +28,15 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [solenoidSelecionado, setSolenoidSelecionado] = useState(initialValues?.solenoidSelecionado ?? true);
 
   // ── Filtro Secador + Visor de Líquido ─────────────────────────────────
+  const cfg = configuracoesMontagem || {};
   const [temTanqueLiquido,  setTemTanqueLiquido]  = useState(initialValues?.temTanqueLiquido ?? true);
   const [acessorioResult,   setAcessorioResult]   = useState(null);
-  const [filtroSelecionado, setFiltroSelecionado] = useState(initialValues?.filtroSelecionado ?? true);
-  const [visorSelecionado,  setVisorSelecionado]  = useState(initialValues?.visorSelecionado  ?? true);
+  const [filtroSelecionado, setFiltroSelecionado] = useState(initialValues?.filtroSelecionado ?? (cfg.incluir_filtro !== false));
+  const [visorSelecionado,  setVisorSelecionado]  = useState(initialValues?.visorSelecionado  ?? (cfg.incluir_visor  !== false));
+
+  // ── GBC Entrada/Saída ─────────────────────────────────────────────────
+  const [gbcEntradaSelecionado, setGbcEntradaSelecionado] = useState(initialValues?.gbcEntradaSelecionado ?? (cfg.incluir_gbc_entrada !== false));
+  const [gbcSaidaSelecionado,   setGbcSaidaSelecionado]   = useState(initialValues?.gbcSaidaSelecionado   ?? (cfg.incluir_gbc_saida   !== false));
 
   // ── Estimativa de carga de fluido ─────────────────────────────────────
   const [cargaFluido,        setCargaFluido]        = useState(null);
@@ -50,9 +55,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [linhasManuais, setLinhasManuais] = useState(initialValues?.linhasManuais ?? [novaLinhaManual()]);
   const [tempAmb, setTempAmb] = useState(tempAmbProp);
 
+  // Captura se havia dados salvos NO MOMENTO DO MOUNT (não após auto-sync via onValoresChange)
+  const projetoSalvoNoMount = React.useRef(!!initialValues);
+
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais });
-  }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
+    if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais });
+  }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
   const tempCond = tempAmb + 10;
 
   React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
@@ -68,6 +76,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   // ── Busca todos os dados em paralelo ─────────────────────────────────
   const executarBusca = (canceladoRef) => {
     if (!cargaAlvo || cargaAlvo <= 0) return;
+    const cfgAtual = configuracoesMontagem || {}; // captura no momento da chamada (já garantido não-null pelo useEffect)
     setLoading(true); setErro('');
     setSolenoidResult(null); setAcessorioResult(null);
 
@@ -104,19 +113,29 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
       if (resAce.status === 'fulfilled' && resAce.value) {
         setAcessorioResult(resAce.value.data);
-        setFiltroSelecionado(true);
-        setVisorSelecionado(true);
+        if (!projetoSalvoNoMount.current) {
+          setFiltroSelecionado(cfgAtual.incluir_filtro !== false);
+          setVisorSelecionado(cfgAtual.incluir_visor  !== false);
+        }
       }
 
       setLoading(false);
     });
   };
 
+  // Aguarda configuracoesMontagem antes de iniciar — aplica flags do perfil logo de início
   useEffect(() => {
+    if (!configuracoesMontagem) return; // espera o perfil carregar
     const ref = { current: false };
+    if (!projetoSalvoNoMount.current) {
+      setFiltroSelecionado(configuracoesMontagem.incluir_filtro !== false);
+      setVisorSelecionado(configuracoesMontagem.incluir_visor   !== false);
+      setGbcEntradaSelecionado(configuracoesMontagem.incluir_gbc_entrada !== false);
+      setGbcSaidaSelecionado(configuracoesMontagem.incluir_gbc_saida     !== false);
+    }
     executarBusca(ref);
     return () => { ref.current = true; };
-  }, [cargaAlvo, fluido, tempEvap]);
+  }, [cargaAlvo, fluido, tempEvap, configuracoesMontagem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-busca filtro/visor quando o técnico muda o toggle de tanque de líquido
   useEffect(() => {
@@ -125,8 +144,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       fluido, capacidade_kcalh: cargaAlvo, tem_tanque_liquido: temTanqueLiquido,
     }).then(res => {
       setAcessorioResult(res.data);
-      setFiltroSelecionado(true);
-      setVisorSelecionado(true);
+      // Não reseta filtro/visor — mantém o estado atual (escolha do usuário ou do perfil)
     }).catch(() => {});
   }, [temTanqueLiquido]);
 
@@ -191,10 +209,10 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       trecho_subida_m:         cfg.trecho_subida,
       trecho_sifao_gbc_m:      cfg.trecho_sifao_gbc,
       tanque_conexao:          tanque?.tanque?.conexao ?? null,
-      incluir_filtro:          cfg.incluir_filtro ?? true,
-      incluir_visor:           cfg.incluir_visor ?? true,
-      incluir_gbc_entrada:     cfg.incluir_gbc_entrada ?? true,
-      incluir_gbc_saida:       cfg.incluir_gbc_saida ?? true,
+      incluir_filtro:          filtroSelecionado,
+      incluir_visor:           visorSelecionado,
+      incluir_gbc_entrada:     gbcEntradaSelecionado,
+      incluir_gbc_saida:       gbcSaidaSelecionado,
     }).then(res => {
       setCavaleteResult(res.data);
       setCavaleteIncluido(true);
@@ -397,16 +415,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
       <div className="p-6">
 
-        {/* Banner dados alterados upstream */}
-        {invalidado && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Tubulação foi recalculada</p>
-              <p className="text-xs text-amber-600">Revise os componentes e confirme novamente para atualizar o orçamento</p>
-            </div>
-          </div>
-        )}
 
         {/* ── Seletor de modo ── */}
         <div className="mb-6 bg-slate-50 rounded-xl border border-slate-200 p-1 flex gap-1">
@@ -475,6 +483,28 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     temTanqueLiquido ? 'translate-x-5' : 'translate-x-0'
                   }`} />
                 </button>
+              </div>
+
+              {/* Toggles GBC Entrada / Saída */}
+              <div className="mt-2 pt-2 border-t border-slate-200 grid grid-cols-2 gap-2">
+                {[
+                  { label: 'GBC Entrada', valor: gbcEntradaSelecionado, set: setGbcEntradaSelecionado },
+                  { label: 'GBC Saída',   valor: gbcSaidaSelecionado,   set: setGbcSaidaSelecionado   },
+                ].map(({ label, valor, set }) => (
+                  <div key={label} className="flex items-center justify-between gap-2 bg-slate-100 rounded-lg px-3 py-2">
+                    <span className="text-xs font-bold text-slate-600">{label}</span>
+                    <button
+                      onClick={() => set(prev => !prev)}
+                      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                        valor ? 'bg-violet-500' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                        valor ? 'translate-x-4' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -725,6 +755,11 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
               className="w-full py-4 bg-[#7B2D8B] text-white rounded-xl font-bold hover:bg-purple-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
               CONFIRMAR ACESSÓRIOS E IR PARA ORÇAMENTO ➡️
             </button>
+            {jaFinalizado && (
+              <p className="text-center text-xs text-slate-400 mt-2">
+                💡 Ao confirmar, gere o orçamento novamente no Card 6 para refletir as alterações.
+              </p>
+            )}
           </>
         )}
 

@@ -13,58 +13,56 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
     total_eq = 0.0
 
     for i in req.materiais:
-        if i.id:
+        # Preco injetado pelo frontend (da cotação) tem prioridade; fallback para banco
+        if i.preco_unitario is not None:
+            custo = i.preco_unitario
+            nome = i.item or "Item Dimensionado"
+            unidade = "un"
+        elif i.id:
             result = await db.execute(select(Material).where(Material.id == i.id))
             mat = result.scalar_one_or_none()
-            if mat:
-                custo = float(mat.custo)
-                subtotal = i.qtde * custo
-                total_mat += subtotal
-                itens.append(ItemDetalhado(
-                    item=f"(Mat) {mat.nome}",
-                    quantidade=i.qtde,
-                    unidade=mat.unidade_medida_id and "un",
-                    custo_unitario_rs=custo,
-                    custo_total_rs=round(subtotal, 2),
-                    detalhe=i.detalhe,
-                ))
+            custo = float(mat.custo) if mat else 0.0
+            nome = f"(Mat) {mat.nome}" if mat else (i.item or "Item Dimensionado")
+            unidade = "un"
         else:
-            itens.append(ItemDetalhado(
-                item=i.item or "Item Dimensionado",
-                quantidade=i.qtde,
-                unidade="un",
-                custo_unitario_rs=0.0,
-                custo_total_rs=0.0,
-                detalhe=i.detalhe,
-            ))
+            custo = 0.0
+            nome = i.item or "Item Dimensionado"
+            unidade = "un"
+        subtotal = i.qtde * custo
+        total_mat += subtotal
+        itens.append(ItemDetalhado(
+            item=nome,
+            quantidade=i.qtde,
+            unidade=unidade,
+            custo_unitario_rs=custo,
+            custo_total_rs=round(subtotal, 2),
+            detalhe=i.detalhe,
+            categoria=i.categoria,
+        ))
 
     for i in req.equipamentos:
-        if i.id:
-            result = await db.execute(
-                select(Equipamento).where(Equipamento.id == i.id)
-            )
+        if i.preco_unitario is not None:
+            custo = i.preco_unitario
+            nome = i.item or "Equipamento Dimensionado"
+        elif i.id:
+            result = await db.execute(select(Equipamento).where(Equipamento.id == i.id))
             eq = result.scalar_one_or_none()
-            if eq:
-                custo = float(eq.custo)
-                subtotal = i.qtde * custo
-                total_eq += subtotal
-                itens.append(ItemDetalhado(
-                    item=f"(Eq) {eq.modelo}",
-                    quantidade=i.qtde,
-                    unidade="un",
-                    custo_unitario_rs=custo,
-                    custo_total_rs=round(subtotal, 2),
-                    detalhe=i.detalhe,
-                ))
+            custo = float(eq.custo) if eq else 0.0
+            nome = f"(Eq) {eq.modelo}" if eq else (i.item or "Equipamento Dimensionado")
         else:
-            itens.append(ItemDetalhado(
-                item=i.item or "Equipamento Dimensionado",
-                quantidade=i.qtde,
-                unidade="un",
-                custo_unitario_rs=0.0,
-                custo_total_rs=0.0,
-                detalhe=i.detalhe,
-            ))
+            custo = 0.0
+            nome = i.item or "Equipamento Dimensionado"
+        subtotal = i.qtde * custo
+        total_eq += subtotal
+        itens.append(ItemDetalhado(
+            item=nome,
+            quantidade=i.qtde,
+            unidade="un",
+            custo_unitario_rs=custo,
+            custo_total_rs=round(subtotal, 2),
+            detalhe=i.detalhe,
+            categoria=i.categoria or "equipamento",
+        ))
 
     return OrcamentoResponse(
         custo_total_materiais_rs=round(total_mat, 2),
