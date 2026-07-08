@@ -93,7 +93,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [custos, setCustos] = useState({ mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
   const [margem,         setMargem]         = useState(25);
   const [imposto,        setImposto]        = useState(6);
-  const [apresentacao,   setApresentacao]   = useState('blocos'); // 'blocos' | 'global'
+  const [apresentacao,     setApresentacao]     = useState('blocos'); // 'blocos' | 'global'
+  const [exibicaoMateriais, setExibicaoMateriais] = useState('itemizado'); // 'itemizado' | 'resumo' | 'sem_preco' (só venda_direta)
   const [moSeparada,     setMoSeparada]     = useState(false);
   const [resumoObjeto,   setResumoObjeto]   = useState('Fornecimento e instalação de câmara frigorífica completa, conforme dimensionamento técnico.');
   const [cond,           setCond]           = useState(CONDICOES_PADRAO);
@@ -539,6 +540,18 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
       // ── Lista de itens ────────────────────────────────────────────────
       if (incluirEquipamentos) {
+        const modoResumo = modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo';
+        if (modoResumo) {
+          checar(18);
+          pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+          txt('MATERIAIS', ML, y); pdf.setTextColor(0); y += 5;
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+          txt('Conjunto de materiais de refrigeração', ML, y);
+          pdf.setTextColor(150); pdf.setFont('helvetica', 'italic');
+          txt('Faturamento direto ao fornecedor', MR, y, { align: 'right' });
+          pdf.setTextColor(0); y += 8;
+        } else {
         const grupos = Object.entries(agruparItens(orcamento.detalhamento_itens)).filter(([, it]) => it.length > 0);
         grupos.forEach(([cat, itens]) => {
           checar(14);
@@ -563,6 +576,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           });
           y += 3;
         });
+        }
 
         if (complementosPreenchidos.length > 0) {
           checar(14);
@@ -588,11 +602,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       txt('INVESTIMENTO', ML, y); pdf.setTextColor(0); y += 5;
 
       if (apresentacao === 'blocos') {
-        cf.blocosCliente.forEach(b => {
+        const isServico = b => b.nome.includes('Mão de obra') || b.nome.includes('Instalação') || b.nome.includes('Deslocamento');
+        const blocos = (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco')
+          ? cf.blocosCliente.filter(isServico)
+          : cf.blocosCliente;
+        blocos.forEach(b => {
           checar(7);
           pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); txt(b.nome, ML, y);
-          const isServico = b.nome.includes('Mão de obra') || b.nome.includes('Instalação') || b.nome.includes('Deslocamento');
-          if (modoFaturamento === 'venda_direta' && !isServico) { pdf.setTextColor(150); pdf.setFont('helvetica', 'italic'); txt('Dir. fornecedor', MR, y, { align: 'right' }); pdf.setTextColor(0); }
+          if (modoFaturamento === 'venda_direta' && !isServico(b)) { pdf.setTextColor(150); pdf.setFont('helvetica', 'italic'); txt('Dir. fornecedor', MR, y, { align: 'right' }); pdf.setTextColor(0); }
           else { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(b.valor)}`, MR, y, { align: 'right' }); }
           y += 6;
         });
@@ -1079,6 +1096,25 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 ))}
               </div>
             </div>
+
+            {/* Exibição de materiais — só no faturamento direto */}
+            {modoFaturamento === 'venda_direta' && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Como apresentar os materiais na proposta</p>
+                <div className="space-y-2">
+                  {[
+                    { v: 'itemizado', label: 'Lista completa', desc: 'Exibe todos os itens com quantidade — valor indicado como "Dir. fornecedor"' },
+                    { v: 'resumo',    label: 'Resumo global',  desc: 'Substitui a lista por uma linha: "Conjunto de materiais de refrigeração"' },
+                    { v: 'sem_preco', label: 'Descritivo sem preço', desc: 'Lista os itens sem valores; investimento apresenta apenas os serviços' },
+                  ].map(opt => (
+                    <label key={opt.v} className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer text-xs transition-all ${exibicaoMateriais === opt.v ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                      <input type="radio" checked={exibicaoMateriais === opt.v} onChange={() => setExibicaoMateriais(opt.v)} className="accent-amber-600 mt-0.5" />
+                      <span><b>{opt.label}</b><br /><span className="text-slate-500">{opt.desc}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Mão de obra e custos */}
             <div>
