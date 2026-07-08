@@ -189,16 +189,6 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
 
       <div className="p-6" onFocus={() => { carregandoDoArquivo.current = false; }} onInput={() => { carregandoDoArquivo.current = false; }}>
 
-        {/* Banner dados do gabinete alterados */}
-        {invalidado && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Dados do gabinete foram alterados</p>
-              <p className="text-xs text-amber-600">Recalcule a carga térmica para atualizar o projeto</p>
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Dimensões */}
@@ -398,16 +388,6 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
           </div>
         </div>
 
-        {/* Banner dados alterados upstream */}
-        {invalidado && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Dados do gabinete foram alterados</p>
-              <p className="text-xs text-amber-600">Recalcule a carga térmica para atualizar o projeto</p>
-            </div>
-          </div>
-        )}
 
         {/* Banner projeto carregado */}
         {jaFinalizado && !resultado && statusCalculo === 'pronto' && (
@@ -443,6 +423,12 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
             'CALCULAR CARGA E PROSSEGUIR ➡️'
           )}
         </button>
+
+        {jaFinalizado && (
+          <p className="text-center text-xs text-slate-400 mt-2">
+            💡 Ao recalcular, continue pelos próximos cards para manter o projeto consistente.
+          </p>
+        )}
 
         {erro && <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm border border-red-200">{erro}</div>}
 

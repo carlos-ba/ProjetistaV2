@@ -1,205 +1,200 @@
 # 01 - Requisitos do Projeto V2
 
-**Versão:** 1.0
-**Data:** 2026-04-28
-**Status:** Em definição
+**Versão:** 2.0
+**Data:** 2026-06-28
+**Status:** Implementado (MVP em produção)
 
 ---
 
 ## 1. Visão Geral do Produto
 
-O **Projetista V2** é um sistema web voltado para profissionais técnicos que precisam calcular e gerar listas de peças/materiais a partir de parâmetros de entrada de um projeto.
+O **IceNexus IAR** é um SaaS web voltado para técnicos e engenheiros de refrigeração que precisam dimensionar câmaras frigoríficas e gerar propostas comerciais.
 
-O sistema deve permitir que o usuário informe os dados de um projeto, receba o resultado do cálculo automaticamente e possa salvar e consultar resultados anteriores.
-
-> **PENDENTE:** Confirmar o domínio específico do sistema.
-> Exemplos: projeto elétrico, projeto hidráulico, estrutura metálica, orçamento de construção, etc.
+O sistema guia o usuário por um **wizard de 6 etapas** — do dimensionamento do gabinete até a geração da proposta em PDF — substituindo planilhas manuais por um fluxo guiado e automatizado.
 
 ---
 
 ## 2. Perfis de Usuário
 
-### 2.1 Usuário Final (MVP)
+### 2.1 Técnico / Engenheiro de Refrigeração (usuário principal)
+- Acessa o sistema pelo navegador (desktop prioritário)
+- Realiza projetos de câmaras frigoríficas
+- Seleciona equipamentos e componentes com base nos cálculos
+- Gera proposta comercial para o cliente final
 
-- Profissional técnico que realiza projetos e precisa gerar listas de materiais.
-- Acessa o sistema pelo navegador (desktop prioritário).
-- Pode ou não ter conhecimento técnico em TI.
-- Espera uma interface simples, rápida e confiável.
-
-> **PENDENTE:** Haverá múltiplos tipos de usuário (ex: administrador vs. usuário comum)?
-> No MVP, assumimos um único perfil de usuário autenticado.
+### 2.2 Admin SaaS (operador interno)
+- Gerencia o catálogo global de equipamentos e componentes
+- Cadastra painéis, portas, equipamentos, performances
+- Fase 2 — ainda não implementado
 
 ---
 
 ## 3. Requisitos Funcionais
 
-Os requisitos funcionais descrevem o que o sistema deve fazer.
-
 ### RF-01 — Autenticação de Usuário
-
-- O sistema deve permitir que o usuário faça login com e-mail e senha.
-- O sistema deve manter a sessão autenticada enquanto o token for válido.
-- O sistema deve permitir logout.
-
-> **PENDENTE:** Haverá cadastro público ou os usuários serão criados manualmente?
-> No MVP, assumimos cadastro via e-mail com senha.
+- Login com e-mail e senha (JWT)
+- Sessão autenticada com token de acesso + refresh token
+- Logout
+- **Status:** ✅ implementado
 
 ---
 
-### RF-02 — Entrada de Dados do Projeto
-
-- O usuário deve poder preencher um formulário com os parâmetros do projeto.
-- O sistema deve validar os campos obrigatórios antes de processar.
-- O sistema deve informar erros de forma clara ao usuário.
-
-> **PENDENTE:** Quais são os campos do formulário?
-> Definir: nome dos campos, tipos (número, texto, seleção), unidades, obrigatoriedade.
+### RF-02 — Dimensionamento do Gabinete (Card 1)
+- Usuário informa: dimensões (largura, altura, comprimento), temperatura interna, tipo de piso, painel PIR (espessura/fabricante) e portas frigoríficas
+- Sistema calcula: área das paredes, lista de corte de painéis, materiais de montagem
+- Catálogo de painéis PIR Kingspan Isoeste e portas carregado via API
+- **Status:** ✅ implementado
 
 ---
 
-### RF-03 — Cálculo da Lista de Peças/Materiais
-
-- O sistema deve processar os dados de entrada e calcular a lista de materiais necessários.
-- O cálculo deve ser executado no backend (nunca no frontend).
-- O resultado deve ser retornado ao usuário em formato estruturado e legível.
-
-> **PENDENTE:** Qual é a lógica de cálculo?
-> Definir: fórmulas, tabelas de referência, coeficientes, regras de arredondamento.
+### RF-03 — Cálculo de Carga Térmica (Card 2)
+- Entradas: temperatura ambiente (T.Amb), produto armazenado, infiltração, ocupação, iluminação
+- Dois métodos: simplificado e psicrométrico (ASHRAE)
+- Saída: carga total em kcal/h
+- **Status:** ✅ implementado
 
 ---
 
-### RF-04 — Exibição do Resultado
-
-- O sistema deve exibir o resultado do cálculo em forma de lista/tabela.
-- A lista deve mostrar: item, descrição, quantidade e unidade de medida.
-- O usuário deve poder visualizar o resultado antes de salvar.
-
-> **PENDENTE:** O resultado deve ser exportável (PDF, Excel)?
-> No MVP, apenas exibição em tela. Exportação fica para versão futura.
-
----
-
-### RF-05 — Salvamento do Projeto
-
-- O usuário deve poder salvar o projeto com um nome identificador.
-- O sistema deve associar o projeto ao usuário autenticado.
-- O sistema deve confirmar o salvamento com feedback visual.
+### RF-04 — Seleção de Equipamentos (Card 3)
+- Sistema busca no banco unidades condensadoras (UC) e evaporadoras compatíveis com:
+  - carga calculada (kcal/h)
+  - fluido refrigerante
+  - temperatura de evaporação (T.Evap)
+- Usuário seleciona UC + evaporadora
+- **Status:** ✅ implementado
 
 ---
 
-### RF-06 — Consulta de Projetos Salvos
+### RF-05 — Dimensionamento de Tubulação (Card 4)
+- Entradas: distâncias de cada trecho (líquido, sucção, descarga), desnível
+- Cálculo de bitolas seguindo tabelas ASHRAE
+- Sugestão automática de padrão de isolamento Armacel (D/F/H/M/R/T) por T.Evap
+- Linha de sucção sempre isolada; linha de líquido opcional
+- Saída: lista de tubos (bitola, metros, peso, isolamento) para orçamento
+- **Status:** ✅ implementado
 
-- O sistema deve listar os projetos salvos pelo usuário autenticado.
-- O usuário deve poder abrir um projeto salvo e visualizar seus dados e resultado.
-- O usuário deve poder excluir um projeto salvo.
+---
 
-> **PENDENTE:** O usuário deve poder reeditar e recalcular um projeto salvo?
-> No MVP, assumimos apenas leitura. Edição fica para versão futura.
+### RF-06 — Seleção de Componentes de Fluxo (Card 5)
+**Modo Automático:**
+- Separadores de líquido e óleo: selecionados do banco por capacidade
+- Válvula solenoide: motor de cálculo Kv interno, família Danfoss EVR v2 (R404A e R22)
+- Filtro secador: DML (com tanque de líquido) ou DMC (sem tanque), seleção pelo diâmetro da linha
+- Visor de líquido: Danfoss SGN, seleção pelo diâmetro da linha de líquido
+- Tanque de líquido: seleção automática via NBR 16.069 após estimativa de carga de fluido
+- Estimativa de carga de fluido: kg por trecho (evaporador + linhas)
+- Cavalete: análise automática de luvas de redução, porcas e luvas de passagem
+
+**Modo Engenharia:**
+- Integração com CoolSelector®2 Online (Danfoss) para seleção manual
+- Campos para registrar manualmente: VET, Filtro Secador, Solenoide, Visor
+- Separadores ainda automáticos do banco
+
+- **Status:** ✅ implementado
+
+---
+
+### RF-07 — Orçamento e Proposta Comercial (Card 6)
+- Consolidação de todos os itens dos cards anteriores
+- **Fase 1:** Geração de planilha Excel de cotação (lista de materiais com metros e kg)
+- **Fase 2:** Importação da planilha devolvida pelo fornecedor com preços
+- **Fase 3:** Geração de proposta comercial em PDF
+- **Status:** ✅ implementado
+
+---
+
+### RF-08 — Salvar e Carregar Projetos
+- Usuário salva o projeto com nome e associação a um cliente
+- Estado completo de todos os cards salvo em `dados_completos` (JSONB)
+- Carregamento automático ao reabrir o projeto
+- Invalidação em cascata: recalcular card N invalida os cards N+1 a 6
+- **Status:** ✅ implementado
+
+---
+
+### RF-09 — Gestão de Clientes
+- Cadastro de clientes (nome, e-mail, telefone, endereço)
+- Vínculo entre projeto e cliente
+- **Status:** ✅ implementado
+
+---
+
+### RF-10 — Configurações de Montagem
+- Perfis de montagem salvos por usuário: tipo de filtro preferido, tipo de visor, trechos padrão
+- Aplicados automaticamente ao iniciar um novo projeto
+- **Status:** ✅ implementado
 
 ---
 
 ## 4. Requisitos Não Funcionais
 
-Os requisitos não funcionais descrevem como o sistema deve se comportar.
-
 ### RNF-01 — Desempenho
-
-- O cálculo deve ser processado e retornado em menos de 3 segundos para projetos de tamanho padrão.
-- A interface deve carregar em menos de 2 segundos em conexões convencionais.
+- Cálculos processados em menos de 3 segundos para projetos padrão
+- Interface carregando em menos de 2 segundos em conexões convencionais
 
 ### RNF-02 — Disponibilidade
-
-- O sistema deve ter disponibilidade mínima de 99% (excluindo janelas de manutenção planejadas).
-- O ambiente de produção (Render + Vercel) é o responsável pelas garantias de uptime.
+- Disponibilidade mínima de 99% (garantida por Render + Vercel)
 
 ### RNF-03 — Segurança
-
-- Nenhum dado sensível (senhas, tokens) deve ser armazenado em texto puro.
-- A comunicação entre frontend e backend deve ocorrer exclusivamente via HTTPS.
-- O backend deve validar e sanitizar todos os dados de entrada.
-- Tokens de autenticação devem ter prazo de expiração definido.
+- Senhas armazenadas com hash (nunca em texto puro)
+- Comunicação exclusiva via HTTPS
+- Backend valida e sanitiza todos os dados de entrada
+- Tokens JWT com prazo de expiração
 
 ### RNF-04 — Escalabilidade
-
-- O backend deve ser stateless, permitindo escalonamento horizontal.
-- O banco de dados deve ser o único ponto de estado persistente.
+- Backend stateless — estado persistido apenas no banco
+- Escalável horizontalmente
 
 ### RNF-05 — Manutenibilidade
-
-- O código deve seguir a separação de camadas definida na arquitetura (api, services, models, schemas).
-- Toda decisão técnica relevante deve ser registrada em `docs/07_decisoes_tecnicas.md`.
-- O banco de dados deve usar migrations para controle de schema.
+- Separação rígida entre camadas: api, services, models, schemas
+- Decisões técnicas registradas em `docs/07_decisoes_tecnicas.md` e `docs/DECISOES_ARQUITETURA.md`
+- Schema do banco controlado por migrations Alembic
 
 ### RNF-06 — Usabilidade
-
-- A interface deve funcionar corretamente em navegadores modernos (Chrome, Firefox, Edge, Safari).
-- A interface deve ser responsiva para desktop (prioridade) e tablet.
+- Interface responsiva para desktop (prioritário) e tablet
+- Funciona em Chrome, Firefox, Edge, Safari modernos
 
 ---
 
-## 5. Fluxo Principal do Usuário (MVP)
+## 5. Fluxo Principal do Usuário
 
-```text
-1. Usuário acessa o sistema
-2. Usuário faz login com e-mail e senha
-3. Usuário acessa a tela de novo projeto
-4. Usuário preenche os parâmetros do projeto
-5. Usuário clica em "Calcular"
-6. Sistema processa o cálculo no backend
-7. Sistema exibe a lista de materiais resultante
-8. Usuário nomeia e salva o projeto
-9. Usuário pode consultar projetos salvos anteriormente
+```
+1. Usuário acessa o sistema e faz login
+2. Usuário cria novo projeto (nome + cliente)
+3. Card 1: preenche dimensões do gabinete e escolhe painéis/portas
+4. Card 2: informa produto e condições para cálculo de carga térmica
+5. Card 3: seleciona UC + evaporadora compatíveis
+6. Card 4: informa distâncias de tubulação → sistema dimensiona bitolas e isolamento
+7. Card 5: sistema seleciona automaticamente todos os componentes de fluxo
+8. Card 6: revisa orçamento, gera planilha Excel para cotação e proposta PDF
+9. Usuário salva o projeto a qualquer momento
 ```
 
 ---
 
-## 6. Fora do Escopo do MVP
+## 6. Fora do Escopo Atual
 
-Os itens abaixo são reconhecidos como necessários no futuro, mas **não fazem parte do MVP**:
-
-- Exportação de resultados em PDF ou Excel
-- Edição de projetos salvos e recálculo
-- Compartilhamento de projetos entre usuários
-- Painel administrativo
-- Gestão de planos/assinatura (SaaS billing)
-- Integração com ERPs ou sistemas externos
+- Admin panel / cadastro de equipamentos pelo cliente (Fase 2)
+- IA com Tool Use para análise e sugestões (Fase 3)
+- Testes automatizados de regressão (Fase 4)
+- Billing e planos de assinatura (Fase 5)
 - Aplicativo mobile
 - Modo offline
+- Compartilhamento de projetos entre usuários
 
 ---
 
 ## 7. Restrições e Premissas
 
-| Item | Descrição |
-|---|---|
+| Item | Decisão |
+|------|---------|
 | Linguagem do sistema | Português (pt-BR) |
-| Plataforma alvo | Web (navegador) |
-| Autenticação MVP | E-mail + senha (JWT) |
+| Plataforma alvo | Web (desktop prioritário) |
+| Autenticação | E-mail + senha (JWT) |
 | Deploy | Vercel (frontend) + Render (backend + banco) |
-| Banco de dados | PostgreSQL (Render managed) |
-| Backend | Python + FastAPI |
-| Frontend | React ou Next.js + Tailwind CSS |
+| Banco de dados | PostgreSQL 17 |
+| Backend | Python + FastAPI + SQLAlchemy 2.0 async |
+| Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Comunicação | REST API (JSON) |
-| Versionamento | Git + GitHub |
-
----
-
-## 8. Pendências Críticas para Inicio do Desenvolvimento
-
-Antes de implementar qualquer código de negócio, os seguintes pontos devem ser respondidos e documentados:
-
-| # | Questão | Impacto |
-|---|---|---|
-| P1 | Qual o domínio do sistema? (elétrico, hidráulico, etc.) | Define todo o modelo de dados e lógica de cálculo |
-| P2 | Quais são os campos de entrada do formulário? | Define o schema de entrada da API e o formulário do frontend |
-| P3 | Qual é a lógica/fórmula de cálculo? | Define a camada de serviço do backend |
-| P4 | Quais são os campos e unidades da lista de resultado? | Define o schema de saída da API e a exibição do frontend |
-| P5 | O cadastro de usuário é aberto ou controlado? | Define o fluxo de autenticação e os endpoints necessários |
-
----
-
-## 9. Histórico de Versões
-
-| Versão | Data | Autor | Descrição |
-|---|---|---|---|
-| 1.0 | 2026-04-28 | Equipe + IA | Estrutura inicial criada com base na visão geral e próximos passos |
+| Unidade de capacidade | kcal/h (padrão mercado BR) |
+| Fluidos suportados | R404A e R22 (motor solenoide); outros via Modo Engenharia |

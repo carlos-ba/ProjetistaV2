@@ -33,24 +33,26 @@ const PROPOSTA_BADGE = {
   recusada: 'bg-red-100 text-red-500',
 };
 
-const PainelCotacoes = ({ aberto, aoFechar }) => {
+const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta }) => {
   const [cotacoes, setCotacoes] = useState([]);
   const [propostas, setPropostas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [filtroProjeto, setFiltroProjeto] = useState(true); // true = só projeto atual
 
   // Fluxo de importação
   const [analise, setAnalise] = useState(null);       // resultado do /analisar
   const [edicao, setEdicao] = useState({});           // { item_id: { preco, marca, prazo, obs } }
   const [importando, setImportando] = useState(false);
   const [sucessoImport, setSucessoImport] = useState(null);
-  const [propostaAberta, setPropostaAberta] = useState(false);
   const [propostaVer, setPropostaVer] = useState(null);   // proposta salva aberta para visualização
   const fileRef = useRef(null);
 
   useEffect(() => {
     if (aberto) {
       setErro(''); setAnalise(null); setSucessoImport(null);
+      // Se tem projeto aberto, começa filtrado por ele; senão mostra tudo
+      setFiltroProjeto(!!projetoAtual?.id);
       carregar();
     }
   }, [aberto]);
@@ -70,6 +72,14 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
       setLoading(false);
     }
   };
+
+  const temProjeto = !!projetoAtual?.id;
+  const cotacoesFiltradas = temProjeto && filtroProjeto
+    ? cotacoes.filter(c => c.projeto_id === projetoAtual.id)
+    : cotacoes;
+  const propostasFiltradas = temProjeto && filtroProjeto
+    ? propostas.filter(p => p.projeto_id === projetoAtual.id)
+    : propostas;
 
   const mudarStatusProposta = async (prop, novoStatus) => {
     try {
@@ -162,8 +172,31 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
 
         {/* Header */}
         <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <h3 className="text-white font-bold flex items-center gap-2">📊 Minhas Cotações</h3>
-          <button onClick={aoFechar} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+          <div>
+            <h3 className="text-white font-bold flex items-center gap-2">📊 Cotações</h3>
+            {temProjeto && (
+              <p className="text-slate-400 text-[11px] mt-0.5 truncate max-w-xs">
+                {projetoAtual.nome || 'Projeto sem nome'}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {temProjeto && (
+              <div className="flex items-center bg-slate-800 rounded-lg p-0.5 text-xs font-bold">
+                <button
+                  onClick={() => setFiltroProjeto(true)}
+                  className={`px-3 py-1.5 rounded-md transition-colors ${filtroProjeto ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  Este projeto
+                </button>
+                <button
+                  onClick={() => setFiltroProjeto(false)}
+                  className={`px-3 py-1.5 rounded-md transition-colors ${!filtroProjeto ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  Todas
+                </button>
+              </div>
+            )}
+            <button onClick={aoFechar} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -270,28 +303,55 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
                 </button>
               </div>
 
-              {/* ── Proposta comercial (Fase 3) ── */}
-              {cotacoes.some(c => c.status === 'processada') && (
-                <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-5 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-bold text-indigo-900">💼 Pronto para fechar negócio?</p>
-                    <p className="text-xs text-indigo-600 mt-0.5">
-                      Compare os fornecedores, monte sua composição de custos e gere a proposta comercial com aceite.
-                    </p>
-                  </div>
-                  <button onClick={() => setPropostaAberta(true)}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow transition-all whitespace-nowrap">
-                    GERAR PROPOSTA
-                  </button>
+              {/* ── Gerar proposta (navega para Card 6) ── */}
+              <div className={`rounded-xl border p-5 flex items-center justify-between gap-4 ${
+                cotacoesFiltradas.some(c => c.status === 'processada')
+                  ? 'bg-indigo-50 border-indigo-200'
+                  : 'bg-amber-50 border-amber-200'
+              }`}>
+                <div>
+                  {cotacoesFiltradas.some(c => c.status === 'processada') ? (
+                    <>
+                      <p className="text-sm font-bold text-indigo-900">💼 Pronto para fechar negócio?</p>
+                      <p className="text-xs text-indigo-600 mt-0.5">
+                        Cotação validada — clique para gerar a proposta técnica comercial no projeto.
+                      </p>
+                    </>
+                  ) : cotacoesFiltradas.some(c => c.status !== 'cancelada') ? (
+                    <>
+                      <p className="text-sm font-bold text-amber-800">⏳ Aguardando retorno do fornecedor</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Importe a planilha devolvida pelo fornecedor e confirme os preços para liberar a proposta.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-amber-800">📋 Nenhuma cotação processada</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Gere uma planilha de cotação no card de Orçamento, envie ao fornecedor e importe os preços aqui.
+                      </p>
+                    </>
+                  )}
                 </div>
-              )}
+                {onGerarProposta && (
+                  <button
+                    onClick={() => { aoFechar(); onGerarProposta(); }}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow transition-all whitespace-nowrap text-white ${
+                      cotacoesFiltradas.some(c => c.status === 'processada')
+                        ? 'bg-indigo-600 hover:bg-indigo-700'
+                        : 'bg-amber-500 hover:bg-amber-600'
+                    }`}>
+                    {cotacoesFiltradas.some(c => c.status === 'processada') ? 'GERAR PROPOSTA →' : 'IR PARA O PROJETO →'}
+                  </button>
+                )}
+              </div>
 
               {/* ── Propostas salvas ── */}
-              {propostas.length > 0 && (
+              {propostasFiltradas.length > 0 && (
                 <div>
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">💼 Propostas comerciais</h4>
                   <div className="space-y-2">
-                    {propostas.map(p => (
+                    {propostasFiltradas.map(p => (
                       <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 hover:border-indigo-300 transition-all">
                         <div className="min-w-0 cursor-pointer" onClick={() => setPropostaVer(p)} title="Abrir proposta">
                           <p className="text-sm font-bold text-indigo-700 font-mono hover:underline">{p.codigo} 📄</p>
@@ -320,16 +380,26 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
 
               {/* ── Lista de cotações ── */}
               <div>
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Cotações geradas</h4>
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+                  Cotações geradas
+                  {temProjeto && filtroProjeto && cotacoesFiltradas.length === 0 && cotacoes.length > 0 && (
+                    <span className="ml-2 text-indigo-400 font-normal normal-case">
+                      — nenhuma neste projeto
+                      <button onClick={() => setFiltroProjeto(false)} className="ml-1 underline hover:text-indigo-300">ver todas</button>
+                    </span>
+                  )}
+                </h4>
                 {loading ? (
                   <p className="text-sm text-slate-400 animate-pulse">Carregando...</p>
-                ) : cotacoes.length === 0 ? (
+                ) : cotacoesFiltradas.length === 0 ? (
                   <p className="text-sm text-slate-400 italic">
-                    Nenhuma cotação ainda. Gere uma no card de Orçamento do seu projeto.
+                    {temProjeto && filtroProjeto
+                      ? 'Nenhuma cotação para este projeto ainda. Gere uma no card de Orçamento.'
+                      : 'Nenhuma cotação ainda. Gere uma no card de Orçamento do seu projeto.'}
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {cotacoes.map(c => (
+                    {cotacoesFiltradas.map(c => (
                       <div key={c.id} className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-slate-800 font-mono">{c.codigo}</p>
@@ -356,7 +426,6 @@ const PainelCotacoes = ({ aberto, aoFechar }) => {
         </div>
       </div>
 
-      <PropostaComercial aberto={propostaAberta} aoFechar={() => setPropostaAberta(false)} />
       <PropostaComercial aberto={!!propostaVer} propostaVisualizar={propostaVer} aoFechar={() => setPropostaVer(null)} />
     </div>,
     document.body

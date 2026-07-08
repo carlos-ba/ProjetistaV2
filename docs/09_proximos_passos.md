@@ -1,43 +1,80 @@
-# 09 - Proximos Passos
+# 09 - Próximos Passos
 
-Este roteiro define a ordem de retomada para a proxima sessao.
+Atualizado em: 2026-06-28
 
-## 1. Requisitos e Escopo
+O wizard de 6 cards está completo e funcional em produção. Os próximos passos são evoluções de produto, não funcionalidades básicas.
 
-1. Detalhar requisitos funcionais em `docs/01_requisitos.md`.
-2. Definir fluxo do usuario para calculo e geracao da lista de pecas.
-3. Definir regras de negocio minimas para o primeiro MVP.
+---
 
-## 2. Modelo de Dados
+## Fase 2 — Admin Panel e Multi-Tenancy
 
-1. Definir entidades principais em `docs/03_banco_de_dados.md`.
-2. Definir relacionamentos e campos obrigatorios.
-3. Definir estrategia de versionamento de schema (migrations).
+### Objetivo
+Permitir que cada empresa cliente gerencie seus próprios dados sem depender do admin SaaS.
 
-## 3. Backend MVP
+### Itens
+1. **Catálogo por empresa** — tabelas `equipamento_empresa` e `componente_empresa`:
+   - `equipamento_id` (FK catálogo global)
+   - `empresa_id` (FK tenant)
+   - `codigo_interno`, `codigo_fornecedor`, `custo`, `fornecedor`, `ativo`
+2. **Admin panel** — formulários de cadastro por categoria de equipamento/componente
+3. **Multi-tenancy** — isolamento de dados por empresa (RLS ou filtro por `empresa_id`)
+4. **Gestão de usuários por empresa** — perfis: admin da empresa, técnico, visualizador
 
-1. Criar configuracao central de ambiente no backend.
-2. Implementar endpoint de health (`/health`).
-3. Implementar primeiro endpoint de calculo (entrada/saida).
-4. Implementar persistencia inicial no PostgreSQL.
-5. Adicionar testes de API para os endpoints iniciais.
+---
 
-## 4. Frontend MVP
+## Fase 3 — IA com Tool Use
 
-1. Inicializar base real do frontend (React/Vite ou Next.js).
-2. Criar tela inicial com formulario de entrada de dados.
-3. Integrar chamada ao endpoint de calculo.
-4. Exibir resultado e salvar para consulta futura.
+### Objetivo
+Usar Claude API com tool use para análises e sugestões automáticas durante o dimensionamento.
 
-## 5. Operacao e Qualidade
+### Candidatos de uso
+- Análise de coerência do projeto (carga vs. equipamento selecionado)
+- Sugestão de fluido refrigerante com base no perfil da câmara
+- Detecção de inconsistências entre cards (ex.: bitola subimensionada)
+- Geração de memorial descritivo em linguagem natural
 
-1. Adicionar logs estruturados no backend.
-2. Definir padrao de tratamento de erros.
-3. Revisar variaveis de ambiente e padroes de seguranca.
-4. Atualizar documentacao de deploy conforme evolucao.
+---
 
-## 6. Regra de Trabalho para Retomada
+## Fase 4 — Testes Automatizados
 
-1. Sempre iniciar com `git pull origin main`.
-2. Implementar em pequenas entregas com commit por etapa.
-3. Atualizar `docs/08_status_atual.md` ao final de cada sessao relevante.
+### Objetivo
+Cobrir os cálculos críticos com testes de regressão.
+
+### Prioridade
+1. Cálculo de carga térmica (método simplificado e psicrométrico)
+2. Seleção de solenoide (motor Kv — R404A e R22)
+3. Dimensionamento ASHRAE de tubulação
+4. Seleção de equipamento por interpolação de performance
+
+---
+
+## Fase 5 — Billing e Planos
+
+### Objetivo
+Monetizar o SaaS com planos de assinatura.
+
+### Itens
+1. Integração com gateway de pagamento (Stripe ou Pagar.me)
+2. Definição de planos (free trial, básico, profissional, empresa)
+3. Limite de projetos por plano
+4. Portal do cliente para gestão de assinatura
+
+---
+
+## Melhorias Contínuas (qualquer fase)
+
+- Ampliar o banco de equipamentos (mais fabricantes, mais modelos, R290)
+- Adicionar compressores como opção no Card 3
+- Suporte a fluidos além de R404A e R22 no motor de solenoide
+- Exportação do diagrama SVG do cavalete junto com a proposta PDF
+- Modo escuro na interface
+- Responsividade para tablet
+
+---
+
+## Regra de Trabalho
+
+1. Sempre iniciar com `git pull origin main`
+2. Implementar em pequenas entregas com commit por etapa
+3. Testar local antes de qualquer push
+4. Atualizar `docs/08_status_atual.md` ao final de sessões relevantes

@@ -164,16 +164,6 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
 
       <div className="p-6">
 
-        {/* Banner dados alterados upstream */}
-        {invalidado && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Carga térmica foi recalculada</p>
-              <p className="text-xs text-amber-600">Verifique se os equipamentos selecionados ainda são adequados e confirme novamente</p>
-            </div>
-          </div>
-        )}
 
         {/* Parâmetros */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -404,6 +394,11 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
               className="w-full py-4 bg-[#7B2D8B] hover:bg-purple-800 text-white font-black rounded-xl shadow-lg shadow-purple-200 transition-all hover:-translate-y-1 active:translate-y-0">
               FINALIZAR SELEÇÃO E CONTINUAR ➡️
             </button>
+            {jaFinalizado && (
+              <p className="text-center text-xs text-slate-400 mt-2">
+                💡 Ao confirmar nova seleção, continue pelos cards seguintes para manter o projeto consistente.
+              </p>
+            )}
           </div>
         )}
       </div>

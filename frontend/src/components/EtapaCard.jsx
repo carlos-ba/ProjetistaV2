@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Lock, Pencil, X, ChevronDown, ChevronUp, ChevronRight } from "lucide-react"
+import { CheckCircle2, Lock, Pencil, X, ChevronDown, ChevronUp, ChevronRight, AlertTriangle } from "lucide-react"
 
 const EtapaCard = ({
   numero,
@@ -15,6 +15,7 @@ const EtapaCard = ({
   onEditar,
   onFechar,
   somenteLeitura,
+  invalidado,         // bool — exibe aviso de "pode estar desatualizado"
   confirmacaoProxima, // string com nome da próxima etapa (ou null)
   onConfirmar,        // () => void — avança para próxima etapa
   onRecusar,          // () => void — fica na etapa atual
@@ -130,6 +131,7 @@ const EtapaCard = ({
           )}
         </div>
       </div>
+
 
       {/* ── Conteúdo ── sempre montado ── */}
       <div className={cn(

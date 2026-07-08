@@ -1,93 +1,88 @@
 # 08 - Status Atual
 
-Data de referencia: 2026-04-28
+Data de referência: 2026-06-28
+
+---
 
 ## 1. Ambiente Publicado
 
-- Frontend (Vercel): `https://projetista-v2-frontend.vercel.app`
-- Backend (Render): `https://projetista-v2-api-alt.onrender.com`
-- Swagger backend: `https://projetista-v2-api-alt.onrender.com/docs`
+- Frontend (Vercel): https://projetista-v2.vercel.app
+- Backend (Render): https://projetista-v2-api-alt.onrender.com
+- Swagger backend: https://projetista-v2-api-alt.onrender.com/docs
 
 ## 2. Recursos Ativos
 
 Render:
-
 - `projetista-v2-db` (Postgres)
 - `projetista-v2-api-alt` (Web Service Python)
 
 Vercel:
-
 - `projetista-v2-frontend`
 
-## 3. Configuracao Atual
+## 3. Configuração Atual
 
 Backend (Render):
-
 - `APP_ENV=production`
 - `DATABASE_URL` configurada no painel do Render
-- `CORS_ORIGINS=https://projetista-v2-frontend.vercel.app`
+- `CORS_ORIGINS=["https://projetista-v2.vercel.app"]`
 
 Frontend (Vercel):
+- `VITE_API_BASE_URL=https://projetista-v2-api-alt.onrender.com`
 
-- `NEXT_PUBLIC_API_URL=https://projetista-v2-api-alt.onrender.com`
+## 4. Estado das Funcionalidades
 
-## 4. Validacoes Executadas
+| Funcionalidade | Status |
+|---------------|--------|
+| Wizard 6 cards | ✅ funcional |
+| Autenticação JWT | ✅ |
+| Gabinete + painéis PIR Kingspan + portas | ✅ |
+| Carga térmica | ✅ |
+| Seleção UC + Evaporadora | ✅ |
+| Tubulação ASHRAE + isolamento Armacel | ✅ |
+| Card 5 — Separadores (banco de dados) | ✅ |
+| Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv |
+| Card 5 — Filtro secador automático (DML/DMC) | ✅ |
+| Card 5 — Visor de líquido automático (SGN) | ✅ |
+| Card 5 — Tanque de Líquido (NBR 16.069) | ✅ |
+| Card 5 — Carga de Fluido (kg por trecho) | ✅ |
+| Card 5 — Cavalete (luvas/porcas/reduções) | ✅ |
+| Card 5 — Modo Engenharia (CoolSelector) | ✅ |
+| Orçamento + Cotação Excel + Proposta PDF | ✅ |
+| Salvar/Carregar projeto com invalidação em cascata | ✅ |
+| Configurações de montagem (perfis) | ✅ |
+| Gestão de clientes | ✅ |
+| Diagrama SVG do cavalete (flutuante) | ✅ |
+| Admin panel / multi-tenancy | ❌ Fase 2 |
+| IA com Tool Use | ❌ Fase 3 |
+| Billing | ❌ Fase 5 |
 
-- Frontend responde HTTP 200 em producao.
-- Backend `/docs` responde HTTP 200.
-- Deploy manual do backend concluido com status `live`.
+## 5. Banco de Dados
 
-## 5. Decisoes Confirmadas
+- Migrations aplicadas: **0001 → 0016**
+- Principais tabelas com dados reais:
 
-- Plataforma inicial de deploy: `Vercel + Render`.
-- Backend e frontend mantidos separados.
-- Persistencia de dados em PostgreSQL gerenciado.
+| Tabela | Registros estimados |
+|--------|-------------------|
+| equipamento | 19 (7 UCs + 12 evaporadoras FL*) |
+| performance_equipamento | 627 |
+| componente_tecnico | 18 (VET + Separadores) |
+| performance_componente | 128 |
+| painel_frigorifico | 16 (Kingspan Isoeste PIR) |
+| isolamento_tubulacao | 97 (Armacel D/F/H/M/R/T) |
+| perfil_produto_termico | 26 (ASHRAE validado) |
 
-## 6. Riscos/Pontos de Atencao
+## 6. Decisões Confirmadas
 
-- Ainda nao existe modelagem de banco implementada.
-- Ainda nao existem endpoints de negocio publicados.
-- Pendências críticas de requisitos aguardando resposta do responsável (ver seção 8 de `01_requisitos.md`).
+- Wizard linear de 6 cards como fluxo principal
+- Backend stateless com estado persistido em `dados_completos` (JSONB) no projeto
+- Catálogo técnico global (admin SaaS) — catálogo por empresa fica para Fase 2
+- Auto-deploy via GitHub → Render (backend) + Vercel (frontend)
 
 ## 7. Checkpoint Git
 
 - Branch: `main`
-- Commit de referencia de infraestrutura inicial publicada: `3ef42f9`
-
----
-
-## 8. Checkpoint de Sessão — 2026-04-28
-
-### O que foi feito nesta sessão
-
-1. **Análise SDD realizada:** O projeto foi avaliado quanto à conformidade com o modelo SDD.
-   - Resultado: estrutura correta, mas documentos de especificação estavam vazios (placeholders).
-
-2. **`docs/01_requisitos.md` criado e estruturado** com:
-   - Visão geral do produto
-   - Perfil de usuário MVP
-   - 6 requisitos funcionais (RF-01 a RF-06)
-   - 6 requisitos não funcionais (RNF-01 a RNF-06)
-   - Fluxo principal do usuário
-   - Itens fora do escopo do MVP
-   - Tabela de pendências críticas para início do desenvolvimento
-
-### Estado atual da documentação SDD
-
-| Arquivo | Status |
-|---|---|
-| `docs/00_visao_geral.md` | Completo |
-| `docs/01_requisitos.md` | Estruturado — aguarda respostas das pendências P1 a P5 |
-| `docs/02_arquitetura.md` | Mínimo — aguarda detalhamento |
-| `docs/03_banco_de_dados.md` | Placeholder — bloqueado por P1/P2/P3 |
-| `docs/04_api.md` | Placeholder — bloqueado por P2/P3/P4 |
-| `docs/05_frontend.md` | Placeholder — bloqueado por P2/P4 |
-| `docs/06_deploy_vercel_render.md` | Completo |
-| `docs/07_decisoes_tecnicas.md` | 1 decisão registrada |
-
-### Próxima ação ao retomar
-
-1. Abrir `docs/01_requisitos.md` seção 8 (Pendências Críticas).
-2. Responder as perguntas P1 a P5 — especialmente **P1 (domínio do sistema)** e **P3 (lógica de cálculo)**.
-3. Com P1–P5 respondidas, preencher `docs/03_banco_de_dados.md` e `docs/04_api.md`.
-4. Só então iniciar código de negócio no backend.
+- Commits recentes relevantes:
+  - `c83dc16` — planilha Excel com colunas metros + kg para tubos de cobre
+  - `df578ff` — peso de tubos de cobre e seleção de espessura de parede
+  - `134d768` — carregamento automático de projeto e invalidação em cascata
+  - `3b611e3` — diagrama SVG dinâmico do cavalete de componentes

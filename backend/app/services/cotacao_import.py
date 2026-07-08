@@ -15,8 +15,10 @@ from typing import Any
 from openpyxl import load_workbook
 
 # Colunas da planilha v2 (1-based)
-COL_REF, COL_TIPO, COL_DESC, COL_DET, COL_QTDE, COL_UN = 1, 2, 3, 4, 5, 6
-COL_PRECO, COL_TOTAL, COL_MARCA, COL_PRAZO, COL_OBS = 7, 8, 9, 10, 11
+# A=1 Código, B=2 Tipo, C=3 Descrição, D=4 Detalhe, E=5 Qtde(m), F=6 Qtde, G=7 Un
+# H=8 Preço Unit., I=9 Total, J=10 Marca/Modelo, K=11 Prazo, L=12 Obs
+COL_REF, COL_TIPO, COL_DESC, COL_DET, COL_QTDE_M, COL_QTDE, COL_UN = 1, 2, 3, 4, 5, 6, 7
+COL_PRECO, COL_TOTAL, COL_MARCA, COL_PRAZO, COL_OBS = 8, 9, 10, 11, 12
 
 LINHA_PRIMEIRO_ITEM = 6   # linha 5 é o cabeçalho das colunas
 

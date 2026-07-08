@@ -106,16 +106,6 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Banner dados alterados upstream */}
-        {invalidado && (
-          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Equipamentos foram alterados</p>
-              <p className="text-xs text-amber-600">Recalcule as bitolas de tubulação para o novo dimensionamento</p>
-            </div>
-          </div>
-        )}
 
         {/* Equipamentos do sistema */}
         <div className="space-y-2">
@@ -222,6 +212,12 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
               : 'CALCULAR BITOLAS ➡️'}
           </button>
         </div>
+
+        {jaFinalizado && (
+          <p className="text-center text-xs text-slate-400 mt-2">
+            💡 Ao recalcular, continue pelo Card 5 para manter os componentes atualizados.
+          </p>
+        )}
 
         {erro && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100">{erro}</div>}
 
