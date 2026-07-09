@@ -279,6 +279,46 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 
 ---
 
+## Sessões 2026-07-09 — Classificação via banco + Expansão de catálogo
+
+### Classificação de itens do orçamento (commit 52c1ea1)
+- Migration **0017**: tabelas `bloco_orcamento`, `classificacao_item`, `item_classificacao` + seed
+  (5 blocos, 20 classificações, 27 slugs `tipo_item`). Aplicada em local E produção.
+- Todos os geradores (gabinete, tubulação, cavalete, componentes, equipamentos, portas)
+  emitem `tipo_item` (slug estável). Classificação por string-matching REMOVIDA do frontend.
+- Fonte única: `GET /api/v1/classificacoes` (árvore) + CRUD admin. Página "Classificação de
+  Itens" no menu lateral (renomear/mover blocos, classificações e itens — sem deploy).
+- 4 blocos na proposta: Materiais Termo Isolantes / Equipamentos / Tubulação e Conexões /
+  Componentes de Fluxo. Complemento tem seletor de classificação.
+- Fixes: porta persistida e desacoplada do cálculo (Card 1); projeto novo recarrega o perfil
+  de montagem ATIVO (flags incluir_*); loop infinito de refresh 401 corrigido.
+- Proposta: margens separadas materiais × serviços; modos de exibição no faturamento direto
+  (lista com valores de cotação / resumo global / sem preço); empreitada com preço de venda
+  (nunca custo) e opção "somente totais"; checkbox "incluir lista detalhada" removido.
+
+### Expansão de catálogo (commit 7761454 + importação em produção)
+- **Importadores** em `backend/scripts/`: `importar_paineis.py` e `importar_equipamentos.py`
+  (upsert idempotente por chave única — NUNCA duplicam; pulam linhas cinza de referência).
+- **Templates** na raiz (fonte de dados versionada): `template_paineis_frigorificos.xlsx`,
+  `template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`.
+- Catálogo atual (local = produção, verificado, zero duplicatas): 37 painéis (Isoeste +
+  MBP Isoblock), 77 equipamentos, 5.576 pontos de performance:
+  - UC: Elgin (13) + **Danfoss Optyma** (39 — HJM/HGM R22, HJZ/HGZ multi-fluido,
+    LJZ/LGZ baixa temperatura; 9 fluidos; extraído do catálogo PDF por parsing).
+  - Evaporadoras: Elgin (12) + **Mipal Mi BX** (13 — R22/R404A, DT1=6K, extraído de
+    tabelas-imagem do catálogo).
+- Novo fornecedor = preencher template + rodar importador (local e depois produção com
+  `DATABASE_URL` do Render na env).
+
+### Pendências para 2026-07-10
+1. **ROTACIONAR SENHA do Postgres no Render** (credencial passou pelo chat na importação).
+2. Docker: container `projetista_v2_db` (compose) tem banco VAZIO e disputa a porta 5432
+   com o Postgres nativo (que é o banco real) — manter Docker desligado ou remover o serviço db.
+3. Projetos salvos antigos não têm `tipo_item` — recalcular os cards para reclassificar.
+4. Rate-limiting da API: adiado de propósito para pré-lançamento (ver AUDITORIA_2026-07-08.md).
+
+---
+
 ## Estado atual do código (2026-06-29)
 
 | Funcionalidade | Status |
