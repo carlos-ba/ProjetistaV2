@@ -9,10 +9,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
+    const refresh = localStorage.getItem('refresh_token');
     if (token) {
-      // Decodifica o payload do JWT para obter o username
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
+        // Se o refresh token também já venceu, não há como renovar: descarta tudo
+        const refreshPayload = refresh ? JSON.parse(atob(refresh.split('.')[1])) : null;
+        const agora = Date.now() / 1000;
+        if (!refreshPayload || refreshPayload.exp < agora) throw new Error('sessão expirada');
         setUser({ username: payload.username || payload.user_id });
       } catch {
         localStorage.removeItem('access_token');

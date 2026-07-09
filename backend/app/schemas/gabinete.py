@@ -18,12 +18,14 @@ class ItemCorte(BaseModel):
     comprimento: float
     area_total: float
     descricao: str
+    tipo_item: str | None = None
 
 
 class MaterialExtra(BaseModel):
     item: str
     qtd: str
     detalhe: str
+    tipo_item: str | None = None
 
 
 class GabineteResponse(BaseModel):

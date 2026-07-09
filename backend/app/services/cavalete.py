@@ -25,7 +25,8 @@ def _luvas_passagem(bitola: str, metros: float) -> list[dict]:
     if qtd <= 0:
         return []
     return [{"item": f"Luva de Passagem {bitola}", "quantidade": qtd,
-             "unidade": "un", "detalhe": f"1 a cada 5 m — {metros:.1f} m de tubo"}]
+             "unidade": "un", "detalhe": f"1 a cada 5 m — {metros:.1f} m de tubo",
+             "tipo_item": "luva_passagem"}]
 
 
 def _reducao(de: str, para: str, posicao: str) -> dict | None:
@@ -34,12 +35,12 @@ def _reducao(de: str, para: str, posicao: str) -> dict | None:
         return None
     maior, menor = (de, para) if _rank(de) > _rank(para) else (para, de)
     return {"item": f"Luva de Redução {maior} x {menor}", "quantidade": 1,
-            "unidade": "un", "detalhe": posicao}
+            "unidade": "un", "detalhe": posicao, "tipo_item": "luva_reducao"}
 
 
 def _porca(bitola: str, posicao: str) -> dict:
     return {"item": f"Porca {bitola}", "quantidade": 1,
-            "unidade": "un", "detalhe": posicao}
+            "unidade": "un", "detalhe": posicao, "tipo_item": "porca"}
 
 
 # Ordem de tamanho das bitolas padrão
@@ -205,14 +206,14 @@ def analisar_cavalete(
 
     # 2. Sifão (comprado, bitola = ds)
     itens_succao.append({"item": f"Sifão {ds}", "quantidade": 1,
-                         "unidade": "un", "detalhe": "Saída do evaporador"})
+                         "unidade": "un", "detalhe": "Saída do evaporador", "tipo_item": "sifao"})
 
     # 3. Trecho subida (Sifão → Contra-sifão)
     itens_succao += _luvas_passagem(ds, trecho_subida_m)
 
     # 4. Contra-sifão (comprado, bitola = ds)
     itens_succao.append({"item": f"Contra-sifão {ds}", "quantidade": 1,
-                         "unidade": "un", "detalhe": "Topo da subida"})
+                         "unidade": "un", "detalhe": "Topo da subida", "tipo_item": "contra_sifao"})
 
     # 5. Trecho Contra-sifão → GBC sucção
     itens_succao += _luvas_passagem(ds, trecho_sifao_gbc_m)

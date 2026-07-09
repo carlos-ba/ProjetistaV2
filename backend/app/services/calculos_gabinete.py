@@ -20,6 +20,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         comprimento=req.altura,
         area_total=round(area_paredes, 2),
         descricao=f"Peças de {req.altura}m (Altura)",
+        tipo_item="painel_parede",
     ))
 
     # Teto
@@ -32,6 +33,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         comprimento=req.largura,
         area_total=round(area_teto, 2),
         descricao=f"Peças de {req.largura}m (Largura)",
+        tipo_item="painel_teto",
     ))
 
     # Piso
@@ -46,6 +48,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             comprimento=req.largura,
             area_total=round(area_piso_painel, 2),
             descricao=f"Peças de {req.largura}m (Largura)",
+            tipo_item="painel_piso",
         ))
         altura_util -= esp_m
     elif req.tipo_piso == "convencional":
@@ -55,11 +58,13 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             item=f"Placas Isolamento ({req.nucleo})",
             qtd=f"{area_piso * 2:.2f} m²",
             detalhe=f"2 camadas de {esp_camada:.0f}mm (Juntas Desencontradas)",
+            tipo_item="placa_isolamento",
         ))
         materiais_extras.append(MaterialExtra(
             item="Barreira de Vapor",
             qtd=f"{area_piso * 1.1:.2f} m²",
             detalhe="Sob isolamento (1 camada)",
+            tipo_item="barreira_vapor",
         ))
         if req.espessura_concreto_cm > 0:
             vol = area_piso * (req.espessura_concreto_cm / 100)
@@ -67,6 +72,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
                 item="Concreto Armado",
                 qtd=f"{vol:.2f} m³",
                 detalhe=f"Esp. {req.espessura_concreto_cm}cm",
+                tipo_item="concreto_armado",
             ))
             altura_util -= esp_m + (req.espessura_concreto_cm / 100)
         else:
@@ -76,6 +82,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         item="Acessórios de Montagem (Kit)",
         qtd=f"{area_total_paineis:.2f} m²",
         detalhe="Silicone, Fixadores, Cantoneiras (Base: Área Total de Painéis)",
+        tipo_item="acessorio_montagem",
     ))
 
     return GabineteResponse(

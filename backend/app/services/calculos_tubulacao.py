@@ -253,6 +253,7 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
             detalhe=f"Linha de alta pressão — ASHRAE | {parede_liq_desc}",
             peso_por_metro=peso_liq_m,
             quantidade_kg=peso_liq_total,
+            tipo_item="tubo_cobre_liquido",
         ),
         ItemTubulacao(
             item=f'Tubo Cobre {diam_succao} (Sucção)',
@@ -260,6 +261,7 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
             detalhe=nota_succao + f" | {parede_suc_desc}",
             peso_por_metro=peso_suc_m,
             quantidade_kg=peso_suc_total,
+            tipo_item="tubo_cobre_succao",
         ),
     ]
 
@@ -271,12 +273,14 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
             item=f'Isolamento Armacel {ref} (Sucção)',
             quantidade=qtd_tubo, unidade="m",
             detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_succao}",
+            tipo_item="isolamento_tubo_succao",
         ))
     else:
         materiais.append(ItemTubulacao(
             item=f'Isolamento Armacel padrão {padrao} (Sucção)',
             quantidade=qtd_tubo, unidade="m",
             detalhe=f"Consultar catálogo para bitola {diam_succao}",
+            tipo_item="isolamento_tubo_succao",
         ))
 
     # Isolamento líquido (opcional)
@@ -288,12 +292,14 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
                 item=f'Isolamento Armacel {ref} (Líquido)',
                 quantidade=qtd_tubo, unidade="m",
                 detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_liquido}",
+                tipo_item="isolamento_tubo_liquido",
             ))
         else:
             materiais.append(ItemTubulacao(
                 item=f'Isolamento Armacel padrão {padrao} (Líquido)',
                 quantidade=qtd_tubo, unidade="m",
                 detalhe=f"Consultar catálogo para bitola {diam_liquido}",
+                tipo_item="isolamento_tubo_liquido",
             ))
 
 

@@ -38,6 +38,7 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
             custo_total_rs=round(subtotal, 2),
             detalhe=i.detalhe,
             categoria=i.categoria,
+            tipo_item=i.tipo_item,
         ))
 
     for i in req.equipamentos:
@@ -62,6 +63,7 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
             custo_total_rs=round(subtotal, 2),
             detalhe=i.detalhe,
             categoria=i.categoria or "equipamento",
+            tipo_item=i.tipo_item,
         ))
 
     return OrcamentoResponse(

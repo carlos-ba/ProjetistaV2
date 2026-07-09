@@ -10,6 +10,18 @@ const CATEGORIAS_MANUAL = [
 
 const novaLinhaManual = () => ({ categoria: '', modelo: '', fabricante: '', conexao: '', capacidade: '', custo: '' });
 
+// Categoria (texto) → tipo_item (slug estável usado na classificação do orçamento)
+const slugPorCategoria = (cat = '') => {
+  const c = cat.toLowerCase();
+  if (c.includes('separador') && (c.includes('líquido') || c.includes('liquido'))) return 'separador_liquido';
+  if (c.includes('separador') && (c.includes('óleo')   || c.includes('oleo')))    return 'separador_oleo';
+  if (c.includes('expansão') || c.includes('expansao') || c.includes('vet'))       return 'valvula_expansao';
+  if (c.includes('solenoide'))                                                      return 'valvula_solenoide';
+  if (c.includes('filtro'))                                                         return 'filtro_secador';
+  if (c.includes('visor'))                                                          return 'visor_liquido';
+  return null;
+};
+
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
 const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
@@ -246,6 +258,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       .filter(c => selecionados[c.categoria])
       .map(c => ({
         item: `${c.categoria} ${c.modelo}`,
+        tipo_item: slugPorCategoria(c.categoria),
         quantidade: 1, unidade: 'un',
         detalhe: `${c.fabricante} | ${c.conexao_entrada} | ${c.faixa_operacao}`,
         custo_unitario: c.custo, preco: c.custo,
@@ -254,6 +267,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     if (solenoidResult && solenoidSelecionado) {
       itens.push({
         item: `Válvula Solenoide ${solenoidResult.modelo}`,
+        tipo_item: 'valvula_solenoide',
         quantidade: 1, unidade: 'un',
         detalhe: `Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
         custo_unitario: 0, preco: 0,
@@ -264,6 +278,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       const f = acessorioResult.filtro_secador;
       itens.push({
         item: `Filtro Secador ${f.modelo}`,
+        tipo_item: 'filtro_secador',
         quantidade: 1, unidade: 'un',
         detalhe: `${f.fabricante} | ${f.tipo} | ${f.conexao}`,
         custo_unitario: 0, preco: 0,
@@ -274,6 +289,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       const v = acessorioResult.visor_liquido;
       itens.push({
         item: `Visor de Líquido ${v.modelo}`,
+        tipo_item: 'visor_liquido',
         quantidade: 1, unidade: 'un',
         detalhe: `${v.fabricante} | ${v.conexao} | ${v.tipo}`,
         custo_unitario: 0, preco: 0,
@@ -284,6 +300,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       const t = tanqueResult.tanque;
       itens.push({
         item: `Tanque de Líquido ${t.fabricante} ${t.modelo}`,
+        tipo_item: 'tanque_liquido',
         quantidade: 1, unidade: 'un',
         detalhe: `Vol. total ${t.volume_total_l} L | Vol. útil ${t.volume_util_l} L (NBR 16.069) | ${t.conexao}`,
         custo_unitario: 0, preco: 0,
@@ -294,6 +311,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       cavaleteResult.resumo.forEach(it => {
         itens.push({
           item: it.item,
+          tipo_item: it.tipo_item,
           quantidade: it.quantidade,
           unidade: it.unidade,
           detalhe: it.detalhe || 'Cavalete de montagem',
@@ -306,6 +324,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       const fluido = evaporador?.fluido || condensadora?.fluido || 'Fluido';
       itens.push({
         item: `Carga de Fluido ${fluido}`,
+        tipo_item: 'carga_fluido',
         quantidade: cargaFluido.carga_total_kg,
         unidade: 'kg',
         detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
@@ -322,6 +341,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     [separadorLiqAuto, separadorOleoAuto].filter(Boolean).forEach(sep => {
       itens.push({
         item: `${sep.categoria} ${sep.modelo}`,
+        tipo_item: slugPorCategoria(sep.categoria),
         quantidade: 1, unidade: 'un',
         detalhe: `${sep.fabricante} | ${sep.conexao_entrada} | ${sep.faixa_operacao}`,
         custo_unitario: sep.custo, preco: sep.custo,
@@ -331,6 +351,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       .filter(l => l.modelo.trim() && l.categoria)
       .forEach(l => itens.push({
         item: `${l.categoria} ${l.modelo}`,
+        tipo_item: slugPorCategoria(l.categoria),
         quantidade: 1, unidade: 'un',
         detalhe: [l.fabricante, l.conexao, l.capacidade ? `${l.capacidade} kcal/h` : ''].filter(Boolean).join(' | '),
         custo_unitario: parseFloat(l.custo) || 0,

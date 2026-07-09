@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from './api';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -9,6 +9,7 @@ import CalculadoraCargaTermica from './components/CalculadoraCargaTermica.jsx';
 import SelecaoEquipamentos from './components/SelecaoEquipamentos.jsx';
 import ComponentesFluxo from './components/ComponentesFluxo.jsx';
 import ConfiguracoesPage from './components/ConfiguracoesPage.jsx';
+import ClassificacaoPage from './components/ClassificacaoPage.jsx';
 import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
@@ -62,14 +63,19 @@ function AppContent({ catalogo }) {
   const [mostrandoCotacoes, setMostrandoCotacoes] = useState(false);
   const [triggerGerarProposta, setTriggerGerarProposta] = useState(0);
   const [mostrandoConfiguracoes, setMostrandoConfiguracoes] = useState(false);
+  const [mostrandoClassificacao, setMostrandoClassificacao] = useState(false);
+  const [classificacoes, setClassificacoes] = useState(catalogo.classificacoes);
   const [resumoProjeto, setResumoProjeto] = useState(null); // { projeto, dados } — exibe modal ao carregar
 
   // --- FUNÇÕES DE INTERLIGAÇÃO (PONTES) ---
   const { useCallback, useEffect } = React;
 
-  // Carrega perfil de montagem ativo no boot
-  useEffect(() => {
-    api.get('/api/v1/configuracoes/montagem').then(r => {
+  // Carrega o perfil de montagem ATIVO da API (com os flags incluir_*).
+  // Usado no boot e ao iniciar um projeto novo — assim um projeto novo
+  // sempre respeita o perfil ativo em vez de um default fixo.
+  const carregarPerfilAtivo = useCallback(async () => {
+    try {
+      const r = await api.get('/api/v1/configuracoes/montagem');
       const ativo = r.data.find(p => p.ativo) || r.data[0];
       if (ativo) {
         setConfiguracoesMontagem({
@@ -85,8 +91,11 @@ function AppContent({ catalogo }) {
           incluir_gbc_saida:   ativo.incluir_gbc_saida ?? true,
         });
       }
-    }).catch(() => {});
+    } catch { /* mantém o valor atual em caso de falha */ }
   }, []);
+
+  // Carrega perfil de montagem ativo no boot
+  useEffect(() => { carregarPerfilAtivo(); }, [carregarPerfilAtivo]);
 
   // Reconstrói materiais do orçamento sempre que qualquer fonte muda.
   // Ordem: gabinete (painéis) → acessórios (VET, separador) → tubulação (tubos, isolamento)
@@ -307,11 +316,9 @@ function AppContent({ catalogo }) {
     setInputsTubulacao(null);
     setInputsComponentes(null);
     setInputsOrcamento(null);
-    setConfiguracoesMontagem({
-      tipo_filtro: 'solda', tipo_visor: 'solda',
-      trecho_vet_evap: 0.5, trecho_evap_sifao: 0.5,
-      trecho_subida: 1.0, trecho_sifao_gbc: 0.5,
-    });
+    // Recarrega o perfil de montagem ATIVO (com os flags incluir_*),
+    // em vez de um default fixo que ignorava o perfil e reativava tudo.
+    carregarPerfilAtivo();
     setInvalidados({ 2: false, 3: false, 4: false, 5: false, 6: false });
     setPassoAtual(1);
     setProjetoAtual(null);
@@ -343,6 +350,7 @@ function AppContent({ catalogo }) {
       itens_tubulacao: itensTubulacao,
       resultado_tubulacao: resultadoTubulacao,
       dados_cliente: inputsOrcamento?.dadosCliente ?? null,
+      inputs_orcamento: inputsOrcamento,
       configuracoes: { passo_atual: passoAtual }
     }
   });
@@ -442,7 +450,7 @@ function AppContent({ catalogo }) {
     setInputsEquipamentos(d.inputs_equipamentos || null);
     setInputsTubulacao(d.inputs_tubulacao || null);
     setInputsComponentes(d.inputs_componentes || null);
-    setInputsOrcamento(d.dados_cliente ? { dadosCliente: d.dados_cliente } : null);
+    setInputsOrcamento(d.inputs_orcamento || (d.dados_cliente ? { dadosCliente: d.dados_cliente } : null));
     setInvalidados({ 2: false, 3: false, 4: false, 5: false, 6: false });
 
     // Avança automaticamente para o card mais avançado com dados
@@ -611,6 +619,10 @@ function AppContent({ catalogo }) {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <Settings className="w-4 h-4" /> Configurações
           </div>
+          <div onClick={() => setMostrandoClassificacao(true)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+            <Settings className="w-4 h-4" /> Classificação de Itens
+          </div>
         </nav>
 
         {/* Insights */}
@@ -658,6 +670,13 @@ function AppContent({ catalogo }) {
           />
 
           {/* MODAL CONFIGURAÇÕES DE MONTAGEM */}
+          {mostrandoClassificacao && (
+            <ClassificacaoPage
+              onFechar={() => setMostrandoClassificacao(false)}
+              onAtualizar={setClassificacoes}
+            />
+          )}
+
           {mostrandoConfiguracoes && (
             <ConfiguracoesPage
               onFechar={() => setMostrandoConfiguracoes(false)}
@@ -849,6 +868,7 @@ function AppContent({ catalogo }) {
                 triggerGerarProposta={triggerGerarProposta}
                 onSalvarProjeto={salvarProjeto}
                 onSalvarComo={salvarComo}
+                classificacoes={classificacoes}
                 resumoTecnico={dadosDoGabinete ? {
                   comprimento: dadosDoGabinete.comprimento,
                   largura: dadosDoGabinete.largura,
@@ -905,14 +925,16 @@ function useCatalogo() {
     const carregar = async () => {
       while (!cancelado) {
         try {
-          const [fabricantesRes, portasRes] = await Promise.all([
+          const [fabricantesRes, portasRes, classifRes] = await Promise.all([
             api.get('/api/v1/catalogo/paineis/fabricantes'),
             api.get('/api/v1/catalogo/portas'),
+            api.get('/api/v1/classificacoes'),
           ]);
           if (!cancelado) {
             setCatalogo({
               fabricantes: fabricantesRes.data,
               portasCatalogo: portasRes.data,
+              classificacoes: classifRes.data,
             });
           }
           return; // sucesso — encerra o loop

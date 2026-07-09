@@ -17,6 +17,7 @@ from app.models.proposta import PropostaComercial
 from app.models.configuracao_montagem import ConfiguracaoMontagem
 from app.models.cliente import Cliente
 from app.models.peso_tubo_cobre import PesoTuboCobre
+from app.models.classificacao import BlocoOrcamento, ClassificacaoItem, ItemClassificacao
 
 __all__ = [
     "Base",
@@ -40,4 +41,7 @@ __all__ = [
     "ConfiguracaoMontagem",
     "Cliente",
     "PesoTuboCobre",
+    "BlocoOrcamento",
+    "ClassificacaoItem",
+    "ItemClassificacao",
 ]

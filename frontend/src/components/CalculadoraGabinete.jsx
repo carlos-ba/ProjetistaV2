@@ -149,6 +149,22 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto]);
 
   // ── Sincroniza com pai ────────────────────────────────────────────────
+  // Portas como linhas de material — independentes do cálculo dos painéis
+  const portasMateriais = React.useMemo(() => portasSelecionadas.map(({ porta, qtde }) => ({
+    id:         porta.id,
+    item:       `Porta Frigorífica ${porta.largura_mm}×${porta.altura_mm}mm (${porta.tipo})`,
+    tipo_item:  'porta_frigorifica',
+    quantidade: qtde,
+    unidade:    'un',
+    detalhe:    [
+      porta.classificacao,
+      porta.abertura ? `abertura ${porta.abertura}` : null,
+      porta.batente  ? `batente ${porta.batente}`   : null,
+      porta.soleira  ? 'com soleira'                : 'sem soleira',
+      porta.espessura_mm ? `esp. ${porta.espessura_mm}mm` : null,
+    ].filter(Boolean).join(' | '),
+  })), [portasSelecionadas]);
+
   const dadosParaSincronizar = React.useMemo(() => {
     const base = {
       comprimento: parseFloat(comprimento),
@@ -164,7 +180,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       tipo_piso: tipoPiso,
       imagem_projeto: imagemProjeto,
     };
-    if (!resultado) return base;
+    // Sem cálculo de painéis mas com portas: ainda emite a lista com as portas
+    if (!resultado) {
+      return portasMateriais.length ? { ...base, lista_materiais: [...portasMateriais] } : base;
+    }
     return {
       ...base, ...resultado,
       lista_materiais: [
@@ -177,6 +196,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           return {
             id: null,
             item: i.item,
+            tipo_item: i.tipo_item ?? null,
             quantidade: i.quantidade,
             unidade: 'un',
             comprimento: i.comprimento,
@@ -191,28 +211,17 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           return {
             id: null,
             item: m.item,
+            tipo_item: m.tipo_item ?? null,
             qtd: m.qtd,
             unidade: 'un',
             detalhe: [m.detalhe, especPainel].filter(Boolean).join(' | '),
           };
         }),
         // Portas frigoríficas selecionadas
-        ...portasSelecionadas.map(({ porta, qtde }) => ({
-          id:         porta.id,
-          item:       `Porta Frigorífica ${porta.largura_mm}×${porta.altura_mm}mm (${porta.tipo})`,
-          quantidade: qtde,
-          unidade:    'un',
-          detalhe:    [
-            porta.classificacao,
-            porta.abertura ? `abertura ${porta.abertura}` : null,
-            porta.batente  ? `batente ${porta.batente}`   : null,
-            porta.soleira  ? 'com soleira'                : 'sem soleira',
-            porta.espessura_mm ? `esp. ${porta.espessura_mm}mm` : null,
-          ].filter(Boolean).join(' | '),
-        })),
+        ...portasMateriais,
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasSelecionadas]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasMateriais]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -220,9 +229,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     const validos = comprimento !== '' && largura !== '' && altura !== '' && temperaturaInterna !== '';
     if (!validos) { aoFinalizar(null); return; }
     // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso });
+    const portasKey = portasSelecionadas.map(p => `${p.porta.id}x${p.qtde}`).join(',');
+    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, portas: portasKey });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, portasSelecionadas]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -554,7 +564,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         </div>
 
         {/* Resultados */}
-        {resultado && (
+        {(resultado || portasSelecionadas.length > 0) && (
           <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-l-4 border-indigo-500 pl-3">Materiais Dimensionados</h3>
             <div className="overflow-hidden border border-slate-200 rounded-xl">
@@ -567,14 +577,14 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {resultado.lista_corte.map((item, idx) => (
+                  {(resultado?.lista_corte || []).map((item, idx) => (
                     <tr key={`c-${idx}`} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-700 font-medium">{item.item}</td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.quantidade}</td>
                       <td className="px-4 py-3 text-right text-slate-500">{item.comprimento}m | {item.area_total}m²</td>
                     </tr>
                   ))}
-                  {(resultado.materiais_extras || []).map((item, idx) => (
+                  {(resultado?.materiais_extras || []).map((item, idx) => (
                     <tr key={`e-${idx}`} className="hover:bg-slate-50 bg-slate-50/30">
                       <td className="px-4 py-3 text-slate-700">
                         <div className="font-medium">{item.item}</div>
@@ -582,6 +592,16 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.qtd}</td>
                       <td className="px-4 py-3 text-right text-slate-400 text-xs italic">Material Extra</td>
+                    </tr>
+                  ))}
+                  {portasMateriais.map((p, idx) => (
+                    <tr key={`p-${idx}`} className="hover:bg-slate-50 bg-amber-50/40">
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="font-medium">{p.item}</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">{p.detalhe}</div>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{p.quantidade}</td>
+                      <td className="px-4 py-3 text-right text-amber-500 text-xs italic">Porta Frigorífica</td>
                     </tr>
                   ))}
                 </tbody>

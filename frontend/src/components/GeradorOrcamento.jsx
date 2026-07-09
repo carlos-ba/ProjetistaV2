@@ -4,38 +4,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ModalCotacaoFornecedor from './ModalCotacaoFornecedor';
 
-const agruparItens = (itens) => {
-  const cats = {
-    "Painéis e Isolamento": [],
-    "Equipamentos Principais": [],
-    "Tubulação e Conexões": [],
-    "Componentes de Fluxo": [],
-    "Outros": [],
-  };
-  itens.forEach(l => {
-    if (l.categoria === 'equipamento') { cats["Equipamentos Principais"].push(l); return; }
-    const n = (l.item || '').toLowerCase();
-    if (n.includes('painéi') || n.includes('painel') || n.includes('isolamento') ||
-        n.includes('piso') || n.includes('placa') || n.includes('porta') ||
-        n.includes('acessório') || n.includes('acessorio') || n.includes('teto') || n.includes('parede'))
-      cats["Painéis e Isolamento"].push(l);
-    else if (n.includes('condensadora') || n.includes('evaporador') || n.includes('compressor') || n.includes('(eq)'))
-      cats["Equipamentos Principais"].push(l);
-    else if (n.includes('tubo') || n.includes('solda') || n.includes('armacel') ||
-             n.includes('luva') || n.includes('porca') || n.includes('sif') ||
-             n.includes('contra-sif'))
-      cats["Tubulação e Conexões"].push(l);
-    else if (n.includes('válvula') || n.includes('valvula') || n.includes('filtro') ||
-             n.includes('separador') || n.includes('visor') || n.includes('pressostato') ||
-             n.includes('tanque') || n.includes('fluido') || n.includes('carga de'))
-      cats["Componentes de Fluxo"].push(l);
-    else cats["Outros"].push(l);
-  });
-  return cats;
-};
-
 // ── Linha de complemento em branco ───────────────────────────────────────
-const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '' });
+const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '', classificacao_id: null });
 
 const norm = (s) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
@@ -50,9 +20,51 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
+
+  // ── Resolução de classificação (via banco) ────────────────────────────
+  // Constrói índices a partir da árvore carregada no App: mapa tipo_item→classificação,
+  // classificação→bloco. Fonte única para a lista E para os blocos financeiros.
+  const classIndex = React.useMemo(() => {
+    const blocos = classificacoes?.blocos || [];
+    const classes = classificacoes?.classificacoes || [];
+    const mapa = classificacoes?.mapa || {};
+    const blocoPorId = Object.fromEntries(blocos.map(b => [b.id, b]));
+    const classePorId = Object.fromEntries(classes.map(c => [c.id, c]));
+    const ordemBloco = Object.fromEntries(blocos.map(b => [b.nome, b.ordem]));
+    // Nome do bloco (nível 1) a partir de um item do orçamento
+    const blocoDoItem = (item) => {
+      // Complemento com classificação escolhida à mão
+      let clsId = item?.classificacao_id ?? mapa[item?.tipo_item];
+      if (clsId == null) return 'Outros';
+      const cls = classePorId[clsId];
+      if (!cls) return 'Outros';
+      return blocoPorId[cls.bloco_id]?.nome || 'Outros';
+    };
+    const nomesBlocosOrdenados = [...blocos].sort((a, b) => a.ordem - b.ordem).map(b => b.nome);
+    // Opções para o seletor de complemento: "Bloco › Classificação", ordenadas
+    const opcoes = [...classes]
+      .sort((a, b) => (blocoPorId[a.bloco_id]?.ordem ?? 999) - (blocoPorId[b.bloco_id]?.ordem ?? 999) || a.ordem - b.ordem)
+      .map(c => ({ id: c.id, label: `${blocoPorId[c.bloco_id]?.nome || '—'} › ${c.nome}` }));
+    return { blocos, classes, mapa, blocoDoItem, ordemBloco, nomesBlocosOrdenados, classePorId, blocoPorId, opcoes };
+  }, [classificacoes]);
+
+  // Agrupa itens do orçamento por bloco (nível 1), na ordem definida no banco
+  const agruparPorBloco = React.useCallback((itens) => {
+    const grupos = {};
+    (itens || []).forEach(l => {
+      const bloco = classIndex.blocoDoItem(l);
+      (grupos[bloco] = grupos[bloco] || []).push(l);
+    });
+    // ordena as chaves pela ordem do bloco
+    return Object.fromEntries(
+      Object.entries(grupos).sort(
+        ([a], [b]) => (classIndex.ordemBloco[a] ?? 999) - (classIndex.ordemBloco[b] ?? 999)
+      )
+    );
+  }, [classIndex]);
 
   // ── Checkboxes para aprovar/desmarcar itens ───────────────────────────
   const [materiaisAtivos,     setMateriaisAtivos]     = useState({});
@@ -87,17 +99,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [modoNovoCliente, setModoNovoCliente] = useState(false);
 
   // ── Configurações da proposta ─────────────────────────────────────────
-  const [incluirResumoTecnico,   setIncluirResumoTecnico]   = useState(true);
-  const [incluirEquipamentos,    setIncluirEquipamentos]    = useState(true);
-  const [modoFaturamento,        setModoFaturamento]        = useState('empreitada'); // 'empreitada' | 'venda_direta'
-  const [custos, setCustos] = useState({ mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
-  const [margem,         setMargem]         = useState(25);
-  const [imposto,        setImposto]        = useState(6);
-  const [apresentacao,     setApresentacao]     = useState('blocos'); // 'blocos' | 'global'
-  const [exibicaoMateriais, setExibicaoMateriais] = useState('itemizado'); // 'itemizado' | 'resumo' | 'sem_preco' (só venda_direta)
-  const [moSeparada,     setMoSeparada]     = useState(false);
-  const [resumoObjeto,   setResumoObjeto]   = useState('Fornecimento e instalação de câmara frigorífica completa, conforme dimensionamento técnico.');
-  const [cond,           setCond]           = useState(CONDICOES_PADRAO);
+  const iv = initialValues || {};
+  const [incluirResumoTecnico,   setIncluirResumoTecnico]   = useState(iv.incluirResumoTecnico ?? true);
+  const [modoFaturamento,        setModoFaturamento]        = useState(iv.modoFaturamento ?? 'empreitada'); // 'empreitada' | 'venda_direta'
+  const [custos, setCustos] = useState(iv.custos ?? { mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
+  const [margemMateriais, setMargemMateriais] = useState(iv.margemMateriais ?? 25);
+  const [margemServicos,  setMargemServicos]  = useState(iv.margemServicos ?? 25);
+  const [imposto,        setImposto]        = useState(iv.imposto ?? 6);
+  const [apresentacao,     setApresentacao]     = useState(iv.apresentacao ?? 'blocos'); // 'blocos' | 'global'
+  const [exibicaoMateriais, setExibicaoMateriais] = useState(iv.exibicaoMateriais ?? 'itemizado'); // 'itemizado' | 'resumo' | 'sem_preco' (só venda_direta)
+  const [listaEmpreitada,   setListaEmpreitada]   = useState(iv.listaEmpreitada ?? 'completa'); // 'completa' | 'totais' (só empreitada)
+  const [moSeparada,     setMoSeparada]     = useState(iv.moSeparada ?? false);
+  const [resumoObjeto,   setResumoObjeto]   = useState(iv.resumoObjeto ?? 'Fornecimento e instalação de câmara frigorífica completa, conforme dimensionamento técnico.');
+  const [cond,           setCond]           = useState(iv.cond ?? CONDICOES_PADRAO);
 
   // Auto-aprovação quando chamado a partir do PainelCotacoes
   useEffect(() => {
@@ -132,8 +146,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const complementosPreenchidos = complementos.filter(c => c.descricao.trim());
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ dadosCliente });
-  }, [dadosCliente]);
+    if (onValoresChange) onValoresChange({
+      dadosCliente,
+      incluirResumoTecnico,
+      modoFaturamento, custos, margemMateriais, margemServicos, imposto,
+      apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
+    });
+  }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
+      custos, margemMateriais, margemServicos, imposto, apresentacao,
+      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -241,6 +262,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           qtde: parseFloat(m.quantidade ?? m.qtd ?? 1) || 1,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : null].filter(Boolean).join(' — '),
           preco_unitario: precoManual ?? buscarPreco(descricao),
+          tipo_item: m.tipo_item ?? null,
         };
       }),
       equipamentos: equipamentosAprovados.map(e => {
@@ -252,6 +274,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           detalhe: e.detalhe || '',
           preco_unitario: precoManual ?? buscarPreco(descricao),
           categoria: 'equipamento',
+          tipo_item: e.tipo_item ?? null,
         };
       }),
     };
@@ -350,44 +373,54 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     const custo_materiais = (orcamento?.custo_total_projeto_rs || 0) + totalComplementos;
     const n = (v) => parseFloat(v) || 0;
     const custo_servicos = n(custos.mo_paineis) + n(custos.mo_refrigeracao) + n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
-    const taxa = (parseFloat(margem) || 0) + (parseFloat(imposto) || 0);
-    const fator = taxa < 99 ? 1 / (1 - taxa / 100) : 1;
+    const mkFator = (margemPct) => {
+      const taxa = (parseFloat(margemPct) || 0) + (parseFloat(imposto) || 0);
+      return taxa < 99 ? 1 / (1 - taxa / 100) : 1;
+    };
+    const fatorMateriais = mkFator(margemMateriais);
+    const fatorServicos  = mkFator(margemServicos);
+    const fator = fatorServicos; // usado nos blocos de serviço
 
     let preco_venda, preco_materiais_cliente, preco_servicos_cliente;
     if (modoFaturamento === 'venda_direta') {
-      preco_servicos_cliente = custo_servicos * fator;
+      // Fornecedor fatura direto ao cliente: materiais a custo de cotação, sem margem
+      preco_servicos_cliente = custo_servicos * fatorServicos;
       preco_materiais_cliente = custo_materiais;
       preco_venda = preco_materiais_cliente + preco_servicos_cliente;
     } else {
-      const custo_total = custo_materiais + custo_servicos;
-      preco_venda = custo_total * fator;
-      preco_servicos_cliente = custo_servicos * fator;
-      preco_materiais_cliente = preco_venda - preco_servicos_cliente;
+      preco_materiais_cliente = custo_materiais * fatorMateriais;
+      preco_servicos_cliente = custo_servicos * fatorServicos;
+      preco_venda = preco_materiais_cliente + preco_servicos_cliente;
     }
 
-    // Blocos de material para apresentação
+    // Blocos de material para apresentação — classificação via banco (tipo_item → bloco)
     const blocosMatMap = {};
     (orcamento?.detalhamento_itens || []).forEach(l => {
-      const nome = (l.item || '').toLowerCase();
-      const ehPainel = l.categoria !== 'equipamento' && (
-        nome.includes('painéi') || nome.includes('painel') || nome.includes('isolamento') ||
-        nome.includes('piso')   || nome.includes('placa')  || nome.includes('porta')       ||
-        nome.includes('acessório') || nome.includes('acessorio') ||
-        nome.includes('teto')   || nome.includes('parede')
-      );
-      const bloco = ehPainel ? 'Painéis, estrutura e materiais' : 'Sistema de refrigeração';
+      const bloco = classIndex.blocoDoItem(l);
       blocosMatMap[bloco] = (blocosMatMap[bloco] || 0) + (l.custo_total_rs || 0);
     });
-    if (totalComplementos > 0) blocosMatMap['Painéis, estrutura e materiais'] = (blocosMatMap['Painéis, estrutura e materiais'] || 0) + totalComplementos;
-    const blocosCliente = Object.entries(blocosMatMap).map(([nome, custo]) => ({
-      nome,
-      valor: modoFaturamento === 'venda_direta' ? custo : custo * fator,
-    }));
+    // Complementos: cada um vai para o bloco da classificação escolhida (default "Outros")
+    complementosPreenchidos.forEach(c => {
+      const custo = (parseFloat(c.preco_unit) || 0) * (parseFloat(c.qtde) || 1);
+      if (custo <= 0) return;
+      const bloco = classIndex.blocoDoItem({ classificacao_id: c.classificacao_id });
+      blocosMatMap[bloco] = (blocosMatMap[bloco] || 0) + custo;
+    });
+    const blocosCliente = Object.entries(blocosMatMap)
+      .sort(([a], [b]) => (classIndex.ordemBloco[a] ?? 999) - (classIndex.ordemBloco[b] ?? 999))
+      .map(([nome, custo]) => ({
+        nome,
+        valor: modoFaturamento === 'venda_direta' ? custo : custo * fatorMateriais,
+      }));
 
     const mo_p = n(custos.mo_paineis), mo_r = n(custos.mo_refrigeracao);
     const overhead = n(custos.locomocao) + n(custos.despesas) + n(custos.outros);
     let blocosServicos;
-    if (moSeparada) {
+    // No faturamento direto (exceto resumo global), "Por blocos" já quebra os serviços.
+    // No resumo global, quem controla a quebra é apenas o toggle "MO separada".
+    const quebrarServicos = moSeparada ||
+      (modoFaturamento === 'venda_direta' && exibicaoMateriais !== 'resumo' && apresentacao === 'blocos');
+    if (quebrarServicos) {
       blocosServicos = [
         mo_p   > 0 ? { nome: 'Mão de obra — montagem de painéis',                       valor: mo_p   * fator } : null,
         mo_r   > 0 ? { nome: 'Mão de obra — montagem de refrigeração e comissionamento', valor: mo_r   * fator } : null,
@@ -398,6 +431,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     } else {
       blocosServicos = [{ nome: 'Instalação, mobilização e comissionamento', valor: preco_servicos_cliente }];
     }
+    const blocosMateriais = [...blocosCliente];
     blocosCliente.push(...blocosServicos);
 
     const custo_total = custo_materiais + custo_servicos;
@@ -406,7 +440,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     const impostos_valor = faturamento_proprio * ((parseFloat(imposto) || 0) / 100);
     const lucro_liquido = faturamento_proprio - custo_proprio - impostos_valor;
 
-    return { custo_materiais, custo_servicos, custo_total, preco_venda, preco_materiais_cliente, preco_servicos_cliente, faturamento_proprio, impostos_valor, lucro_liquido, blocosCliente, blocosServicos };
+    return { custo_materiais, custo_servicos, custo_total, preco_venda, preco_materiais_cliente, preco_servicos_cliente, faturamento_proprio, impostos_valor, lucro_liquido, blocosCliente, blocosServicos, blocosMateriais, fatorMateriais };
   };
 
   const cf = calcFinanceiro();
@@ -539,20 +573,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       }
 
       // ── Lista de itens ────────────────────────────────────────────────
-      if (incluirEquipamentos) {
-        const modoResumo = modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo';
-        if (modoResumo) {
-          checar(18);
-          pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
-          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
-          txt('MATERIAIS', ML, y); pdf.setTextColor(0); y += 5;
-          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-          txt('Conjunto de materiais de refrigeração', ML, y);
-          pdf.setTextColor(150); pdf.setFont('helvetica', 'italic');
-          txt('Faturamento direto ao fornecedor', MR, y, { align: 'right' });
-          pdf.setTextColor(0); y += 8;
-        } else {
-        const grupos = Object.entries(agruparItens(orcamento.detalhamento_itens)).filter(([, it]) => it.length > 0);
+      {
+        // Lista omitida no resumo global do fat. direto e no "somente totais" da empreitada;
+        // na empreitada os itens saem com preço de venda (markup), nunca com custo
+        const modoResumo = (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo')
+          || (modoFaturamento === 'empreitada' && listaEmpreitada === 'totais');
+        if (!modoResumo) {
+        if (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'itemizado') {
+          checar(10);
+          pdf.setFontSize(7); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150, 100, 20);
+          wrap('Faturamento direto: os materiais e equipamentos abaixo serão faturados diretamente pelo fornecedor ao cliente, pelos valores de cotação, sem margem.', ML, y, CW);
+          pdf.setTextColor(0); y += 9;
+        }
+        const grupos = Object.entries(agruparPorBloco(orcamento.detalhamento_itens)).filter(([, it]) => it.length > 0);
         grupos.forEach(([cat, itens]) => {
           checar(14);
           pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
@@ -568,9 +601,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             if (l.detalhe) { checar(4); pdf.text(pdf.splitTextToSize(l.detalhe, CW - 55), ML, y + nL.length * 4); }
             pdf.setFontSize(8); pdf.setTextColor(0);
             txt(`${l.quantidade} ${l.unidade}`, MR - 25, y, { align: 'right' });
-            if (modoFaturamento !== 'venda_direta') {
+            if (modoFaturamento === 'venda_direta') {
+              if (exibicaoMateriais === 'itemizado') {
+                pdf.setFont('helvetica', 'bold');
+                txt(`R$ ${fmt(l.custo_total_rs ?? 0)}`, MR, y, { align: 'right' });
+              }
+            } else {
               pdf.setFont('helvetica', 'bold');
-              txt(`R$ ${fmt(l.custo_total_rs ?? 0)}`, MR, y, { align: 'right' });
+              txt(`R$ ${fmt((l.custo_total_rs ?? 0) * cf.fatorMateriais)}`, MR, y, { align: 'right' });
             }
             y += (nL.length + (l.detalhe ? 1 : 0)) * 4 + 2;
           });
@@ -588,7 +626,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
             txt(c.descricao, ML, y);
             txt(`${c.qtde} ${c.unidade}`, MR - 25, y, { align: 'right' });
-            if (c.preco_unit) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde))}`, MR, y, { align: 'right' }); }
+            if (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco') { /* sem valor */ }
+            else if (c.preco_unit) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
             else { pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt('A cotação', MR, y, { align: 'right' }); pdf.setTextColor(0); }
             y += 6;
           });
@@ -601,18 +640,26 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
       txt('INVESTIMENTO', ML, y); pdf.setTextColor(0); y += 5;
 
-      if (apresentacao === 'blocos') {
-        const isServico = b => b.nome.includes('Mão de obra') || b.nome.includes('Instalação') || b.nome.includes('Deslocamento');
-        const blocos = (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco')
-          ? cf.blocosCliente.filter(isServico)
-          : cf.blocosCliente;
-        blocos.forEach(b => {
-          checar(7);
-          pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); txt(b.nome, ML, y);
-          if (modoFaturamento === 'venda_direta' && !isServico(b)) { pdf.setTextColor(150); pdf.setFont('helvetica', 'italic'); txt('Dir. fornecedor', MR, y, { align: 'right' }); pdf.setTextColor(0); }
-          else { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(b.valor)}`, MR, y, { align: 'right' }); }
-          y += 6;
-        });
+      const linhaInv = (nome, valor, nota) => {
+        checar(nota ? 10 : 7);
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); txt(nome, ML, y);
+        pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(valor)}`, MR, y, { align: 'right' });
+        if (nota) { pdf.setFontSize(6); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt(nota, ML, y + 3.5); pdf.setTextColor(0); y += 3.5; }
+        y += 6;
+      };
+      if (modoFaturamento === 'venda_direta') {
+        if (exibicaoMateriais === 'resumo') {
+          linhaInv('Cj. materiais de refrigeração e isolamento', cf.custo_materiais, 'Faturamento direto ao fornecedor');
+        } else if (exibicaoMateriais === 'itemizado') {
+          cf.blocosMateriais.forEach(b => linhaInv(b.nome, b.valor, 'Faturamento direto ao fornecedor — valor de cotação'));
+        }
+        if (exibicaoMateriais === 'resumo' || apresentacao === 'blocos') {
+          cf.blocosServicos.forEach(b => linhaInv(b.nome, b.valor));
+        } else {
+          linhaInv('Instalação, mobilização e comissionamento', cf.preco_servicos_cliente);
+        }
+      } else if (apresentacao === 'blocos') {
+        cf.blocosCliente.forEach(b => linhaInv(b.nome, b.valor));
       } else {
         checar(12);
         pdf.setFillColor(241, 245, 249); pdf.rect(ML, y - 3, CW, 12, 'F');
@@ -628,13 +675,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       y += 6;
       pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
       const notaTotal = modoFaturamento === 'venda_direta'
-        ? '* Materiais faturados diretamente pelo fornecedor. Valor refere-se aos serviços.'
+        ? (exibicaoMateriais === 'sem_preco'
+            ? '* Materiais faturados diretamente pelo fornecedor. Valor refere-se aos serviços.'
+            : '* Materiais faturados diretamente pelo fornecedor ao cliente, pelos valores de cotação, sem margem. Serviços faturados pelo instalador.')
         : `* Proposta válida até ${valData}. Preços sujeitos a alteração após este prazo.`;
       wrap(notaTotal, ML, y, CW - 50);
       pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
       txt('INVESTIMENTO TOTAL', MR, y, { align: 'right' });
       pdf.setFontSize(16); pdf.setTextColor(67, 56, 202);
-      txt(`R$ ${fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}`, MR, y + 8, { align: 'right' });
+      txt(`R$ ${fmt(modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco' ? cf.preco_servicos_cliente : cf.preco_venda)}`, MR, y + 8, { align: 'right' });
       pdf.setTextColor(0); y += 20;
 
       // ── Condições comerciais + Aceite — sempre numa página nova ─────
@@ -972,8 +1021,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     <input
                       value={c.descricao} onChange={e => updateComplemento(i, 'descricao', e.target.value)}
                       placeholder="Descrição do item..."
-                      className="col-span-5 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                      className="col-span-4 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
                     />
+                    <select
+                      value={c.classificacao_id ?? ''}
+                      onChange={e => updateComplemento(i, 'classificacao_id', e.target.value ? parseInt(e.target.value) : null)}
+                      className="col-span-3 px-2 py-2 rounded-lg border border-slate-300 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-400"
+                      title="Classificação (define o bloco no orçamento)"
+                    >
+                      <option value="">Outros / a classificar</option>
+                      {classIndex.opcoes.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    </select>
                     <input
                       type="number" min="1" value={c.qtde} onChange={e => updateComplemento(i, 'qtde', e.target.value)}
                       className="col-span-1 px-2 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none"
@@ -981,14 +1039,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     <input
                       value={c.unidade} onChange={e => updateComplemento(i, 'unidade', e.target.value)}
                       placeholder="un"
-                      className="col-span-2 px-2 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none"
+                      className="col-span-1 px-1 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none"
                     />
-                    <div className="col-span-3 relative">
-                      <span className="absolute left-3 top-2 text-slate-400 text-sm">R$</span>
+                    <div className="col-span-2 relative">
+                      <span className="absolute left-2 top-2 text-slate-400 text-xs">R$</span>
                       <input
                         type="number" min="0" step="0.01" value={c.preco_unit} onChange={e => updateComplemento(i, 'preco_unit', e.target.value)}
                         placeholder="0,00"
-                        className="w-full pl-8 pr-2 py-2 rounded-lg border border-slate-300 text-sm outline-none"
+                        className="w-full pl-7 pr-1 py-2 rounded-lg border border-slate-300 text-sm outline-none"
                       />
                     </div>
                     <button onClick={() => complementos.length > 1 ? removerComplemento(i) : updateComplemento(i, 'descricao', '')}
@@ -1103,12 +1161,30 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Como apresentar os materiais na proposta</p>
                 <div className="space-y-2">
                   {[
-                    { v: 'itemizado', label: 'Lista completa', desc: 'Exibe todos os itens com quantidade — valor indicado como "Dir. fornecedor"' },
-                    { v: 'resumo',    label: 'Resumo global',  desc: 'Substitui a lista por uma linha: "Conjunto de materiais de refrigeração"' },
-                    { v: 'sem_preco', label: 'Descritivo sem preço', desc: 'Lista os itens sem valores; investimento apresenta apenas os serviços' },
+                    { v: 'itemizado', label: 'Lista completa', desc: 'Itens com qtde e valores de cotação (sem margem) + lembrete de faturamento direto' },
+                    { v: 'resumo',    label: 'Resumo global',  desc: 'Uma linha "Cj. materiais" com o valor total de cotação + serviços' },
+                    { v: 'sem_preco', label: 'Descritivo sem preço', desc: 'Itens e quantidades sem nenhum valor; investimento mostra só os serviços' },
                   ].map(opt => (
                     <label key={opt.v} className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer text-xs transition-all ${exibicaoMateriais === opt.v ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
                       <input type="radio" checked={exibicaoMateriais === opt.v} onChange={() => setExibicaoMateriais(opt.v)} className="accent-amber-600 mt-0.5" />
+                      <span><b>{opt.label}</b><br /><span className="text-slate-500">{opt.desc}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Lista de materiais na empreitada */}
+            {modoFaturamento === 'empreitada' && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Como apresentar os materiais na proposta</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { v: 'completa', label: 'Lista completa', desc: 'Exibe todos os itens com preço de venda (markup aplicado)' },
+                    { v: 'totais',   label: 'Somente totais', desc: 'Omite a lista de itens; mostra apenas os valores de investimento' },
+                  ].map(opt => (
+                    <label key={opt.v} className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer text-xs transition-all ${listaEmpreitada === opt.v ? 'bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200'}`}>
+                      <input type="radio" checked={listaEmpreitada === opt.v} onChange={() => setListaEmpreitada(opt.v)} className="accent-indigo-600 mt-0.5" />
                       <span><b>{opt.label}</b><br /><span className="text-slate-500">{opt.desc}</span></span>
                     </label>
                   ))}
@@ -1146,11 +1222,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             </div>
 
             {/* Margem, impostos, apresentação */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-500 uppercase">Margem (%)</label>
-                <input type="number" min="0" max="98" step="0.5" value={margem}
-                  onChange={e => setMargem(e.target.value)}
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Margem Materiais (%)</label>
+                <input type="number" min="0" max="98" step="0.5" value={margemMateriais}
+                  onChange={e => setMargemMateriais(e.target.value)}
+                  disabled={modoFaturamento === 'venda_direta'}
+                  title={modoFaturamento === 'venda_direta' ? 'No faturamento direto os materiais vão a custo de cotação, sem margem' : ''}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-100 disabled:text-slate-400" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Margem Serviços (%)</label>
+                <input type="number" min="0" max="98" step="0.5" value={margemServicos}
+                  onChange={e => setMargemServicos(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div className="space-y-1">
@@ -1161,14 +1245,20 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
               <div className="space-y-1 col-span-2">
                 <label className="text-[9px] font-bold text-slate-500 uppercase">Apresentação dos valores</label>
-                <div className="flex gap-2">
-                  {[{ v: 'blocos', l: 'Por blocos' }, { v: 'global', l: 'Valor global' }].map(o => (
-                    <label key={o.v} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs flex-1 justify-center transition-all ${apresentacao === o.v ? 'bg-indigo-50 border-indigo-300 font-bold text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-                      <input type="radio" checked={apresentacao === o.v} onChange={() => setApresentacao(o.v)} className="accent-indigo-600" />
-                      {o.l}
-                    </label>
-                  ))}
-                </div>
+                {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo' ? (
+                  <p className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    No resumo global a apresentação é fixa: conjunto de materiais + serviços + total.
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    {[{ v: 'blocos', l: 'Por blocos' }, { v: 'global', l: 'Valor global' }].map(o => (
+                      <label key={o.v} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs flex-1 justify-center transition-all ${apresentacao === o.v ? 'bg-indigo-50 border-indigo-300 font-bold text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                        <input type="radio" checked={apresentacao === o.v} onChange={() => setApresentacao(o.v)} className="accent-indigo-600" />
+                        {o.l}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1214,10 +1304,6 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     Incluir resumo técnico
                   </label>
                 )}
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
-                  <input type="checkbox" checked={incluirEquipamentos} onChange={e => setIncluirEquipamentos(e.target.checked)} className="accent-indigo-600" />
-                  Incluir lista detalhada de equipamentos e materiais
-                </label>
               </div>
             </div>
           </div>
@@ -1402,7 +1488,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">🔒 Resumo Financeiro Interno</h4>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-bold uppercase">
-              {modoFaturamento === 'venda_direta' ? 'Faturamento direto' : 'Empreitada'} · Margem {margem}% · Imposto {imposto}%
+              {modoFaturamento === 'venda_direta'
+                ? `Faturamento direto · Margem serviços ${margemServicos}% · Imposto ${imposto}%`
+                : `Empreitada · Margem mat. ${margemMateriais}% · serv. ${margemServicos}% · Imposto ${imposto}%`}
             </span>
           </div>
 
@@ -1428,7 +1516,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   <span className="text-yellow-300 font-black tabular-nums">R$ {fmt(cf.custo_servicos)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">× fator markup (1 / (1 − {margem}% − {imposto}%))</span>
+                  <span className="text-slate-400">× fator markup (1 / (1 − {margemServicos}% − {imposto}%))</span>
                   <span className="text-green-300 font-black tabular-nums">R$ {fmt(cf.preco_servicos_cliente)}</span>
                 </div>
               </div>
@@ -1594,10 +1682,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             )}
 
-            {/* Lista detalhada de itens */}
-            {incluirEquipamentos && (
+            {/* Lista detalhada de itens (omitida no resumo global do fat. direto e no "somente totais" da empreitada) */}
+            {!(modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo')
+              && !(modoFaturamento === 'empreitada' && listaEmpreitada === 'totais') && (
               <>
-                {Object.entries(agruparItens(orcamento.detalhamento_itens)).map(([cat, itens]) =>
+                {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'itemizado' && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                    <b>Faturamento direto:</b> os materiais e equipamentos abaixo serão faturados
+                    diretamente pelo fornecedor ao cliente, pelos valores de cotação, sem margem.
+                  </div>
+                )}
+                {Object.entries(agruparPorBloco(orcamento.detalhamento_itens)).map(([cat, itens]) =>
                   itens.length > 0 && (
                     <div key={cat}>
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">{cat}</h4>
@@ -1611,8 +1706,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                             <div className="w-24 text-center text-sm text-slate-600 font-medium">{l.quantidade} {l.unidade}</div>
                             <div className="w-32 text-right font-black text-slate-900 text-sm">
                               {modoFaturamento === 'venda_direta'
-                                ? <span className="text-slate-400 font-normal italic text-xs">Dir. fornecedor</span>
-                                : `R$ ${fmt(l.custo_total_rs ?? 0)}`}
+                                ? (exibicaoMateriais === 'sem_preco' ? null : `R$ ${fmt(l.custo_total_rs ?? 0)}`)
+                                : `R$ ${fmt((l.custo_total_rs ?? 0) * cf.fatorMateriais)}`}
                             </div>
                           </div>
                         ))}
@@ -1629,9 +1724,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                           <div className="flex-1 font-bold text-slate-800 text-sm">{c.descricao}</div>
                           <div className="w-24 text-center text-sm text-slate-600 font-medium">{c.qtde} {c.unidade}</div>
                           <div className="w-32 text-right font-black text-slate-900 text-sm">
-                            {c.preco_unit
-                              ? `R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde))}`
-                              : <span className="text-slate-400 font-normal italic text-xs">A cotação</span>}
+                            {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco'
+                              ? null
+                              : c.preco_unit
+                                ? `R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`
+                                : <span className="text-slate-400 font-normal italic text-xs">A cotação</span>}
                           </div>
                         </div>
                       ))}
@@ -1644,16 +1741,46 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             {/* Bloco de investimento */}
             <div>
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">Investimento</h4>
-              {apresentacao === 'blocos' ? (
+              {modoFaturamento === 'venda_direta' ? (
+                <div className="space-y-3">
+                  {exibicaoMateriais === 'resumo' && (
+                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">Cj. materiais de refrigeração e isolamento</p>
+                        <p className="text-[10px] text-slate-400">Faturamento direto ao fornecedor</p>
+                      </div>
+                      <p className="font-black text-slate-900">R$ {fmt(cf.custo_materiais)}</p>
+                    </div>
+                  )}
+                  {exibicaoMateriais === 'itemizado' && cf.blocosMateriais.map((b, i) => (
+                    <div key={`m${i}`} className="flex justify-between items-center py-2 border-b border-slate-50">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
+                        <p className="text-[10px] text-slate-400">Faturamento direto ao fornecedor — valor de cotação</p>
+                      </div>
+                      <p className="font-black text-slate-900">R$ {fmt(b.valor)}</p>
+                    </div>
+                  ))}
+                  {(exibicaoMateriais === 'resumo' || apresentacao === 'blocos') ? (
+                    cf.blocosServicos.map((b, i) => (
+                      <div key={`s${i}`} className="flex justify-between items-center py-2 border-b border-slate-50">
+                        <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
+                        <p className="font-black text-slate-900">R$ {fmt(b.valor)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                      <p className="font-bold text-slate-800 text-sm">Instalação, mobilização e comissionamento</p>
+                      <p className="font-black text-slate-900">R$ {fmt(cf.preco_servicos_cliente)}</p>
+                    </div>
+                  )}
+                </div>
+              ) : apresentacao === 'blocos' ? (
                 <div className="space-y-3">
                   {cf.blocosCliente.map((b, i) => (
                     <div key={i} className="flex justify-between items-center py-2 border-b border-slate-50">
                       <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
-                      <p className="font-black text-slate-900">
-                        {modoFaturamento === 'venda_direta' && b.nome !== 'Instalação, mobilização e comissionamento' && !b.nome.includes('Mão de obra')
-                          ? <span className="text-slate-400 font-normal italic text-sm">Dir. fornecedor</span>
-                          : `R$ ${fmt(b.valor)}`}
-                      </p>
+                      <p className="font-black text-slate-900">R$ {fmt(b.valor)}</p>
                     </div>
                   ))}
                 </div>
@@ -1672,14 +1799,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <div className="pt-6 border-t-4 border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6">
               <p className="text-slate-400 text-xs max-w-xs leading-relaxed print:text-[8px]">
                 {modoFaturamento === 'venda_direta'
-                  ? '* Materiais e equipamentos serão faturados diretamente pelo fornecedor ao cliente. O valor indicado refere-se aos serviços de instalação.'
+                  ? (exibicaoMateriais === 'sem_preco'
+                      ? '* Materiais e equipamentos serão faturados diretamente pelo fornecedor ao cliente. O valor indicado refere-se aos serviços de instalação.'
+                      : '* Materiais e equipamentos faturados diretamente pelo fornecedor ao cliente, pelos valores de cotação, sem margem. Serviços de instalação faturados pelo instalador.')
                   : `* Proposta válida até ${new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR')}. Preços sujeitos a alteração após este prazo.`}
                 {modoFaturamento !== 'venda_direta' && complementosPreenchidos.some(c => !c.preco_unit) && ' Itens "a cotação" não incluídos no total.'}
               </p>
               <div className="text-right">
                 <div className="text-slate-500 text-sm font-bold uppercase">Investimento Total</div>
                 <div className="text-4xl font-black text-indigo-600">
-                  R$ {fmt(modoFaturamento === 'venda_direta' ? cf.preco_servicos_cliente : cf.preco_venda)}
+                  R$ {fmt(modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco' ? cf.preco_servicos_cliente : cf.preco_venda)}
                 </div>
               </div>
             </div>

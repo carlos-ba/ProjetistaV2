@@ -23,6 +23,7 @@ class ItemTubulacao(BaseModel):
     detalhe: str
     quantidade_kg: Optional[float] = None   # peso total em kg (só para tubos de cobre)
     peso_por_metro: Optional[float] = None  # kg/m da bitola+parede selecionada
+    tipo_item: Optional[str] = None
 
 
 class TubulacaoResponse(BaseModel):
