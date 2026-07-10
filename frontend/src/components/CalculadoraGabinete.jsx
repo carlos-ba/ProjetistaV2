@@ -49,6 +49,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // ── Portas frigoríficas ───────────────────────────────────────────────
   const [portasSelecionadas, setPortasSelecionadas] = useState(initialValues?.portasSelecionadas ?? []);
 
+  // ── Modo de compra dos painéis ────────────────────────────────────────
+  // 'fabricante' = sob medida (comprimento exato, preço un/m²)
+  // 'revenda'    = barras de comprimento fixo (padrão 12.000mm), técnico corta na obra
+  const [modoCompra, setModoCompra] = useState(initialValues?.modoCompra ?? 'fabricante');
+  const [comprimentoBarra, setComprimentoBarra] = useState(initialValues?.comprimentoBarra ?? 12000);
+
   const [resultado, setResultado] = useState(initialValues?.resultado ?? null);
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
@@ -57,11 +63,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (onValoresChange) onValoresChange({
       comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
-      portasSelecionadas, resultado,
+      portasSelecionadas, resultado, modoCompra, comprimentoBarra,
     });
   }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
-      portasSelecionadas, resultado]);
+      portasSelecionadas, resultado, modoCompra, comprimentoBarra]);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -165,6 +171,51 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     ].filter(Boolean).join(' | '),
   })), [portasSelecionadas]);
 
+  // ── Planejador de corte (modo Revenda) ────────────────────────────────
+  // Empacota TODAS as peças de painel (parede+teto+piso, mesmo produto) em
+  // barras de comprimento fixo, minimizando o nº de barras (First-Fit-Decreasing).
+  const planoCorte = React.useMemo(() => {
+    if (!resultado?.lista_corte?.length) return null;
+    const barraM = (parseFloat(comprimentoBarra) || 12000) / 1000;
+    // largura do painel em metros (do painel selecionado ou derivada de uma peça)
+    let larguraM = painelSelecionado ? painelSelecionado.largura_mm / 1000 : null;
+    if (!larguraM) {
+      const p0 = resultado.lista_corte[0];
+      larguraM = (p0.quantidade && p0.comprimento) ? p0.area_total / (p0.quantidade * p0.comprimento) : 1.16;
+    }
+    // expande em peças individuais {comprimento, origem}
+    const pecas = [];
+    resultado.lista_corte.forEach(i => {
+      const origem = i.item.replace('Painéis de ', '').replace('Painéis ', '');
+      for (let k = 0; k < i.quantidade; k++) pecas.push({ comprimento: i.comprimento, origem });
+    });
+    const grandes = pecas.filter(p => p.comprimento > barraM);
+    const cortaveis = pecas.filter(p => p.comprimento <= barraM).sort((a, b) => b.comprimento - a.comprimento);
+    // First-Fit-Decreasing
+    const barras = [];
+    cortaveis.forEach(p => {
+      let alvo = barras.find(b => b.restante >= p.comprimento - 1e-9);
+      if (!alvo) { alvo = { pecas: [], usado: 0, restante: barraM }; barras.push(alvo); }
+      alvo.pecas.push(p); alvo.usado += p.comprimento; alvo.restante -= p.comprimento;
+    });
+    const sobraTotal = barras.reduce((s, b) => s + b.restante, 0);
+    return {
+      barraM, larguraM,
+      numBarras: barras.length,
+      areaBarrasM2: barras.length * barraM * larguraM,
+      sobraTotalM: sobraTotal,
+      barras: barras.map((b, idx) => ({
+        indice: idx + 1,
+        pecas: b.pecas,
+        usado: b.usado,
+        sobra: b.restante,
+      })),
+      aviso: grandes.length
+        ? `${grandes.length} peça(s) de ${grandes[0].comprimento}m excedem a barra de ${barraM}m — não podem ser cortadas de uma única barra.`
+        : null,
+    };
+  }, [resultado, comprimentoBarra, painelSelecionado]);
+
   const dadosParaSincronizar = React.useMemo(() => {
     const base = {
       comprimento: parseFloat(comprimento),
@@ -184,26 +235,41 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (!resultado) {
       return portasMateriais.length ? { ...base, lista_materiais: [...portasMateriais] } : base;
     }
+    const especBase = painelSelecionado
+      ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | larg. ${painelSelecionado.largura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
+      : '';
+
+    // Modo Revenda: substitui as peças de painel por uma linha de barras de 12m
+    const linhasPaineis = (modoCompra === 'revenda' && planoCorte)
+      ? [{
+          id: null,
+          item: `Painel ${base.nucleo} ${base.espessura}mm — Barra ${planoCorte.barraM}m`,
+          tipo_item: 'painel_parede',
+          quantidade: planoCorte.numBarras,
+          unidade: 'un',
+          area_total: Number(planoCorte.areaBarrasM2.toFixed(2)),
+          detalhe: [
+            especBase,
+            `${planoCorte.numBarras} barras × ${planoCorte.barraM}m (corte na obra)`,
+            `sobra total ${planoCorte.sobraTotalM.toFixed(2)}m`,
+          ].filter(Boolean).join(' | '),
+        }]
+      : resultado.lista_corte.map(i => ({
+          id: null,
+          item: i.item,
+          tipo_item: i.tipo_item ?? null,
+          quantidade: i.quantidade,
+          unidade: 'un',
+          comprimento: i.comprimento,
+          area_total: i.area_total,
+          detalhe: [i.descricao, especBase].filter(Boolean).join(' | '),
+        }));
+
     return {
       ...base, ...resultado,
+      plano_corte: modoCompra === 'revenda' ? planoCorte : null,
       lista_materiais: [
-        ...resultado.lista_corte.map(i => {
-          // Especificação técnica completa do painel selecionado
-          const especPainel = painelSelecionado
-            ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | larg. ${painelSelecionado.largura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
-            : '';
-
-          return {
-            id: null,
-            item: i.item,
-            tipo_item: i.tipo_item ?? null,
-            quantidade: i.quantidade,
-            unidade: 'un',
-            comprimento: i.comprimento,
-            area_total: i.area_total,
-            detalhe: [i.descricao, especPainel].filter(Boolean).join(' | '),
-          };
-        }),
+        ...linhasPaineis,
         ...(resultado.materiais_extras || []).map(m => {
           const especPainel = painelSelecionado
             ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
@@ -221,7 +287,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         ...portasMateriais,
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasMateriais]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -230,9 +296,9 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (!validos) { aoFinalizar(null); return; }
     // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
     const portasKey = portasSelecionadas.map(p => `${p.porta.id}x${p.qtde}`).join(',');
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, portas: portasKey });
+    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, portas: portasKey, modoCompra, barra: comprimentoBarra });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, portasSelecionadas]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, portasSelecionadas, modoCompra, comprimentoBarra]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -567,6 +633,41 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         {(resultado || portasSelecionadas.length > 0) && (
           <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-l-4 border-indigo-500 pl-3">Materiais Dimensionados</h3>
+
+            {/* Modo de compra dos painéis */}
+            {resultado && (
+              <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Compra dos painéis</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { v: 'fabricante', label: 'Fabricante (sob medida)', desc: 'Cortado na medida do projeto' },
+                    { v: 'revenda',    label: 'Revenda (barra 12m)',     desc: 'Barras cortadas na obra' },
+                  ].map(opt => (
+                    <label key={opt.v} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer text-xs flex-1 min-w-[180px] transition-all ${modoCompra === opt.v ? 'bg-indigo-50 border-indigo-300' : 'bg-white border-slate-200'}`}>
+                      <input type="radio" checked={modoCompra === opt.v} onChange={() => setModoCompra(opt.v)} className="accent-indigo-600 mt-0.5" />
+                      <span><b>{opt.label}</b><br /><span className="text-slate-500">{opt.desc}</span></span>
+                    </label>
+                  ))}
+                  {modoCompra === 'revenda' && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Barra (mm)</label>
+                      <input type="number" min="1000" step="500" value={comprimentoBarra}
+                        onChange={e => setComprimentoBarra(parseInt(e.target.value) || 12000)}
+                        className="w-24 px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-center outline-none focus:ring-2 focus:ring-indigo-400" />
+                    </div>
+                  )}
+                </div>
+                {modoCompra === 'revenda' && planoCorte && (
+                  <p className="text-[11px] text-indigo-600 mt-2 font-medium">
+                    {planoCorte.numBarras} barras de {planoCorte.barraM}m ({planoCorte.areaBarrasM2.toFixed(1)} m²) · sobra total {planoCorte.sobraTotalM.toFixed(2)}m entregue ao cliente
+                  </p>
+                )}
+                {planoCorte?.aviso && (
+                  <p className="text-[11px] text-red-500 mt-1">⚠ {planoCorte.aviso}</p>
+                )}
+              </div>
+            )}
+
             <div className="overflow-hidden border border-slate-200 rounded-xl">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -577,7 +678,16 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(resultado?.lista_corte || []).map((item, idx) => (
+                  {modoCompra === 'revenda' && planoCorte ? (
+                    <tr className="hover:bg-slate-50 bg-indigo-50/40">
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="font-medium">Painel {resultado?.nucleo_selecionado || ''} — Barra {planoCorte.barraM}m</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Corte na obra · sobra {planoCorte.sobraTotalM.toFixed(2)}m</div>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{planoCorte.numBarras}</td>
+                      <td className="px-4 py-3 text-right text-indigo-500 text-xs italic">{planoCorte.areaBarrasM2.toFixed(1)} m² (barras)</td>
+                    </tr>
+                  ) : (resultado?.lista_corte || []).map((item, idx) => (
                     <tr key={`c-${idx}`} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-700 font-medium">{item.item}</td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.quantidade}</td>
@@ -607,6 +717,33 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                 </tbody>
               </table>
             </div>
+            {/* Mapa de corte — modo Revenda */}
+            {modoCompra === 'revenda' && planoCorte && (
+              <div className="mt-4 border border-indigo-100 rounded-xl overflow-hidden">
+                <div className="bg-indigo-50 px-4 py-2 flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">Mapa de corte — {planoCorte.numBarras} barras de {planoCorte.barraM}m</span>
+                  <span className="text-[11px] text-indigo-500">sobra total {planoCorte.sobraTotalM.toFixed(2)}m</span>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                  {planoCorte.barras.map(b => (
+                    <div key={b.indice} className="flex items-center gap-3 px-4 py-2 text-xs">
+                      <span className="font-bold text-slate-400 w-14">Barra {b.indice}</span>
+                      <div className="flex-1 flex flex-wrap gap-1">
+                        {b.pecas.map((p, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                            {p.comprimento}m <span className="text-slate-400">({p.origem})</span>
+                          </span>
+                        ))}
+                        {b.sobra > 0.01 && (
+                          <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-500 italic">sobra {b.sobra.toFixed(2)}m</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 p-4 bg-green-50 border border-green-100 rounded-xl text-green-700 flex items-center gap-2">
               <span className="text-xl">✅</span>
               <span className="text-sm font-medium">Dados enviados para o próximo passo!</span>

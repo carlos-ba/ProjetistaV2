@@ -907,6 +907,7 @@ function AppContent({ catalogo }) {
           passoExpandido={passoSelecionado}
           itensAcessorios={itensAcessorios}
           itensTubulacao={itensTubulacao}
+          projetoAtual={projetoAtual}
         />
       </aside>
 

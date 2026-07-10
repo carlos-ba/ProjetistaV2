@@ -1,7 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../api';
+
+// ── Status da cotação (Card 6) ────────────────────────────────────────────
+const ESTADOS_COTACAO = {
+  sem_projeto: { bg: 'bg-slate-50 border-slate-100',     dot: 'bg-slate-400',   txt: 'Salve o projeto para cotar' },
+  carregando:  { bg: 'bg-slate-50 border-slate-100',     dot: 'bg-slate-300',   txt: 'Verificando…' },
+  nenhuma:     { bg: 'bg-rose-50 border-rose-100',       dot: 'bg-rose-500',    txt: 'Sem cotação — gere a planilha' },
+  aguardando:  { bg: 'bg-amber-50 border-amber-100',     dot: 'bg-amber-500',   txt: 'Aguardando fornecedor' },
+  processada:  { bg: 'bg-emerald-50 border-emerald-100', dot: 'bg-emerald-500', txt: 'Cotação processada — pronto p/ proposta' },
+};
+
+const StatusCotacao = ({ projetoId }) => {
+  const [status, setStatus] = useState(projetoId ? 'carregando' : 'sem_projeto');
+  useEffect(() => {
+    if (!projetoId) { setStatus('sem_projeto'); return; }
+    let cancelado = false;
+    setStatus('carregando');
+    api.get(`/api/v1/cotacoes?projeto_id=${projetoId}`)
+      .then(r => {
+        if (cancelado) return;
+        const cot = (r.data || []).filter(c => c.status !== 'cancelada');
+        const proc = cot.filter(c => c.status === 'processada');
+        setStatus(cot.length === 0 ? 'nenhuma' : proc.length ? 'processada' : 'aguardando');
+      })
+      .catch(() => { if (!cancelado) setStatus('nenhuma'); });
+    return () => { cancelado = true; };
+  }, [projetoId]);
+
+  const e = ESTADOS_COTACAO[status];
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${e.bg}`}>
+      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${e.dot}`} />
+      <div>
+        <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Status da cotação</p>
+        <p className="text-[11px] font-bold text-slate-700 leading-tight">{e.txt}</p>
+      </div>
+    </div>
+  );
+};
 
 // ── Detalhe rico por etapa ────────────────────────────────────────────────
-const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrcamento, deltaT, itensAcessorios, itensTubulacao }) => {
+const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrcamento, deltaT, itensAcessorios, itensTubulacao, projetoAtual }) => {
 
   if (!passoExpandido) return (
     <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
@@ -143,10 +182,11 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
 
   // ── Etapa 6: Orçamento ──
   if (passoExpandido === 6) {
-    const totalEq = itensOrcamento.equipamentos.reduce((s, e) => s + (e.preco * e.qtde), 0);
     return (
       <div className="space-y-3">
-        <Chip label="Equipamentos" valor={`R$ ${totalEq.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+        <StatusCotacao projetoId={projetoAtual?.id} />
+        <Chip label="Materiais" valor={`${itensOrcamento.materiais.length}`} />
+        <Chip label="Equipamentos" valor={`${itensOrcamento.equipamentos.length}`} />
         <Chip label="Total de itens" valor={`${itensOrcamento.equipamentos.length + itensOrcamento.materiais.length} itens`} destaque />
       </div>
     );
@@ -176,10 +216,8 @@ const ETAPAS = {
 const PainelResumoLateral = ({
   dadosGabinete, cargaCalculada, itensOrcamento,
   passoAtual, deltaT, passoExpandido,
-  itensAcessorios, itensTubulacao,
+  itensAcessorios, itensTubulacao, projetoAtual,
 }) => {
-  const totalMateriais   = itensOrcamento.materiais.length;
-  const totalEquipamentos= itensOrcamento.equipamentos.length;
   const volumeBruto      = dadosGabinete
     ? dadosGabinete.comprimento * dadosGabinete.largura * dadosGabinete.altura
     : 0;
@@ -190,10 +228,30 @@ const PainelResumoLateral = ({
   // Trocas de ar
   const evaporadores      = itensOrcamento.equipamentos.filter(e => e.vazao_ar > 0);
   const vazaoTotalHoraria = evaporadores.reduce((a, e) => a + e.vazao_ar * e.qtde, 0);
-  const trocas0   = volumeBruto > 0 ? vazaoTotalHoraria / volumeBruto : 0;
-  const trocas50  = volumeBruto > 0 ? vazaoTotalHoraria / (volumeBruto * 0.5) : 0;
-  const trocas100 = volumeBruto > 0 ? vazaoTotalHoraria / (volumeBruto * 0.1) : 0;
-  const temEvap   = vazaoTotalHoraria > 0;
+  const trocas0     = volumeBruto > 0 ? vazaoTotalHoraria / volumeBruto : 0;          // câmara vazia — base da norma (FAO)
+  const trocasMeia  = volumeBruto > 0 ? vazaoTotalHoraria / (volumeBruto * 0.5) : 0;  // ~50% ocupada (informativo)
+  const trocasCheia = volumeBruto > 0 ? vazaoTotalHoraria / (volumeBruto * 0.1) : 0;  // cheia, ~10% de ar livre (informativo)
+  const temEvap     = vazaoTotalHoraria > 0;
+
+  // Faixa recomendada de trocas/h por aplicação (FAO/ASHRAE), sobre o volume vazio.
+  const tempInt     = dadosGabinete?.temperatura_interna != null ? Number(dadosGabinete.temperatura_interna) : null;
+  const ehCongelados = tempInt != null && tempInt < -5;
+  const faixaRec    = ehCongelados ? [40, 60] : [20, 30];
+  const aplicacao   = ehCongelados ? 'Congelados' : 'Resfriados';
+  let veredito = null;
+  if (temEvap) {
+    if (trocas0 < faixaRec[0])
+      veredito = { cor: 'amber', txt: 'Abaixo do recomendado — risco de zonas mortas / má distribuição de ar.' };
+    else if (trocas0 > faixaRec[1])
+      veredito = { cor: 'rose', txt: 'Acima do recomendado — risco de ressecamento em produto não embalado; avaliar evaporador de menor vazão.' };
+    else
+      veredito = { cor: 'emerald', txt: 'Circulação dentro da faixa recomendada.' };
+  }
+  const CORES = {
+    amber:   { txt: 'text-amber-600',   bg: 'bg-amber-50',   ring: 'text-amber-500' },
+    rose:    { txt: 'text-rose-600',    bg: 'bg-rose-50',    ring: 'text-rose-500' },
+    emerald: { txt: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'text-emerald-500' },
+  };
 
   return (
     <aside className="w-80 bg-white border-l border-slate-200 hidden xl:flex flex-col overflow-y-auto shadow-sm" style={{ height: '100%', maxHeight: '100vh' }}>
@@ -217,6 +275,7 @@ const PainelResumoLateral = ({
             deltaT={deltaT}
             itensAcessorios={itensAcessorios}
             itensTubulacao={itensTubulacao}
+            projetoAtual={projetoAtual}
           />
         </div>
 
@@ -259,62 +318,48 @@ const PainelResumoLateral = ({
                 </div>
               </div>
 
-              {/* Gráfico trocas de ar */}
+              {/* Renovação de ar (recirculação do evaporador) */}
               <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-3">
                   Renovação de Ar (trocas/h)
                 </label>
-                <div className="flex items-center gap-4">
-                  <div className="relative w-16 h-16 flex-shrink-0">
-                    <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                      <circle cx="18" cy="18" r="16" fill="transparent" stroke="#f1f5f9" strokeWidth="4"/>
-                      <circle cx="18" cy="18" r="16" fill="transparent" stroke={temEvap ? "#f43f5e" : "#e2e8f0"} strokeWidth="4" strokeDasharray="33.3 100" strokeDashoffset="0"/>
-                      <circle cx="18" cy="18" r="16" fill="transparent" stroke={temEvap ? "#f59e0b" : "#e2e8f0"} strokeWidth="4" strokeDasharray="33.3 100" strokeDashoffset="-33.3"/>
-                      <circle cx="18" cy="18" r="16" fill="transparent" stroke={temEvap ? "#10b981" : "#e2e8f0"} strokeWidth="4" strokeDasharray="33.4 100" strokeDashoffset="-66.6"/>
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-[9px] font-black text-slate-400">{temEvap ? trocas0.toFixed(0) : '--'}</span>
+                {!temEvap ? (
+                  <p className="text-[10px] text-slate-400 italic">Selecione um evaporador para calcular.</p>
+                ) : (
+                  <>
+                    {/* Indicador principal — câmara vazia (base da norma) */}
+                    <div className="flex items-end gap-2">
+                      <span className={`text-3xl font-black ${veredito ? CORES[veredito.cor].txt : 'text-slate-800'}`}>
+                        {trocas0.toFixed(0)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 mb-1.5">trocas/h · câmara vazia</span>
                     </div>
-                  </div>
-                  <div className="flex-1 space-y-1 text-[10px]">
-                    {!temEvap ? (
-                      <p className="text-slate-400 italic">Selecione um evaporador para calcular.</p>
-                    ) : (
-                      <>
-                        {[['Vazia', 'bg-emerald-500', trocas0],['50%', 'bg-amber-500', trocas50],['100%', 'bg-red-500', trocas100]].map(([l,c,v]) => (
-                          <div key={l} className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <div className={`w-2 h-2 rounded-full ${c}`}/>
-                              <span className="font-bold text-slate-500">{l}</span>
-                            </div>
-                            <span className="font-black text-slate-700">{v.toFixed(1)}</span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
+
+                    {/* Faixa recomendada + veredito */}
+                    <div className={`mt-2 rounded-lg px-3 py-2 ${veredito ? CORES[veredito.cor].bg : 'bg-slate-50'}`}>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-slate-500">Recomendado ({aplicacao})</span>
+                        <span className="font-black text-slate-700">{faixaRec[0]}–{faixaRec[1]}/h</span>
+                      </div>
+                      {veredito && (
+                        <p className={`text-[10px] mt-1 leading-snug ${CORES[veredito.cor].txt}`}>{veredito.txt}</p>
+                      )}
+                    </div>
+
+                    {/* Secundário — informativo, com a câmara carregada (não comparar com a norma) */}
+                    <div className="mt-2 pt-2 border-t border-slate-100">
+                      <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Recirculação sobre o ar livre com a câmara carregada (informativo)</p>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Meia carga: <b className="text-slate-600">{trocasMeia.toFixed(0)}</b>/h</span>
+                        <span>Cheia (~10% livre): <b className="text-slate-600">{trocasCheia.toFixed(0)}</b>/h</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
         )}
-
-        {/* ── ITENS NO ORÇAMENTO ── */}
-        <div>
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">
-            Itens no Orçamento
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-              <div className="text-2xl font-black text-slate-700">{totalEquipamentos}</div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Máquinas</div>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-              <div className="text-2xl font-black text-slate-700">{totalMateriais}</div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Itens</div>
-            </div>
-          </div>
-        </div>
 
       </div>
 
