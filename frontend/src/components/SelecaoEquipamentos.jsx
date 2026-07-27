@@ -20,14 +20,18 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
   const [resultadosEvap, setResultadosEvap] = useState([]);
   const [quantidades,    setQuantidades]    = useState(initialValues?.quantidades ?? {});
   const [selecionados,   setSelecionados]   = useState(initialValues?.selecionados ?? []);
+  // Capacidade da UC escolhida que passa a dimensionar os evaporadores (null = ainda pela carga térmica)
+  const [cargaEvapRef,   setCargaEvapRef]   = useState(initialValues?.cargaEvapRef ?? null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados });
-  }, [cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados]);
+    if (onValoresChange) onValoresChange({ cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados, cargaEvapRef });
+  }, [cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados, cargaEvapRef]);
   const [loading,        setLoading]        = useState(false);
   const [erro,           setErro]           = useState('');
 
   const cargaReferencia = Math.round(cargaTotal / numMaquinas);
+  // Evaporadores: se já há uma UC escolhida, dimensiona pela capacidade dela; senão pela carga térmica
+  const refEvap = cargaEvapRef ?? cargaReferencia;
   const resultadosAtivos = abaAtiva === 'Unidade Condensadora' ? resultadosUC : resultadosEvap;
 
   useEffect(() => {
@@ -45,9 +49,11 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       temp_condensacao:    initialValues.cond ?? 45,
       fluido:              initialValues.fluido ?? 'R22',
     };
+    // Se o projeto salvo já tinha uma UC como base, restaura os evaporadores pela capacidade dela
+    const cargaEvap = initialValues.cargaEvapRef ?? params.carga_termica_total;
     Promise.all([
       api.post('/api/v1/selecao', { ...params, tipo: 'Unidade Condensadora' }),
-      api.post('/api/v1/selecao', { ...params, tipo: 'Evaporadora' }),
+      api.post('/api/v1/selecao', { ...params, carga_termica_total: cargaEvap, tipo: 'Evaporadora' }),
     ]).then(([resUC, resEvap]) => {
       setResultadosUC(resUC.data);
       setResultadosEvap(resEvap.data);
@@ -80,6 +86,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     setResultadosUC([]);
     setResultadosEvap([]);
     setQuantidades({});
+    setCargaEvapRef(null);   // nova busca volta a dimensionar evaporadores pela carga térmica
 
     const params = {
       carga_termica_total: cargaReferencia,
@@ -116,8 +123,33 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     setQuantidades(prev => ({ ...prev, [id]: Math.max(1, parseInt(valor) || 1) }));
   };
 
+  // Recarrega a lista de evaporadores dimensionada pela capacidade da UC escolhida (não mais pela carga térmica)
+  const recalcularEvaporadores = async (capacidadeUC) => {
+    const evapVal = parseFloat(evap);
+    if (isNaN(evapVal) || !capacidadeUC) return;
+    const cap = Math.round(capacidadeUC);
+    try {
+      const res = await api.post('/api/v1/selecao', {
+        carga_termica_total: cap,
+        temp_evaporacao:     evapVal,
+        temp_condensacao:    cond,
+        fluido,
+        tipo:                'Evaporadora',
+      });
+      setResultadosEvap(res.data);
+      setCargaEvapRef(cap);
+      setQuantidades(prev => {
+        const q = { ...prev };
+        res.data.forEach(i => { if (!(i.id in q)) q[i.id] = numMaquinas; });
+        return q;
+      });
+    } catch { /* mantém lista anterior em caso de falha */ }
+  };
+
   const adicionarAoRascunho = (item) => {
     const qtd = quantidades[item.id] || 1;
+    // Ao escolher uma UC, os evaporadores passam a ser dimensionados pela capacidade dela
+    if (abaAtiva === 'Unidade Condensadora') recalcularEvaporadores(item.capacidade_real);
     setSelecionados(prev => [...prev, {
       nome:              `${item.modelo} (${item.fabricante})`,
       preco:             item.preco,
@@ -262,6 +294,19 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
               })}
             </div>
 
+            {/* Aviso de base do evaporador */}
+            {abaAtiva === 'Evaporadora' && (
+              <div className={`mb-4 px-4 py-2.5 rounded-lg text-xs font-medium border ${
+                cargaEvapRef
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {cargaEvapRef
+                  ? `❄️ Evaporadores dimensionados pela capacidade da UC selecionada: ${cargaEvapRef} kcal/h`
+                  : `⚠️ Dimensionados pela carga térmica (${cargaReferencia} kcal/h). Selecione uma Unidade Condensadora para casar os evaporadores com a capacidade dela.`}
+              </div>
+            )}
+
             {/* Cards da aba ativa */}
             <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               {resultadosAtivos.length === 0 ? (
@@ -269,7 +314,8 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                   Nenhum equipamento encontrado para este tipo.
                 </div>
               ) : resultadosAtivos.map((item, idx) => {
-                const perc = (item.capacidade_real / cargaReferencia) * 100;
+                const refPerc = abaAtiva === 'Evaporadora' ? refEvap : cargaReferencia;
+                const perc = (item.capacidade_real / refPerc) * 100;
                 let statusCor = 'ideal';
                 let label = '✅ Capacidade Ideal';
                 if (perc < 90) { statusCor = 'menor'; label = '⚠️ Capacidade Menor'; }
