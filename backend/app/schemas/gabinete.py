@@ -10,6 +10,16 @@ class GabineteRequest(BaseModel):
     nucleo: str = "PUR"
     tipo_piso: str = "nenhum"
     espessura_concreto_cm: float = 0.0
+    piso_rebaixado: bool = False   # convencional rebaixado (nivelado, sem degrau)
+
+
+class GabineteDXFRequest(BaseModel):
+    """Payload do botão 'Baixar Projeto CAD (.DXF)' do Card 1 (dimensões em metros)."""
+    comprimento: float
+    largura: float
+    altura: float
+    largura_painel: float = 1.1
+    espessura: float = 100.0   # mm
 
 
 class ItemCorte(BaseModel):

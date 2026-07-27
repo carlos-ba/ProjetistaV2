@@ -10,6 +10,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   const [temperaturaInterna, setTemperaturaInterna] = useState(initialValues?.temperaturaInterna ?? '');
   const [tipoPiso, setTipoPiso] = useState(initialValues?.tipoPiso ?? 'painel');
   const [espessuraConcreto, setEspessuraConcreto] = useState(initialValues?.espessuraConcreto ?? '');
+  const [pisoRebaixado, setPisoRebaixado] = useState(initialValues?.pisoRebaixado ?? false);
 
   // Seleção de painel do catálogo — apenas os 4 valores selecionados são estado
   const [fabricanteSelecionado, setFabricanteSelecionado] = useState(initialValues?.fabricanteSelecionado ?? '');
@@ -61,11 +62,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // Snapshot — salva apenas os 4 valores selecionados (as listas são derivadas)
   useEffect(() => {
     if (onValoresChange) onValoresChange({
-      comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
+      comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
     });
-  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto,
+  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra]);
   const [erro, setErro] = useState('');
@@ -152,7 +153,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       setStatusCalculo('modificado');
       setResultado(null);
     }
-  }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto]);
+  }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto, pisoRebaixado]);
 
   // ── Sincroniza com pai ────────────────────────────────────────────────
   // Portas como linhas de material — independentes do cálculo dos painéis
@@ -296,9 +297,9 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (!validos) { aoFinalizar(null); return; }
     // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
     const portasKey = portasSelecionadas.map(p => `${p.porta.id}x${p.qtde}`).join(',');
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, portas: portasKey, modoCompra, barra: comprimentoBarra });
+    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey, modoCompra, barra: comprimentoBarra });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, portasSelecionadas, modoCompra, comprimentoBarra]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -346,6 +347,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         nucleo:               painelSelecionado.nucleo,
         tipo_piso:            tipoPiso,
         espessura_concreto_cm: parseFloat(espessuraConcreto) || 0,
+        piso_rebaixado:       pisoRebaixado,
       });
       setResultado(response.data);
       setStatusCalculo('pronto');
@@ -499,6 +501,19 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                 placeholder="Ex: 10"
                 className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
+          )}
+          {tipoPiso === 'convencional' && (
+            <label className="md:col-span-2 flex items-start gap-2 cursor-pointer bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+              <input type="checkbox" checked={pisoRebaixado} onChange={e => setPisoRebaixado(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-[#7B2D8B]" />
+              <span className="text-sm text-slate-700">
+                <span className="font-semibold">Piso rebaixado</span> (nivelado, sem degrau)
+                <span className="block text-xs text-slate-500">
+                  Abre rebaixo para isolamento + concreto → piso interno nivelado com o externo.
+                  A parede desce no rebaixo (fica mais comprida) e a altura útil = altura − teto.
+                </span>
+              </span>
+            </label>
           )}
         </div>
 

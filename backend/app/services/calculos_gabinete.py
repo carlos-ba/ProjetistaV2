@@ -4,22 +4,38 @@ from app.schemas.gabinete import GabineteRequest, GabineteResponse, ItemCorte, M
 
 
 def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
-    esp_m = req.espessura_mm / 1000.0
+    esp_m = req.espessura_mm / 1000.0             # espessura do painel (teto/piso)
+    concreto_m = req.espessura_concreto_cm / 100.0
     lista_corte: list[ItemCorte] = []
     materiais_extras: list[MaterialExtra] = []
     area_total_paineis = 0.0
 
+    # ── Comprimento da peça do painel de parede ────────────────────────────
+    # O teto apoia sobre as paredes → sempre desconta a espessura do teto.
+    # O que muda embaixo depende do piso:
+    #   painel        → desconta também o piso em painel (parede fica entre teto e piso)
+    #   convencional  → apoiado: só teto; rebaixado: teto − mas parede desce no rebaixo (+ isolamento + concreto)
+    #   nenhum        → só teto
+    rebaixo = esp_m + concreto_m                  # profundidade do rebaixo (isolamento do piso + concreto)
+    if req.tipo_piso == "painel":
+        comp_parede = req.altura - 2 * esp_m
+    elif req.tipo_piso == "convencional" and req.piso_rebaixado:
+        comp_parede = req.altura - esp_m + rebaixo
+    else:  # convencional apoiado / nenhum
+        comp_parede = req.altura - esp_m
+    comp_parede = round(comp_parede, 3)
+
     # Paredes
     dim_linear = (req.comprimento * 2) + ((req.largura - 2 * esp_m) * 2)
     qtde_parede = math.ceil(dim_linear / req.largura_painel)
-    area_paredes = qtde_parede * req.altura * req.largura_painel
+    area_paredes = qtde_parede * comp_parede * req.largura_painel
     area_total_paineis += area_paredes
     lista_corte.append(ItemCorte(
         item="Painéis de Parede",
         quantidade=int(qtde_parede),
-        comprimento=req.altura,
+        comprimento=comp_parede,
         area_total=round(area_paredes, 2),
-        descricao=f"Peças de {req.altura}m (Altura)",
+        descricao=f"Peças de {comp_parede}m (comprimento do painel)",
         tipo_item="painel_parede",
     ))
 
@@ -67,16 +83,18 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             tipo_item="barreira_vapor",
         ))
         if req.espessura_concreto_cm > 0:
-            vol = area_piso * (req.espessura_concreto_cm / 100)
+            vol = area_piso * concreto_m
+            nota = " (piso rebaixado — nivelado, sem degrau)" if req.piso_rebaixado else ""
             materiais_extras.append(MaterialExtra(
                 item="Concreto Armado",
                 qtd=f"{vol:.2f} m³",
-                detalhe=f"Esp. {req.espessura_concreto_cm}cm",
+                detalhe=f"Esp. {req.espessura_concreto_cm}cm{nota}",
                 tipo_item="concreto_armado",
             ))
-            altura_util -= esp_m + (req.espessura_concreto_cm / 100)
-        else:
-            altura_util -= esp_m
+        # Altura útil: apoiado desce pelo isolamento + concreto (cria degrau na porta);
+        # rebaixado preenche o rebaixo e o piso fica nivelado (só desconta o teto).
+        if not req.piso_rebaixado:
+            altura_util -= esp_m + concreto_m
 
     materiais_extras.append(MaterialExtra(
         item="Acessórios de Montagem (Kit)",
