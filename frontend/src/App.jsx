@@ -834,6 +834,7 @@ function AppContent({ catalogo }) {
                 condensadora={getCondensadora()}
                 dadosTubulacao={resultadoTubulacao}
                 configuracoesMontagem={configuracoesMontagem}
+                numCircuitos={inputsEquipamentos?.numMaquinas ?? 1}
                 aoFinalizar={receberComponentesFluxo}
                 onCavaleteChange={receberCavaleteChange}
                 initialValues={inputsComponentes}

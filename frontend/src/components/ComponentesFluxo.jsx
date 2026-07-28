@@ -24,7 +24,19 @@ const slugPorCategoria = (cat = '') => {
 
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
-const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
+const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange, jaFinalizado = false, invalidado = false, numCircuitos = 1 }) => {
+
+  // Cada circuito é uma cópia da mesma UC → todo componente de fluxo é 1 por circuito.
+  // Escala as quantidades pelo número de circuitos antes de enviar ao orçamento.
+  const escalarPorCircuitos = (itens) => {
+    const n = Math.max(1, parseInt(numCircuitos) || 1);
+    if (n === 1) return itens;
+    return itens.map(it => ({
+      ...it,
+      quantidade: +((it.quantidade || 0) * n).toFixed(3),
+      detalhe: it.detalhe ? `${it.detalhe} | ×${n} circuitos` : `×${n} circuitos`,
+    }));
+  };
 
   // ── Modo de seleção ───────────────────────────────────────────────────
   const [modo, setModo] = useState(initialValues?.modo ?? 'automatico');
@@ -332,7 +344,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       });
     }
 
-    if (aoFinalizar) aoFinalizar(itens);
+    if (aoFinalizar) aoFinalizar(escalarPorCircuitos(itens));
   };
 
   // ── Finalizar Engenharia ──────────────────────────────────────────────
@@ -357,7 +369,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         custo_unitario: parseFloat(l.custo) || 0,
         preco: parseFloat(l.custo) || 0,
       }));
-    if (aoFinalizar) aoFinalizar(itens);
+    if (aoFinalizar) aoFinalizar(escalarPorCircuitos(itens));
   };
 
   const updateLinha = (i, campo, valor) => {
@@ -436,6 +448,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
       <div className="p-6">
 
+        {(parseInt(numCircuitos) || 1) > 1 && (
+          <div className="mb-6 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-800 font-semibold">
+            🔁 {numCircuitos} circuitos — cada componente é 1 por circuito. As quantidades enviadas ao orçamento
+            são multiplicadas por {numCircuitos} automaticamente (os cards abaixo mostram o valor por circuito).
+          </div>
+        )}
 
         {/* ── Seletor de modo ── */}
         <div className="mb-6 bg-slate-50 rounded-xl border border-slate-200 p-1 flex gap-1">
