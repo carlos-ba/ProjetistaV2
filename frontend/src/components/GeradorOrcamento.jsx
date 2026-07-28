@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -85,6 +85,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [cotacoesProcessadas, setCotacoesProcessadas] = useState([]);
   const [modalEscolhaCotacao, setModalEscolhaCotacao] = useState(false);
   const [cotacaoEscolhidaId,  setCotacaoEscolhidaId] = useState(null); // null = melhor preço
+
+  // Assinatura do conteúdo de cada saída no momento em que foi gerada (para sinalizar desatualização)
+  const [geradas, setGeradas] = useState({}); // { listaExcel, listaPdf, proposta, cotacao }
   const [loadingCotacaoCheck, setLoadingCotacaoCheck] = useState(false);
   const [itensSemPreco,       setItensSemPreco]       = useState([]);
   const [precosManuals,       setPrecosManuals]       = useState({}); // norm(desc) → string
@@ -368,6 +371,32 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     const q = parseFloat(c.qtde) || 1;
     return s + p * q;
   }, 0);
+
+  // ── Sinalização de saídas desatualizadas ──────────────────────────────
+  // Lista de materiais e cotação dependem só dos itens; a proposta depende também do financeiro.
+  const sigLista = useMemo(() => JSON.stringify({
+    eq: equipamentosAprovados.map(e => [e.nome || e.item, e.qtde ?? 1]),
+    mat: materiaisAprovados.map(m => [m.item, m.quantidade ?? m.qtd ?? 1, m.comprimento ?? '']),
+    comp: complementos.filter(c => c.descricao.trim()).map(c => [c.descricao, c.qtde, c.unidade]),
+  }), [equipamentosAprovados, materiaisAprovados, complementos]);
+
+  const sigProposta = useMemo(() => JSON.stringify({
+    sigLista, custos, margemMateriais, margemServicos, imposto, modoFaturamento,
+    exibicaoMateriais, apresentacao, moSeparada, cond, cliente: dadosCliente,
+    precosComp: complementos.map(c => c.preco_unit), temOrc: !!orcamento,
+  }), [sigLista, custos, margemMateriais, margemServicos, imposto, modoFaturamento,
+       exibicaoMateriais, apresentacao, moSeparada, cond, dadosCliente, complementos, orcamento]);
+
+  const marcarGerada = (tipo) => setGeradas(g => ({ ...g, [tipo]: tipo === 'proposta' ? sigProposta : sigLista }));
+  const estaDesatualizada = (tipo) => {
+    const s = geradas[tipo];
+    return s != null && s !== (tipo === 'proposta' ? sigProposta : sigLista);
+  };
+  const SeloStale = ({ tipo, texto = '⚠️ desatualizada' }) => estaDesatualizada(tipo) ? (
+    <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-full whitespace-nowrap animate-pulse">
+      {texto}
+    </span>
+  ) : null;
 
   const calcFinanceiro = () => {
     const custo_materiais = (orcamento?.custo_total_projeto_rs || 0) + totalComplementos;
@@ -722,6 +751,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       txt('Data: _____ / _____ / _________', MR - halfAce, y + 8);
 
       pdf.save(`Proposta_${(dadosCliente.nome || 'Camara').replace(/\s+/g, '_')}.pdf`);
+      marcarGerada('proposta');
     } catch (e) { console.error(e); setErro('Erro ao gerar PDF.'); }
     finally { setLoading(false); }
   };
@@ -753,6 +783,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     const a = document.createElement('a');
     a.href = url; a.download = `Lista_Materiais_${nome.replace(/\s+/g, '_')}.csv`;
     a.click(); URL.revokeObjectURL(url);
+    marcarGerada('listaExcel');
   };
 
   const exportarListaPDF = () => {
@@ -787,6 +818,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     });
 
     pdf.save(`Lista_Materiais_${nome.replace(/\s+/g, '_')}.pdf`);
+    marcarGerada('listaPdf');
   };
 
   // ── Cotação com fornecedor (Fase 1) ───────────────────────────────────
@@ -957,18 +989,24 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Itens do Dimensionamento</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <button
                     onClick={() => exportarListaPDF()}
-                    className="text-[10px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg transition-colors"
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                      estaDesatualizada('listaPdf')
+                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                        : 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200'}`}
                   >
-                    📄 PDF
+                    {estaDesatualizada('listaPdf') ? '🔄 Atualizar PDF' : '📄 PDF'}
                   </button>
                   <button
                     onClick={() => exportarListaExcel()}
-                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors"
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                      estaDesatualizada('listaExcel')
+                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                        : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'}`}
                   >
-                    📊 Excel
+                    {estaDesatualizada('listaExcel') ? '🔄 Atualizar Excel' : '📊 Excel'}
                   </button>
                 </div>
               </div>
@@ -1326,12 +1364,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             )}
 
+            {estaDesatualizada('cotacao') && (
+              <div className="mb-3 p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-center text-[11px] text-amber-800 font-semibold">
+                ⚠️ Os itens mudaram desde a última cotação gerada. Gere uma nova planilha para incluir as alterações.
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
 
               {/* Opção A: Enviar para cotação */}
               <button onClick={() => setModalCotacaoAberto(true)} disabled={loading || !projetoSalvo}
                 title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
-                className="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                className={`w-full sm:w-auto px-6 py-3 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                  estaDesatualizada('cotacao') ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-300' : 'bg-amber-500 hover:bg-amber-600'}`}>
                 📊 GERAR PLANILHA DE COTAÇÃO
                 <span className="text-[10px] font-normal opacity-80">— enviar ao fornecedor</span>
               </button>
@@ -1480,6 +1525,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         itens={modalCotacaoAberto ? montarItensCotacao() : []}
         nomeProjeto={projetoAtual?.nome || (dadosCliente.nome ? `Câmara Frigorífica — ${dadosCliente.nome}` : 'Câmara Frigorífica')}
         projetoId={projetoAtual?.id || null}
+        aoGerar={() => marcarGerada('cotacao')}
       />
 
       {/* ══ 3. RESUMO FINANCEIRO PRIVADO (não imprime) ══ */}
@@ -1853,9 +1899,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           {/* Ações */}
           <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-center gap-4 print:hidden">
             <button onClick={() => window.print()} className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-300 transition-all">Imprimir 🖨️</button>
-            <button onClick={gerarPDF} disabled={loading} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-all disabled:bg-slate-300">
-              {loading ? 'Gerando...' : 'Baixar PDF 📥'}
-            </button>
+            <div className="flex flex-col items-center gap-1">
+              <button onClick={gerarPDF} disabled={loading} className={`px-6 py-2 text-white rounded-lg font-bold transition-all disabled:bg-slate-300 ${
+                estaDesatualizada('proposta') ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-300' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                {loading ? 'Gerando...' : (estaDesatualizada('proposta') ? '🔄 Atualizar PDF' : 'Baixar PDF 📥')}
+              </button>
+              <SeloStale tipo="proposta" texto="⚠️ PDF desatualizado — regere" />
+            </div>
             <button onClick={enviarWhatsApp} className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-all">WhatsApp 💬</button>
           </div>
 

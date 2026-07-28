@@ -11,7 +11,7 @@ import api from '../api';
  */
 const fornecedorVazio = { nome: '', cnpj: '', telefone: '', email: '', contato: '' };
 
-const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto, projetoId = null }) => {
+const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto, projetoId = null, aoGerar = null }) => {
   const [fornecedores, setFornecedores] = useState([]);
   const [fornecedorId, setFornecedorId] = useState('');
   const [validadeDias, setValidadeDias] = useState(30);
@@ -86,6 +86,7 @@ const ModalCotacaoFornecedor = ({ aberto, aoFechar, itens, nomeProjeto, projetoI
       link.remove();
 
       setSucesso({ codigo: cot.data.codigo });
+      if (aoGerar) aoGerar();
     } catch {
       setErro('Erro ao gerar a cotação.');
     } finally {
