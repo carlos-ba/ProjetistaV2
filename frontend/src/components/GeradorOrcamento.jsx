@@ -268,10 +268,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       materiais: materiaisAprovados.map(m => {
         const descricao = m.comprimento ? `${m.item} ${m.comprimento}m` : m.item;
         const precoManual = parseFloat(extras[norm(descricao)]) || null;
+        // Tubo de cobre é cotado/pago por KG (coluna F). A quantidade do orçamento tem que ser kg,
+        // não metros (coluna E) — igual à planilha de cotação (montarItensCotacao).
+        const qtd = parseFloat(m.quantidade ?? m.qtd ?? 1) || 1;
+        const parede = m.detalhe?.includes('grossa') ? 'grossa' : 'fina';
+        const kgTotal = m.unidade === 'm' ? calcularKg(m, qtd, parede) : null;
         return {
           id: m.id,
           item: descricao,
-          qtde: parseFloat(m.quantidade ?? m.qtd ?? 1) || 1,
+          qtde: kgTotal != null ? kgTotal : qtd,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : null].filter(Boolean).join(' — '),
           preco_unitario: precoManual ?? buscarPreco(descricao),
           tipo_item: m.tipo_item ?? null,
