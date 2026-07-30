@@ -23,5 +23,8 @@ class Usuario(Base, TimestampMixin):
     # Recuperação de senha
     password_reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Preferência: app só como seleção/lista de engenharia (sem jornada de orçamento)
+    modo_engenharia: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     projetos: Mapped[List["Projeto"]] = relationship(back_populates="owner")
     clientes: Mapped[List["Cliente"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

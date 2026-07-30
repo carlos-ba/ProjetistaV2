@@ -844,9 +844,11 @@ function AppContent({ catalogo }) {
               />
             </EtapaCard>
 
-            {/* 6. Orçamento */}
+            {/* 6. Orçamento (ou Lista de Engenharia, conforme preferência do usuário) */}
             <EtapaCard
-              numero={6} titulo="Gerador de Orçamento" icone="💰"
+              numero={6}
+              titulo={user?.modo_engenharia ? 'Lista de Engenharia' : 'Gerador de Orçamento'}
+              icone={user?.modo_engenharia ? '📋' : '💰'}
               status={statusEtapa(6)} resumo={resumoEtapa(6)}
               somenteLeitura
               expandido={passoExpandido === 6}
@@ -857,6 +859,7 @@ function AppContent({ catalogo }) {
               <GeradorOrcamento
                 key={projetoKey}
                 dadosAutomaticos={itensOrcamento}
+                modoEngenharia={!!user?.modo_engenharia}
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
                 projetoAtual={projetoAtual}

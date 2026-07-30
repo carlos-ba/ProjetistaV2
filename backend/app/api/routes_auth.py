@@ -1,17 +1,39 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
+from app.models.usuario import Usuario
 from app.schemas.auth import (
     UserCreate, UserLogin, TokenResponse, TokenRefreshRequest, TokenRefreshResponse,
-    MessageResponse, ForgotPasswordRequest, ResetPasswordRequest,
+    MessageResponse, ForgotPasswordRequest, ResetPasswordRequest, UserOut, PreferenciasUpdate,
 )
 from app.services.auth import (
     registrar_usuario, autenticar_usuario, renovar_token,
-    verificar_email, solicitar_reset_senha, redefinir_senha,
+    verificar_email, solicitar_reset_senha, redefinir_senha, get_current_user,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.get("/me/", response_model=UserOut)
+async def me(usuario: UserOut = Depends(get_current_user)) -> UserOut:
+    return usuario
+
+
+@router.patch("/me/preferencias/", response_model=UserOut)
+async def atualizar_preferencias(
+    payload: PreferenciasUpdate,
+    usuario: UserOut = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    obj = (await db.execute(select(Usuario).where(Usuario.id == usuario.id))).scalar_one()
+    obj.modo_engenharia = payload.modo_engenharia
+    await db.commit()
+    await db.refresh(obj)
+    return UserOut.model_validate(obj)
 
 
 @router.post("/register/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)

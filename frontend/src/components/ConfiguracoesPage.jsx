@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
 const DEFAULTS = {
   nome: 'Novo Perfil',
@@ -117,11 +118,21 @@ function FormPerfil({ form, setForm, onSalvar, onCancelar, titulo, salvando, err
 }
 
 export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
+  const { user, atualizarModoEngenharia } = useAuth();
   const [perfis, setPerfis]     = useState([]);
   const [editando, setEditando] = useState(null);
   const [novoForm, setNovoForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro]         = useState('');
+  const [salvandoModo, setSalvandoModo] = useState(false);
+
+  const modoEngenharia = !!user?.modo_engenharia;
+  const alternarModo = async (valor) => {
+    setSalvandoModo(true);
+    try { await atualizarModoEngenharia(valor); }
+    catch { setErro('Erro ao salvar o modo do aplicativo.'); }
+    finally { setSalvandoModo(false); }
+  };
 
   const carregar = () =>
     api.get('/api/v1/configuracoes/montagem').then(r => setPerfis(r.data)).catch(() => {});
@@ -177,6 +188,24 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Modo do aplicativo (preferência do usuário) */}
+          <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4">
+            <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest mb-2">Modo do aplicativo</p>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={modoEngenharia} disabled={salvandoModo}
+                onChange={e => alternarModo(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-indigo-600" />
+              <span className="text-sm text-slate-700">
+                <span className="font-semibold">Somente engenharia</span>
+                <span className="block text-xs text-slate-500">
+                  App como gestor de engenharia: dimensionamento + lista de itens em Excel,
+                  sem a jornada de orçamento (cotação, proposta, cliente e margens ficam ocultos).
+                </span>
+              </span>
+            </label>
+          </div>
+
           {perfis.map(p => (
             <div key={p.id} className={`rounded-xl border-2 p-4 ${p.ativo ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-center justify-between mb-3">

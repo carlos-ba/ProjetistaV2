@@ -49,8 +49,13 @@ class UserOut(BaseModel):
     email: str
     is_active: bool
     email_verified: bool = False
+    modo_engenharia: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class PreferenciasUpdate(BaseModel):
+    modo_engenharia: bool
 
 
 class MessageResponse(BaseModel):
