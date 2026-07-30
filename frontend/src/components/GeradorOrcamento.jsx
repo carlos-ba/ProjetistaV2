@@ -72,7 +72,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [listaAprovada,       setListaAprovada]       = useState(false);
 
   // ── Complementos livres (sem catálogo) ───────────────────────────────
-  const [complementos, setComplementos] = useState([novoComplemento()]);
+  // Restaura os complementos salvos com o projeto; senão começa com uma linha em branco
+  const [complementos, setComplementos] = useState(
+    (initialValues?.complementos?.length ? initialValues.complementos : [novoComplemento()])
+  );
 
   // ── Orçamento e UI ───────────────────────────────────────────────────
   const [orcamento,    setOrcamento]    = useState(null);
@@ -159,11 +162,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       incluirResumoTecnico,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
-      baseCotacao,
+      baseCotacao, complementos,
     });
   }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
-      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao]);
+      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -412,11 +415,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     await gerarOrcamentoComPrecos(ultimoPrecoMapRef.current, precosManuals);
   };
 
+  // Preço efetivo do complemento: manual (preco_unit) tem prioridade; senão, usa o preço
+  // vindo da cotação (precoMap por descrição). Corrige complementos cotados que apareciam "a cotação".
+  const precoComplemento = (c) =>
+    parseFloat(c.preco_unit) || ultimoPrecoMapRef.current.get(norm(c.descricao)) || 0;
+
   // ── Total dos complementos ────────────────────────────────────────────
   const totalComplementos = complementosPreenchidos.reduce((s, c) => {
-    const p = parseFloat(c.preco_unit) || 0;
     const q = parseFloat(c.qtde) || 1;
-    return s + p * q;
+    return s + precoComplemento(c) * q;
   }, 0);
 
   // ── Sinalização de saídas desatualizadas ──────────────────────────────
@@ -477,7 +484,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     });
     // Complementos: cada um vai para o bloco da classificação escolhida (default "Outros")
     complementosPreenchidos.forEach(c => {
-      const custo = (parseFloat(c.preco_unit) || 0) * (parseFloat(c.qtde) || 1);
+      const custo = precoComplemento(c) * (parseFloat(c.qtde) || 1);
       if (custo <= 0) return;
       const bloco = classIndex.blocoDoItem({ classificacao_id: c.classificacao_id });
       blocosMatMap[bloco] = (blocosMatMap[bloco] || 0) + custo;
@@ -699,11 +706,12 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           txt('COMPLEMENTOS E MATERIAIS ADICIONAIS', ML, y); pdf.setTextColor(0); y += 5;
           complementosPreenchidos.forEach(c => {
             checar(7);
+            const pc = precoComplemento(c);
             pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
             txt(c.descricao, ML, y);
             txt(`${c.qtde} ${c.unidade}`, MR - 25, y, { align: 'right' });
             if (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco') { /* sem valor */ }
-            else if (c.preco_unit) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
+            else if (pc > 0) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(pc * (parseFloat(c.qtde) || 1) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
             else { pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt('A cotação', MR, y, { align: 'right' }); pdf.setTextColor(0); }
             y += 6;
           });
@@ -1162,8 +1170,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       <span className="text-sm text-slate-700 font-medium truncate">{c.descricao}</span>
                       <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0 text-right whitespace-nowrap">
                         {c.qtde} {c.unidade}
-                        {c.preco_unit
-                          ? ` · R$ ${(parseFloat(c.preco_unit) * (parseFloat(c.qtde) || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                        {precoComplemento(c) > 0
+                          ? ` · R$ ${(precoComplemento(c) * (parseFloat(c.qtde) || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                           : ' · a cotação'}
                       </span>
                     </div>
@@ -1874,8 +1882,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                           <div className="w-32 text-right font-black text-slate-900 text-sm">
                             {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco'
                               ? null
-                              : c.preco_unit
-                                ? `R$ ${fmt(parseFloat(c.preco_unit) * parseFloat(c.qtde) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`
+                              : precoComplemento(c) > 0
+                                ? `R$ ${fmt(precoComplemento(c) * (parseFloat(c.qtde) || 1) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`
                                 : <span className="text-slate-400 font-normal italic text-xs">A cotação</span>}
                           </div>
                         </div>
@@ -1951,7 +1959,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       ? '* Materiais e equipamentos serão faturados diretamente pelo fornecedor ao cliente. O valor indicado refere-se aos serviços de instalação.'
                       : '* Materiais e equipamentos faturados diretamente pelo fornecedor ao cliente, pelos valores de cotação, sem margem. Serviços de instalação faturados pelo instalador.')
                   : `* Proposta válida até ${new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR')}. Preços sujeitos a alteração após este prazo.`}
-                {modoFaturamento !== 'venda_direta' && complementosPreenchidos.some(c => !c.preco_unit) && ' Itens "a cotação" não incluídos no total.'}
+                {modoFaturamento !== 'venda_direta' && complementosPreenchidos.some(c => precoComplemento(c) <= 0) && ' Itens "a cotação" não incluídos no total.'}
               </p>
               <div className="text-right">
                 <div className="text-slate-500 text-sm font-bold uppercase">Investimento Total</div>
