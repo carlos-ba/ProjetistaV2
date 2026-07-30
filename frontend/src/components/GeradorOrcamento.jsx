@@ -20,7 +20,7 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -88,6 +88,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
   // Assinatura do conteúdo de cada saída no momento em que foi gerada (para sinalizar desatualização)
   const [geradas, setGeradas] = useState({}); // { listaExcel, listaPdf, proposta, cotacao }
+
+  // Rastreabilidade da base de preços: de qual(is) cotação(ões) o orçamento foi gerado
+  // { modo: 'unica'|'melhor_preco', cotacoes: [{id, codigo, fornecedor_id, data_recebimento}] }
+  const [baseCotacao, setBaseCotacao] = useState(initialValues?.baseCotacao ?? null);
+  const [baseDesatualizada, setBaseDesatualizada] = useState(false);
   const [loadingCotacaoCheck, setLoadingCotacaoCheck] = useState(false);
   const [itensSemPreco,       setItensSemPreco]       = useState([]);
   const [precosManuals,       setPrecosManuals]       = useState({}); // norm(desc) → string
@@ -154,10 +159,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       incluirResumoTecnico,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
+      baseCotacao,
     });
   }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
-      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond]);
+      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -304,9 +310,18 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   };
 
   // ── Verifica cotação antes de gerar ──────────────────────────────────
+  // Descritor da base de preços (qual cotação gerou o orçamento) — para rastreabilidade
+  const _metaBase = (lista, modo) => ({
+    modo,
+    cotacoes: lista.map(c => ({
+      id: c.id, codigo: c.codigo, fornecedor_id: c.fornecedor_id, data_recebimento: c.data_recebimento,
+    })),
+  });
+
   const verificarEGerar = async () => {
     if (!projetoAtual?.id) return;
     setCotacaoAviso(null); setItensSemPreco([]); setPrecosManuals({});
+    setBaseDesatualizada(false);
     setLoadingCotacaoCheck(true);
     try {
       const r = await api.get(`/api/v1/cotacoes?projeto_id=${projetoAtual.id}`);
@@ -320,6 +335,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         setCotacaoAviso('aguardando');
       } else if (processadas.length === 1) {
         setCotacaoEscolhidaId(processadas[0].id);
+        setBaseCotacao(_metaBase([processadas[0]], 'unica'));
         await _gerarComCotacoes([processadas[0].id]);
       } else {
         setCotacoesProcessadas(processadas);
@@ -354,10 +370,41 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const confirmarEscolhaCotacao = async () => {
     if (cotacaoEscolhidaId === null) {
       // Melhor preço: usa todas as processadas
+      setBaseCotacao(_metaBase(cotacoesProcessadas, 'melhor_preco'));
       await _gerarComCotacoes(cotacoesProcessadas.map(c => c.id));
     } else {
+      const esc = cotacoesProcessadas.find(c => c.id === cotacaoEscolhidaId);
+      if (esc) setBaseCotacao(_metaBase([esc], 'unica'));
       await _gerarComCotacoes([cotacaoEscolhidaId]);
     }
+  };
+
+  // Detecta se a base de preços mudou depois de gerado (fornecedor reenviou → data_recebimento muda)
+  useEffect(() => {
+    if (!orcamento || !baseCotacao?.cotacoes?.length || !projetoAtual?.id) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await api.get(`/api/v1/cotacoes?projeto_id=${projetoAtual.id}`);
+        const atuais = new Map((r.data || []).map(c => [c.id, c]));
+        const mudou = baseCotacao.cotacoes.some(b => {
+          const a = atuais.get(b.id);
+          return a && a.data_recebimento !== b.data_recebimento;
+        });
+        if (!cancelado) setBaseDesatualizada(mudou);
+      } catch { /* silencioso */ }
+    })();
+    return () => { cancelado = true; };
+  }, [orcamento, baseCotacao, projetoAtual?.id]);
+
+  // Texto de rastreabilidade da base (uso interno)
+  const textoBaseCotacao = () => {
+    const cs = baseCotacao?.cotacoes || [];
+    if (!cs.length) return null;
+    const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : 's/ data';
+    if (baseCotacao.modo === 'melhor_preco')
+      return `Melhor preço entre ${cs.length} cotações — ${cs.map(c => c.codigo).join(', ')}`;
+    return `${cs[0].codigo} · recebida ${fmtData(cs[0].data_recebimento)}`;
   };
 
   const recalcularComPrecosManuals = async () => {
@@ -943,6 +990,67 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           </div>
         </div>
 
+        {/* Complementos — adicionados junto com a seleção (editáveis aqui) */}
+        <div className="mt-6 pt-5 border-t border-amber-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-bold text-amber-800 uppercase tracking-tight flex items-center gap-2">
+              ➕ Complementos
+              <span className="text-[10px] font-normal text-amber-600/70 normal-case">
+                — fluido de limpeza, material elétrico, etc.
+              </span>
+            </h4>
+          </div>
+
+          <div className="space-y-2">
+            {complementos.map((c, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <input
+                  value={c.descricao} onChange={e => updateComplemento(i, 'descricao', e.target.value)}
+                  placeholder="Descrição do item..."
+                  className="col-span-4 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-400 outline-none bg-white"
+                />
+                <select
+                  value={c.classificacao_id ?? ''}
+                  onChange={e => updateComplemento(i, 'classificacao_id', e.target.value ? parseInt(e.target.value) : null)}
+                  className="col-span-3 px-2 py-2 rounded-lg border border-slate-300 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-400"
+                  title="Classificação (define o bloco no orçamento)"
+                >
+                  <option value="">Outros / a classificar</option>
+                  {classIndex.opcoes.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+                <input
+                  type="number" min="1" value={c.qtde} onChange={e => updateComplemento(i, 'qtde', e.target.value)}
+                  className="col-span-1 px-2 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none bg-white"
+                />
+                <input
+                  value={c.unidade} onChange={e => updateComplemento(i, 'unidade', e.target.value)}
+                  placeholder="un"
+                  className="col-span-1 px-1 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none bg-white"
+                />
+                <div className="col-span-2 relative">
+                  <span className="absolute left-2 top-2 text-slate-400 text-xs">R$</span>
+                  <input
+                    type="number" min="0" step="0.01" value={c.preco_unit} onChange={e => updateComplemento(i, 'preco_unit', e.target.value)}
+                    placeholder="0,00"
+                    className="w-full pl-7 pr-1 py-2 rounded-lg border border-slate-300 text-sm outline-none bg-white"
+                  />
+                </div>
+                <button onClick={() => complementos.length > 1 ? removerComplemento(i) : updateComplemento(i, 'descricao', '')}
+                  className="col-span-1 text-slate-300 hover:text-red-400 transition-colors text-center">✕</button>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[10px] text-amber-600/70 mt-2 mb-3">
+            💡 Deixe o valor em branco para itens "a cotação"
+          </p>
+
+          <button onClick={() => setComplementos([...complementos, novoComplemento()])}
+            className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+            + Adicionar complemento
+          </button>
+        </div>
+
         {/* Rodapé com botão APROVAR */}
         <div className={`mt-6 pt-5 border-t border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-4 ${listaAprovada ? 'bg-emerald-50 -mx-6 -mb-6 px-6 pb-6 rounded-b-2xl' : ''}`}>
           <p className="text-sm text-amber-700 font-medium">
@@ -1042,67 +1150,30 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             </div>
 
-            {/* Complementos livres */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-tight flex items-center gap-2">
-                  ➕ Complementos
-                  <span className="text-[10px] font-normal text-slate-400 normal-case">
-                    — fluido de limpeza, material elétrico, etc.
-                  </span>
-                </h4>
-              </div>
-
-              <div className="space-y-2">
-                {complementos.map((c, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                    <input
-                      value={c.descricao} onChange={e => updateComplemento(i, 'descricao', e.target.value)}
-                      placeholder="Descrição do item..."
-                      className="col-span-4 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
-                    />
-                    <select
-                      value={c.classificacao_id ?? ''}
-                      onChange={e => updateComplemento(i, 'classificacao_id', e.target.value ? parseInt(e.target.value) : null)}
-                      className="col-span-3 px-2 py-2 rounded-lg border border-slate-300 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-400"
-                      title="Classificação (define o bloco no orçamento)"
-                    >
-                      <option value="">Outros / a classificar</option>
-                      {classIndex.opcoes.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                    </select>
-                    <input
-                      type="number" min="1" value={c.qtde} onChange={e => updateComplemento(i, 'qtde', e.target.value)}
-                      className="col-span-1 px-2 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none"
-                    />
-                    <input
-                      value={c.unidade} onChange={e => updateComplemento(i, 'unidade', e.target.value)}
-                      placeholder="un"
-                      className="col-span-1 px-1 py-2 rounded-lg border border-slate-300 text-sm text-center outline-none"
-                    />
-                    <div className="col-span-2 relative">
-                      <span className="absolute left-2 top-2 text-slate-400 text-xs">R$</span>
-                      <input
-                        type="number" min="0" step="0.01" value={c.preco_unit} onChange={e => updateComplemento(i, 'preco_unit', e.target.value)}
-                        placeholder="0,00"
-                        className="w-full pl-7 pr-1 py-2 rounded-lg border border-slate-300 text-sm outline-none"
-                      />
+            {/* Complementos — somente leitura (edite na lista de seleção acima) */}
+            {complementosPreenchidos.length > 0 && (
+              <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-2 bg-slate-100 border-b border-slate-200">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Complementos e Materiais Adicionais</span>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                  {complementosPreenchidos.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2">
+                      <span className="text-sm text-slate-700 font-medium truncate">{c.descricao}</span>
+                      <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0 text-right whitespace-nowrap">
+                        {c.qtde} {c.unidade}
+                        {c.preco_unit
+                          ? ` · R$ ${(parseFloat(c.preco_unit) * (parseFloat(c.qtde) || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                          : ' · a cotação'}
+                      </span>
                     </div>
-                    <button onClick={() => complementos.length > 1 ? removerComplemento(i) : updateComplemento(i, 'descricao', '')}
-                      className="col-span-1 text-slate-300 hover:text-red-400 transition-colors text-center">✕</button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+            )}
 
-              <p className="text-[10px] text-slate-400 mt-2 mb-3">
-                💡 Deixe o valor em branco para itens "a cotação"
-              </p>
-
-              <button onClick={() => setComplementos([...complementos, novoComplemento()])}
-                className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
-                + Adicionar complemento
-              </button>
-            </div>
-
+            {/* ── Bloco comercial (oculto no modo engenharia) ── */}
+            {!modoEngenharia && (<>
             {/* Dados do Cliente */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between border-b pb-2 mb-4">
@@ -1171,8 +1242,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 </div>
               )}
             </div>
+            </>)}
           </div>
 
+          {!modoEngenharia && (<>
           {/* Configurações da Proposta */}
           <div className="px-6 pb-4 border-t border-slate-100 pt-5 space-y-6">
             <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">⚙️ Composição da Proposta</h4>
@@ -1370,6 +1443,18 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             )}
 
+            {baseDesatualizada && (
+              <div className="mb-3 p-3 bg-orange-50 border border-orange-300 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2">
+                <span className="text-[11px] text-orange-800 font-semibold">
+                  🔁 A base de preços foi atualizada (o fornecedor reenviou a cotação). Os preços deste orçamento podem estar desatualizados.
+                </span>
+                <button onClick={verificarEGerar} disabled={loading || loadingCotacaoCheck}
+                  className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 whitespace-nowrap">
+                  🔄 Atualizar base de preços
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
 
               {/* Opção A: Enviar para cotação */}
@@ -1435,6 +1520,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             )}
           </div>
+          </>)}
+
+          {modoEngenharia && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-center text-[11px] text-indigo-800 font-semibold">
+              📋 Modo engenharia — exporte a lista de itens acima (Excel/PDF). A jornada de orçamento está desativada nas Configurações.
+            </div>
+          )}
         </div>
       )}
 
@@ -1529,7 +1621,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       />
 
       {/* ══ 3. RESUMO FINANCEIRO PRIVADO (não imprime) ══ */}
-      {orcamento && (
+      {orcamento && !modoEngenharia && (
         <div className="bg-slate-800 text-white rounded-2xl p-6 print:hidden space-y-5">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">🔒 Resumo Financeiro Interno</h4>
@@ -1539,6 +1631,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 : `Empreitada · Margem mat. ${margemMateriais}% · serv. ${margemServicos}% · Imposto ${imposto}%`}
             </span>
           </div>
+
+          {/* Base de preços (rastreabilidade — uso interno) */}
+          {baseCotacao?.cotacoes?.length > 0 && (
+            <div className={`rounded-xl px-4 py-2.5 text-[11px] flex items-center gap-2 ${
+              baseDesatualizada ? 'bg-orange-900/40 text-orange-200' : 'bg-slate-700/40 text-slate-300'}`}>
+              <span>📎</span>
+              <span>Base de preços: <span className="font-semibold text-white">{textoBaseCotacao()}</span></span>
+              {baseDesatualizada && <span className="ml-auto font-bold text-orange-300">⚠️ atualizada — regere</span>}
+            </div>
+          )}
 
           {/* Composição de custos de serviços */}
           {cf.custo_servicos > 0 && (
@@ -1623,7 +1725,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       )}
 
       {/* ══ 4. PROPOSTA FINAL ══ */}
-      {orcamento && (
+      {orcamento && !modoEngenharia && (
         <div ref={propostaRef} className="bg-white border-2 border-slate-900 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-700 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
 
           {/* Cabeçalho */}
