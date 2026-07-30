@@ -611,11 +611,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
       if (dadosCliente.cnpj) txt(`CNPJ/CPF: ${dadosCliente.cnpj}`, ML + 2, y + 10);
       const metade = ML + CW / 2;
-      pdf.setFontSize(7); pdf.setTextColor(100); txt('CONTATO', metade, y); txt('CELULAR', metade + 40, y); txt('E-MAIL', metade + 70, y);
+      pdf.setFontSize(7); pdf.setTextColor(100); txt('CONTATO', metade, y); txt('CELULAR', metade + 40, y);
       pdf.setTextColor(0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
       txt(dadosCliente.contato || '---', metade, y + 5);
       txt(dadosCliente.celular || '---', metade + 40, y + 5);
-      txt(dadosCliente.email || '---', metade + 70, y + 5);
+      // E-mail em linha própria (rótulo + valor na mesma linha) — evita estourar a margem direita
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100); txt('E-MAIL', metade, y + 10);
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0); txt(dadosCliente.email || '---', metade + 14, y + 10);
       y += 28;
 
       // ── Resumo técnico ────────────────────────────────────────────────
