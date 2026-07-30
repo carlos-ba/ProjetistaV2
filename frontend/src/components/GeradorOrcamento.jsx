@@ -195,6 +195,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     return kgM != null ? Math.round(kgM * quantidade * 1000) / 1000 : null;
   };
 
+  // Tubo de cobre é cotado por kg: retorna o peso em kg do material, ou null se não for tubo de cobre
+  const kgSeTubo = (m) => {
+    if (m.unidade !== 'm') return null;
+    const qtd = parseFloat(m.quantidade ?? m.qtd) || 0;
+    return calcularKg(m, qtd, m.detalhe?.includes('grossa') ? 'grossa' : 'fina');
+  };
+  // Texto de quantidade para exibição: tubo de cobre em kg; demais mantêm o padrão original
+  const qtdeExibir = (m) => {
+    const kg = kgSeTubo(m);
+    if (kg != null) return `${kg} kg`;
+    return m.quantidade ? `${m.quantidade} un` : (m.qtd ?? '');
+  };
+
   // ── Clientes cadastrados ──────────────────────────────────────────────
   useEffect(() => {
     api.get('/api/v1/clientes').then(r => {
@@ -823,7 +836,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       linhas.push({ item: e.nome || e.item, detalhe: e.detalhe || '', qtde: e.qtde ?? 1, unidade: 'un', tipo: 'Equipamento' });
     });
     materiaisAprovados.forEach(m => {
-      linhas.push({ item: m.item, detalhe: m.detalhe || m.descricao || '', qtde: m.quantidade || m.qtd || 1, unidade: m.comprimento ? 'm' : 'un', tipo: 'Material' });
+      const kg = kgSeTubo(m);  // tubo de cobre em kg (cotado por kg)
+      linhas.push({
+        item: m.item, detalhe: m.detalhe || m.descricao || '',
+        qtde: kg != null ? kg : (m.quantidade || m.qtd || 1),
+        unidade: kg != null ? 'kg' : (m.comprimento ? 'm' : 'un'),
+        tipo: 'Material',
+      });
     });
     complementos.filter(c => c.descricao).forEach(c => {
       linhas.push({ item: c.descricao, detalhe: '', qtde: c.qtde || 1, unidade: c.unidade || 'un', tipo: 'Complemento' });
@@ -972,7 +991,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
                     <span className="text-amber-700 font-black text-xs block">
-                      {item.quantidade ? `${item.quantidade} un` : item.qtd}
+                      {qtdeExibir(item)}
                     </span>
                     {item.area_total && (
                       <span className="text-[10px] text-slate-400">({item.area_total} m²)</span>
@@ -1154,7 +1173,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                         )}
                       </div>
                       <span className="text-[10px] text-slate-400 flex-shrink-0 text-right">
-                        <span className="block">{m.quantidade ? `${m.quantidade} un` : m.qtd}</span>
+                        <span className="block">{qtdeExibir(m)}</span>
                         {m.area_total && <span className="block">({m.area_total} m²)</span>}
                       </span>
                     </div>
