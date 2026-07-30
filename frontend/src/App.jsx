@@ -882,6 +882,9 @@ function AppContent({ catalogo }) {
                   nucleo: dadosDoGabinete.nucleo,
                   carga_termica: cargaCalculada,
                   temp_amb: tempExternaCalculo,
+                  produto: inputsCargaTermica?.produtoNome ?? null,
+                  movimentacao: inputsCargaTermica?.movimentacao ?? null,
+                  temp_entrada: inputsCargaTermica?.tempEntrada ?? null,
                 } : null}
               />
             </EtapaCard>

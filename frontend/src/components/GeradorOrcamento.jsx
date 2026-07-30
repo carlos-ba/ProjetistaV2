@@ -629,7 +629,6 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           ['Altura', `${resumoTecnico.altura} m`],
           ['T. Interna', `${resumoTecnico.temperatura_interna} °C`],
           ['Isolamento', `${resumoTecnico.nucleo} ${resumoTecnico.espessura}mm`],
-          resumoTecnico.carga_termica ? ['Carga Térmica', `${Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h`] : null,
         ].filter(Boolean);
         const colW = CW / specs.length;
         specs.forEach((s, i) => {
@@ -641,6 +640,33 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           txt(s[1], x + 2, y + 10);
         });
         y += 18;
+
+        // Carga térmica em destaque + produto / movimentação / temperatura de entrada
+        if (resumoTecnico.carga_termica) {
+          checar(22);
+          pdf.setFillColor(236, 253, 245); pdf.rect(ML, y, CW, 16, 'F');
+          pdf.setDrawColor(167, 243, 208); pdf.setLineWidth(0.3); pdf.rect(ML, y, CW, 16); pdf.setLineWidth(0.2);
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(5, 150, 105);
+          txt('CARGA TÉRMICA CALCULADA', ML + 3, y + 5);
+          pdf.setFontSize(14); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(6, 95, 70);
+          txt(`${Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h`, ML + 3, y + 12);
+          const dets = [
+            resumoTecnico.produto ? ['Produto', String(resumoTecnico.produto)] : null,
+            (resumoTecnico.movimentacao != null && resumoTecnico.movimentacao !== '' && Number(resumoTecnico.movimentacao) > 0) ? ['Movimentação', `${resumoTecnico.movimentacao} kg/dia`] : null,
+            (resumoTecnico.temp_entrada != null && resumoTecnico.temp_entrada !== '') ? ['Temp. Entrada', `${resumoTecnico.temp_entrada} °C`] : null,
+          ].filter(Boolean);
+          const detStartX = ML + CW * 0.42;
+          const detW = (CW * 0.58) / Math.max(1, dets.length);
+          dets.forEach((d, i) => {
+            const dx = detStartX + i * detW;
+            pdf.setFontSize(5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(150);
+            txt(d[0].toUpperCase(), dx, y + 5);
+            pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30);
+            txt(d[1], dx, y + 11);
+          });
+          pdf.setTextColor(0); pdf.setDrawColor(200);
+          y += 20;
+        }
       }
 
       // ── Planta técnica da câmara ─────────────────────────────────────
@@ -1821,18 +1847,31 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-4">
-                  <div className="bg-white rounded-lg p-3 border border-slate-100 flex items-center justify-between">
-                    <p className="text-xs text-slate-500">Isolamento</p>
-                    <p className="text-sm font-bold text-slate-800">{resumoTecnico.nucleo} {resumoTecnico.espessura}mm</p>
-                  </div>
-                  {resumoTecnico.carga_termica && (
-                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100 flex items-center justify-between">
-                      <p className="text-xs text-indigo-500 font-bold">Carga Térmica</p>
-                      <p className="text-sm font-black text-indigo-700">{Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h</p>
-                    </div>
-                  )}
+                <div className="mt-3 bg-white rounded-lg p-3 border border-slate-100 flex items-center justify-between">
+                  <p className="text-xs text-slate-500">Isolamento</p>
+                  <p className="text-sm font-bold text-slate-800">{resumoTecnico.nucleo} {resumoTecnico.espessura}mm</p>
                 </div>
+                {resumoTecnico.carga_termica && (
+                  <div className="mt-3 bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div>
+                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Carga Térmica Calculada</p>
+                        <p className="text-2xl font-black text-emerald-800">{Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} <span className="text-base font-normal">kcal/h</span></p>
+                      </div>
+                      <div className="flex gap-5 text-right">
+                        {resumoTecnico.produto && (
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Produto</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.produto}</p></div>
+                        )}
+                        {resumoTecnico.movimentacao != null && resumoTecnico.movimentacao !== '' && Number(resumoTecnico.movimentacao) > 0 && (
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Movimentação</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.movimentacao} kg/dia</p></div>
+                        )}
+                        {resumoTecnico.temp_entrada != null && resumoTecnico.temp_entrada !== '' && (
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Temp. Entrada</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.temp_entrada} °C</p></div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

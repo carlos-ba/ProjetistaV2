@@ -57,8 +57,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, resultado });
-  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, resultado]);
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
 
   // Produtos filtrados com base na categoria
   const produtosFiltrados = categoriaSelecionada
