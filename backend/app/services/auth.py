@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.database.session import get_db
 from app.models.usuario import Usuario
+from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEMBRO
 from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
 from app.services.email import enviar_verificacao_email, enviar_reset_senha
 
@@ -29,12 +30,20 @@ async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
 
     token_verificacao = secrets.token_urlsafe(32)
 
+    # Todo usuário nasce dono da própria empresa (tenant). Usuários adicionais de
+    # uma empresa existente são criados pelo endpoint de admin, não por aqui.
+    empresa = Empresa(nome=payload.username, plano="trial", status_assinatura="ativa")
+    db.add(empresa)
+    await db.flush()
+
     usuario = Usuario(
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
         email_verified=False,
         email_verification_token=token_verificacao,
+        empresa_id=empresa.id,
+        papel=PAPEL_ADMIN,
     )
     db.add(usuario)
     await db.flush()
@@ -157,3 +166,28 @@ async def get_current_user(
     if not usuario or not usuario.is_active:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
     return UserOut.model_validate(usuario)
+
+
+async def get_empresa_atual(usuario: UserOut = Depends(get_current_user)) -> UUID:
+    """Escopo multi-tenant: devolve a empresa do usuário logado.
+
+    Falha explicitamente se o usuário não tiver empresa vinculada — sem isso, uma
+    query escopada filtraria por NULL e retornaria vazio silenciosamente (ou pior,
+    vazaria dados se alguém esquecesse o filtro).
+    """
+    if not usuario.empresa_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário sem empresa vinculada. Contate o administrador.",
+        )
+    return usuario.empresa_id
+
+
+async def exigir_superadmin(usuario: UserOut = Depends(get_current_user)) -> UserOut:
+    """Restringe a rota à equipe IceNexus (papel superadmin_icenexus)."""
+    if usuario.papel != PAPEL_SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito à administração IceNexus.",
+        )
+    return usuario

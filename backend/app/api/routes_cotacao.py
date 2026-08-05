@@ -15,7 +15,7 @@ from app.schemas.cotacao import (
     FornecedorCreate, FornecedorUpdate, FornecedorOut,
     CotacaoCreate, CotacaoOut, CotacaoComItens,
 )
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_empresa_atual
 from app.services.cotacao_excel import gerar_planilha_cotacao_v2
 from app.services.cotacao_import import extrair_codigo, ler_itens_planilha, casar_itens
 
@@ -29,8 +29,9 @@ async def criar_fornecedor(
     payload: FornecedorCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    fornecedor = Fornecedor(owner_id=usuario.id, **payload.model_dump())
+    fornecedor = Fornecedor(owner_id=usuario.id, empresa_id=empresa_id, **payload.model_dump())
     db.add(fornecedor)
     await db.commit()
     await db.refresh(fornecedor)
@@ -42,8 +43,9 @@ async def listar_fornecedores(
     incluir_inativos: bool = False,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    stmt = select(Fornecedor).where(Fornecedor.owner_id == usuario.id)
+    stmt = select(Fornecedor).where(Fornecedor.empresa_id == empresa_id)
     if not incluir_inativos:
         stmt = stmt.where(Fornecedor.ativo.is_(True))
     result = await db.execute(stmt.order_by(Fornecedor.nome))
@@ -56,8 +58,9 @@ async def atualizar_fornecedor(
     payload: FornecedorUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    fornecedor = await _obter_fornecedor(db, fornecedor_id, usuario.id)
+    fornecedor = await _obter_fornecedor(db, fornecedor_id, empresa_id)
     for campo, valor in payload.model_dump(exclude_unset=True).items():
         setattr(fornecedor, campo, valor)
     await db.commit()
@@ -70,19 +73,20 @@ async def desativar_fornecedor(
     fornecedor_id: int,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     """Desativa (soft delete) — preserva o histórico de cotações."""
-    fornecedor = await _obter_fornecedor(db, fornecedor_id, usuario.id)
+    fornecedor = await _obter_fornecedor(db, fornecedor_id, empresa_id)
     fornecedor.ativo = False
     await db.commit()
     return None
 
 
-async def _obter_fornecedor(db: AsyncSession, fornecedor_id: int, owner_id) -> Fornecedor:
+async def _obter_fornecedor(db: AsyncSession, fornecedor_id: int, empresa_id) -> Fornecedor:
     result = await db.execute(
         select(Fornecedor).where(
             Fornecedor.id == fornecedor_id,
-            Fornecedor.owner_id == owner_id,
+            Fornecedor.empresa_id == empresa_id,
         )
     )
     fornecedor = result.scalar_one_or_none()
@@ -109,16 +113,18 @@ async def criar_cotacao(
     payload: CotacaoCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     if not payload.itens:
         raise HTTPException(status_code=422, detail="A cotação precisa ter ao menos um item")
 
-    await _obter_fornecedor(db, payload.fornecedor_id, usuario.id)
+    await _obter_fornecedor(db, payload.fornecedor_id, empresa_id)
     codigo = await _gerar_codigo(db, payload.fornecedor_id)
 
     cotacao = Cotacao(
         codigo=codigo,
         owner_id=usuario.id,
+        empresa_id=empresa_id,
         fornecedor_id=payload.fornecedor_id,
         projeto_id=payload.projeto_id,
         nome_projeto=payload.nome_projeto,
@@ -143,8 +149,9 @@ async def listar_cotacoes(
     projeto_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    stmt = select(Cotacao).where(Cotacao.owner_id == usuario.id)
+    stmt = select(Cotacao).where(Cotacao.empresa_id == empresa_id)
     if fornecedor_id:
         stmt = stmt.where(Cotacao.fornecedor_id == fornecedor_id)
     if projeto_id:
@@ -158,8 +165,9 @@ async def obter_cotacao(
     cotacao_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+    return await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
 
 
 @router.get("/{cotacao_id}/excel")
@@ -167,8 +175,9 @@ async def baixar_excel_cotacao(
     cotacao_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
 
     result = await db.execute(
         select(Fornecedor).where(Fornecedor.id == cotacao.fornecedor_id)
@@ -215,9 +224,10 @@ async def cancelar_cotacao(
     cotacao_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     """Cancela a cotação (soft) — preserva o registro para o histórico."""
-    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
     cotacao.status = "cancelada"
     await db.commit()
     return None
@@ -230,6 +240,7 @@ async def analisar_planilha_devolvida(
     arquivo: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     """
     Lê a planilha devolvida pelo fornecedor e retorna o relatório de conferência.
@@ -250,7 +261,7 @@ async def analisar_planilha_devolvida(
 
     result = await db.execute(
         select(Cotacao)
-        .where(Cotacao.codigo == codigo, Cotacao.owner_id == usuario.id)
+        .where(Cotacao.codigo == codigo, Cotacao.empresa_id == empresa_id)
         .options(selectinload(Cotacao.itens), selectinload(Cotacao.fornecedor))
     )
     cotacao = result.scalar_one_or_none()
@@ -309,9 +320,10 @@ async def confirmar_importacao(
     payload: ConfirmacaoImportacao,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     """Grava os preços conferidos pelo usuário e marca a cotação como processada."""
-    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
 
     itens_por_id = {i.id: i for i in cotacao.itens}
     atualizados = 0
@@ -332,13 +344,13 @@ async def confirmar_importacao(
     cotacao.data_recebimento = datetime.now().strftime("%Y-%m-%d %H:%M")
     await db.commit()
 
-    return await _obter_cotacao_com_itens(db, cotacao_id, usuario.id)
+    return await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
 
 
-async def _obter_cotacao_com_itens(db: AsyncSession, cotacao_id: UUID, owner_id) -> Cotacao:
+async def _obter_cotacao_com_itens(db: AsyncSession, cotacao_id: UUID, empresa_id) -> Cotacao:
     result = await db.execute(
         select(Cotacao)
-        .where(Cotacao.id == cotacao_id, Cotacao.owner_id == owner_id)
+        .where(Cotacao.id == cotacao_id, Cotacao.empresa_id == empresa_id)
         .options(selectinload(Cotacao.itens))
     )
     cotacao = result.scalar_one_or_none()

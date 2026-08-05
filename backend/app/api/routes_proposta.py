@@ -22,7 +22,7 @@ from app.database.session import get_db
 from app.models.cotacao import Cotacao
 from app.models.proposta import PropostaComercial
 from app.schemas.auth import UserOut
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_empresa_atual
 
 router = APIRouter(prefix="/api/v1/propostas", tags=["propostas"])
 
@@ -38,6 +38,7 @@ async def comparativo_cotacoes(
     projeto_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     """
     Compara as cotações processadas do usuário, item a item.
@@ -45,7 +46,7 @@ async def comparativo_cotacoes(
     """
     stmt = (
         select(Cotacao)
-        .where(Cotacao.owner_id == usuario.id, Cotacao.status == "processada")
+        .where(Cotacao.empresa_id == empresa_id, Cotacao.status == "processada")
         .options(selectinload(Cotacao.itens), selectinload(Cotacao.fornecedor))
         .order_by(Cotacao.created_at.desc())
     )
@@ -173,10 +174,12 @@ async def criar_proposta(
     payload: PropostaCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     proposta = PropostaComercial(
         codigo=await _gerar_codigo_proposta(db),
         owner_id=usuario.id,
+        empresa_id=empresa_id,
         projeto_id=payload.projeto_id,
         dados=payload.dados,
         status="rascunho",
@@ -191,10 +194,11 @@ async def criar_proposta(
 async def listar_propostas(
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
     result = await db.execute(
         select(PropostaComercial)
-        .where(PropostaComercial.owner_id == usuario.id)
+        .where(PropostaComercial.empresa_id == empresa_id)
         .order_by(PropostaComercial.created_at.desc())
     )
     return result.scalars().all()
@@ -205,8 +209,9 @@ async def obter_proposta(
     proposta_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await _obter(db, proposta_id, usuario.id)
+    return await _obter(db, proposta_id, empresa_id)
 
 
 @router.patch("/{proposta_id}", response_model=PropostaOut)
@@ -215,8 +220,9 @@ async def atualizar_proposta(
     payload: PropostaUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    proposta = await _obter(db, proposta_id, usuario.id)
+    proposta = await _obter(db, proposta_id, empresa_id)
     if payload.status is not None:
         if payload.status not in ("rascunho", "enviada", "aceita", "recusada"):
             raise HTTPException(status_code=422, detail="Status inválido")
@@ -233,18 +239,19 @@ async def excluir_proposta(
     proposta_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    proposta = await _obter(db, proposta_id, usuario.id)
+    proposta = await _obter(db, proposta_id, empresa_id)
     await db.delete(proposta)
     await db.commit()
     return None
 
 
-async def _obter(db: AsyncSession, proposta_id: UUID, owner_id) -> PropostaComercial:
+async def _obter(db: AsyncSession, proposta_id: UUID, empresa_id) -> PropostaComercial:
     result = await db.execute(
         select(PropostaComercial).where(
             PropostaComercial.id == proposta_id,
-            PropostaComercial.owner_id == owner_id,
+            PropostaComercial.empresa_id == empresa_id,
         )
     )
     proposta = result.scalar_one_or_none()

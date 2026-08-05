@@ -7,7 +7,7 @@ from app.database.session import get_db
 from app.schemas.auth import UserOut
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut
 from app.services import clientes as service
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_empresa_atual
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["clientes"])
 
@@ -16,8 +16,9 @@ router = APIRouter(prefix="/api/v1/clientes", tags=["clientes"])
 async def listar_clientes(
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await service.get_clientes(db, owner_id=usuario.id)
+    return await service.get_clientes(db, empresa_id=empresa_id)
 
 
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
@@ -25,8 +26,9 @@ async def criar_cliente(
     payload: ClienteCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await service.create_cliente(db, payload, owner_id=usuario.id)
+    return await service.create_cliente(db, payload, owner_id=usuario.id, empresa_id=empresa_id)
 
 
 @router.patch("/{cliente_id}", response_model=ClienteOut)
@@ -35,8 +37,9 @@ async def atualizar_cliente(
     payload: ClienteUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    cliente = await service.get_cliente(db, cliente_id, owner_id=usuario.id)
+    cliente = await service.get_cliente(db, cliente_id, empresa_id=empresa_id)
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     return await service.update_cliente(db, cliente, payload)
@@ -47,8 +50,9 @@ async def deletar_cliente(
     cliente_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    cliente = await service.get_cliente(db, cliente_id, owner_id=usuario.id)
+    cliente = await service.get_cliente(db, cliente_id, empresa_id=empresa_id)
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     await service.delete_cliente(db, cliente)

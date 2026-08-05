@@ -50,6 +50,9 @@ class UserOut(BaseModel):
     is_active: bool
     email_verified: bool = False
     modo_engenharia: bool = False
+    # Multi-tenancy: o escopo dos dados é a empresa; o id do usuário é só autoria
+    empresa_id: UUID | None = None
+    papel: str = "admin_empresa"
 
     model_config = {"from_attributes": True}
 

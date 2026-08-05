@@ -7,7 +7,7 @@ from sqlalchemy import select, delete
 from app.database.session import get_db
 from app.models.configuracao_montagem import ConfiguracaoMontagem
 from app.schemas.auth import UserOut
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_empresa_atual
 
 router = APIRouter(prefix="/api/v1/configuracoes", tags=["configuracoes"])
 
@@ -52,13 +52,18 @@ def _to_dict(cfg: ConfiguracaoMontagem) -> dict:
     }
 
 
-async def _garantir_padrao(db: AsyncSession, usuario_id: UUID):
-    """Cria perfil padrão se o usuário ainda não tem nenhum."""
+async def _garantir_padrao(db: AsyncSession, empresa_id: UUID, usuario_id: UUID):
+    """Cria perfil padrão se a empresa ainda não tem nenhum.
+
+    O perfil é da EMPRESA (compartilhado pela equipe); usuario_id fica como autor.
+    """
     result = await db.execute(
-        select(ConfiguracaoMontagem).where(ConfiguracaoMontagem.usuario_id == usuario_id)
+        select(ConfiguracaoMontagem).where(ConfiguracaoMontagem.empresa_id == empresa_id)
     )
     if result.scalars().first() is None:
-        padrao = ConfiguracaoMontagem(usuario_id=usuario_id, nome="Padrão", ativo=True, **DEFAULTS)
+        padrao = ConfiguracaoMontagem(
+            empresa_id=empresa_id, usuario_id=usuario_id, nome="Padrão", ativo=True, **DEFAULTS
+        )
         db.add(padrao)
         await db.commit()
 
@@ -66,12 +71,13 @@ async def _garantir_padrao(db: AsyncSession, usuario_id: UUID):
 @router.get("/montagem")
 async def listar_perfis(
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
     db: AsyncSession = Depends(get_db),
 ):
-    await _garantir_padrao(db, usuario.id)
+    await _garantir_padrao(db, empresa_id, usuario.id)
     result = await db.execute(
         select(ConfiguracaoMontagem)
-        .where(ConfiguracaoMontagem.usuario_id == usuario.id)
+        .where(ConfiguracaoMontagem.empresa_id == empresa_id)
         .order_by(ConfiguracaoMontagem.id)
     )
     return [_to_dict(c) for c in result.scalars().all()]
@@ -81,9 +87,10 @@ async def listar_perfis(
 async def criar_perfil(
     payload: PerfilPayload,
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
     db: AsyncSession = Depends(get_db),
 ):
-    cfg = ConfiguracaoMontagem(usuario_id=usuario.id, **payload.model_dump())
+    cfg = ConfiguracaoMontagem(usuario_id=usuario.id, empresa_id=empresa_id, **payload.model_dump())
     db.add(cfg)
     await db.commit()
     await db.refresh(cfg)
@@ -95,11 +102,12 @@ async def atualizar_perfil(
     perfil_id: int,
     payload: PerfilPayload,
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(ConfiguracaoMontagem)
-        .where(ConfiguracaoMontagem.id == perfil_id, ConfiguracaoMontagem.usuario_id == usuario.id)
+        .where(ConfiguracaoMontagem.id == perfil_id, ConfiguracaoMontagem.empresa_id == empresa_id)
     )
     cfg = result.scalar_one_or_none()
     if not cfg:
@@ -115,12 +123,13 @@ async def atualizar_perfil(
 async def ativar_perfil(
     perfil_id: int,
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
     db: AsyncSession = Depends(get_db),
 ):
     """Ativa um perfil e desativa todos os outros do usuário."""
     result = await db.execute(
         select(ConfiguracaoMontagem)
-        .where(ConfiguracaoMontagem.usuario_id == usuario.id)
+        .where(ConfiguracaoMontagem.empresa_id == empresa_id)
     )
     perfis = result.scalars().all()
     alvo = next((p for p in perfis if p.id == perfil_id), None)
@@ -136,11 +145,12 @@ async def ativar_perfil(
 async def deletar_perfil(
     perfil_id: int,
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(ConfiguracaoMontagem)
-        .where(ConfiguracaoMontagem.id == perfil_id, ConfiguracaoMontagem.usuario_id == usuario.id)
+        .where(ConfiguracaoMontagem.id == perfil_id, ConfiguracaoMontagem.empresa_id == empresa_id)
     )
     cfg = result.scalar_one_or_none()
     if not cfg:

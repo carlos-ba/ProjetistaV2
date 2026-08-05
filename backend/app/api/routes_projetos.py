@@ -7,7 +7,7 @@ from app.database.session import get_db
 from app.schemas.auth import UserOut
 from app.schemas.projeto import Projeto, ProjetoCreate, ProjetoUpdate, ProjetoComCalculos
 from app.services import projetos as service_projetos
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_empresa_atual
 
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
 
@@ -17,8 +17,9 @@ async def criar_projeto(
     payload: ProjetoCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await service_projetos.create_projeto(db, payload, owner_id=usuario.id)
+    return await service_projetos.create_projeto(db, payload, owner_id=usuario.id, empresa_id=empresa_id)
 
 
 @router.get("", response_model=List[Projeto])
@@ -27,8 +28,9 @@ async def listar_projetos(
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    return await service_projetos.get_projetos(db, skip, limit, owner_id=usuario.id)
+    return await service_projetos.get_projetos(db, skip, limit, empresa_id=empresa_id)
 
 
 @router.get("/{projeto_id}", response_model=ProjetoComCalculos)
@@ -36,8 +38,9 @@ async def obter_projeto(
     projeto_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
+    db_projeto = await service_projetos.get_projeto(db, projeto_id, empresa_id=empresa_id)
     if not db_projeto:
         raise HTTPException(status_code=404, detail="Projeto não encontrado")
     return db_projeto
@@ -49,8 +52,9 @@ async def atualizar_projeto(
     payload: ProjetoUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
+    db_projeto = await service_projetos.get_projeto(db, projeto_id, empresa_id=empresa_id)
     if not db_projeto:
         raise HTTPException(status_code=404, detail="Projeto não encontrado")
     return await service_projetos.update_projeto(db, db_projeto, payload)
@@ -61,8 +65,9 @@ async def deletar_projeto(
     projeto_id: UUID,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
 ):
-    db_projeto = await service_projetos.get_projeto(db, projeto_id, owner_id=usuario.id)
+    db_projeto = await service_projetos.get_projeto(db, projeto_id, empresa_id=empresa_id)
     if not db_projeto:
         raise HTTPException(status_code=404, detail="Projeto não encontrado")
     await service_projetos.delete_projeto(db, db_projeto)

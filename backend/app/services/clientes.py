@@ -6,22 +6,23 @@ from app.models.cliente import Cliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate
 
 
-async def get_clientes(db: AsyncSession, owner_id: UUID):
+async def get_clientes(db: AsyncSession, empresa_id: UUID):
     result = await db.execute(
-        select(Cliente).where(Cliente.owner_id == owner_id).order_by(Cliente.nome)
+        select(Cliente).where(Cliente.empresa_id == empresa_id).order_by(Cliente.nome)
     )
     return result.scalars().all()
 
 
-async def get_cliente(db: AsyncSession, cliente_id: UUID, owner_id: UUID):
+async def get_cliente(db: AsyncSession, cliente_id: UUID, empresa_id: UUID):
     result = await db.execute(
-        select(Cliente).where(Cliente.id == cliente_id, Cliente.owner_id == owner_id)
+        select(Cliente).where(Cliente.id == cliente_id, Cliente.empresa_id == empresa_id)
     )
     return result.scalar_one_or_none()
 
 
-async def create_cliente(db: AsyncSession, payload: ClienteCreate, owner_id: UUID):
-    cliente = Cliente(**payload.model_dump(), owner_id=owner_id)
+async def create_cliente(db: AsyncSession, payload: ClienteCreate, owner_id: UUID, empresa_id: UUID):
+    # owner_id = autor do registro (auditoria) · empresa_id = escopo de acesso
+    cliente = Cliente(**payload.model_dump(), owner_id=owner_id, empresa_id=empresa_id)
     db.add(cliente)
     await db.commit()
     await db.refresh(cliente)
