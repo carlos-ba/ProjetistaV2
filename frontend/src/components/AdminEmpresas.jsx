@@ -1,0 +1,308 @@
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import api from '../api';
+
+/**
+ * Administração IceNexus — gestão de empresas (tenants) e seus usuários.
+ *
+ * Visível apenas para o papel superadmin_icenexus. É por aqui que a implantação
+ * de um cliente empresa é feita: cria-se a empresa e os usuários da equipe dela.
+ */
+
+const PLANOS = [
+  { id: 'trial',    label: 'Trial' },
+  { id: 'tecnico',  label: 'Técnico (individual)' },
+  { id: 'empresa',  label: 'Empresa (multiusuário)' },
+];
+
+const STATUS = [
+  { id: 'ativa',     label: 'Ativa',     cor: 'bg-emerald-100 text-emerald-700' },
+  { id: 'suspensa',  label: 'Suspensa',  cor: 'bg-amber-100 text-amber-700' },
+  { id: 'cancelada', label: 'Cancelada', cor: 'bg-red-100 text-red-600' },
+];
+
+const PAPEIS = [
+  { id: 'admin_empresa', label: 'Administrador' },
+  { id: 'membro',        label: 'Membro' },
+];
+
+const badgeStatus = (s) => (STATUS.find(x => x.id === s) || STATUS[0]).cor;
+const empresaVazia = { nome: '', cnpj: '', plano: 'empresa', status_assinatura: 'ativa' };
+const usuarioVazio = { username: '', email: '', password: '', papel: 'membro' };
+
+export default function AdminEmpresas({ aberto, aoFechar }) {
+  const [empresas, setEmpresas]   = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro]           = useState('');
+  const [ok, setOk]               = useState('');
+
+  const [novaEmpresa, setNovaEmpresa]   = useState(null);
+  const [editando, setEditando]         = useState(null);
+  const [expandida, setExpandida]       = useState(null);   // empresa_id com equipe aberta
+  const [usuarios, setUsuarios]         = useState({});     // empresa_id -> lista
+  const [novoUsuario, setNovoUsuario]   = useState(null);   // { empresa_id, ...campos }
+  const [salvando, setSalvando]         = useState(false);
+
+  const carregar = async () => {
+    setCarregando(true); setErro('');
+    try {
+      const { data } = await api.get('/api/v1/admin/empresas');
+      setEmpresas(data);
+    } catch (e) {
+      setErro(e.response?.status === 403
+        ? 'Acesso restrito à administração IceNexus.'
+        : 'Erro ao carregar empresas.');
+    } finally { setCarregando(false); }
+  };
+
+  useEffect(() => { if (aberto) { carregar(); setOk(''); } }, [aberto]);
+
+  const aviso = (msg) => { setOk(msg); setTimeout(() => setOk(''), 4000); };
+  const msgErro = (e, padrao) => {
+    const d = e.response?.data?.detail;
+    if (typeof d === 'string') return d;
+    if (d && typeof d === 'object') return Object.values(d).flat().join(' · ');
+    return padrao;
+  };
+
+  const criarEmpresa = async () => {
+    if (!novaEmpresa?.nome.trim()) { setErro('Informe o nome da empresa.'); return; }
+    setSalvando(true); setErro('');
+    try {
+      await api.post('/api/v1/admin/empresas', novaEmpresa);
+      setNovaEmpresa(null); await carregar(); aviso('Empresa criada.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao criar empresa.')); }
+    finally { setSalvando(false); }
+  };
+
+  const salvarEmpresa = async () => {
+    setSalvando(true); setErro('');
+    try {
+      const { id, nome, cnpj, plano, status_assinatura } = editando;
+      await api.patch(`/api/v1/admin/empresas/${id}`, { nome, cnpj, plano, status_assinatura });
+      setEditando(null); await carregar(); aviso('Empresa atualizada.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao salvar.')); }
+    finally { setSalvando(false); }
+  };
+
+  const abrirEquipe = async (id) => {
+    if (expandida === id) { setExpandida(null); return; }
+    setExpandida(id); setErro('');
+    try {
+      const { data } = await api.get(`/api/v1/admin/empresas/${id}/usuarios`);
+      setUsuarios(u => ({ ...u, [id]: data }));
+    } catch { setErro('Erro ao carregar a equipe.'); }
+  };
+
+  const criarUsuario = async () => {
+    const { empresa_id, ...dados } = novoUsuario;
+    if (!dados.username.trim() || !dados.email.trim() || dados.password.length < 8) {
+      setErro('Preencha usuário, e-mail e senha com ao menos 8 caracteres.'); return;
+    }
+    setSalvando(true); setErro('');
+    try {
+      await api.post(`/api/v1/admin/empresas/${empresa_id}/usuarios`, dados);
+      setNovoUsuario(null);
+      const { data } = await api.get(`/api/v1/admin/empresas/${empresa_id}/usuarios`);
+      setUsuarios(u => ({ ...u, [empresa_id]: data }));
+      await carregar(); aviso('Usuário criado.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao criar usuário.')); }
+    finally { setSalvando(false); }
+  };
+
+  const desativarUsuario = async (empresa_id, uid, username) => {
+    if (!window.confirm(`Desativar o acesso de "${username}"?`)) return;
+    setErro('');
+    try {
+      await api.patch(`/api/v1/admin/usuarios/${uid}/desativar`);
+      const { data } = await api.get(`/api/v1/admin/empresas/${empresa_id}/usuarios`);
+      setUsuarios(u => ({ ...u, [empresa_id]: data }));
+      aviso('Usuário desativado.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao desativar.')); }
+  };
+
+  if (!aberto) return null;
+
+  const campo = "w-full px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-indigo-400";
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex bg-black/40" onClick={aoFechar}>
+      <div className="relative ml-auto w-full max-w-3xl bg-slate-50 h-full shadow-2xl flex flex-col"
+           onClick={e => e.stopPropagation()}>
+
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 flex-shrink-0">
+          <div>
+            <p className="text-sm font-black text-white">🏢 Administração IceNexus</p>
+            <p className="text-[10px] text-slate-400">Empresas assinantes e suas equipes</p>
+          </div>
+          <button onClick={aoFechar} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {erro && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-semibold">{erro}</div>}
+          {ok   && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 font-semibold">✓ {ok}</div>}
+
+          {/* Nova empresa */}
+          {novaEmpresa ? (
+            <div className="bg-white rounded-xl border-2 border-indigo-200 p-4 space-y-3">
+              <h4 className="text-xs font-black text-indigo-700 uppercase">Nova empresa</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <input className={campo} placeholder="Razão social *" value={novaEmpresa.nome}
+                  onChange={e => setNovaEmpresa(v => ({ ...v, nome: e.target.value }))} />
+                <input className={campo} placeholder="CNPJ" value={novaEmpresa.cnpj}
+                  onChange={e => setNovaEmpresa(v => ({ ...v, cnpj: e.target.value }))} />
+                <select className={campo} value={novaEmpresa.plano}
+                  onChange={e => setNovaEmpresa(v => ({ ...v, plano: e.target.value }))}>
+                  {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+                <select className={campo} value={novaEmpresa.status_assinatura}
+                  onChange={e => setNovaEmpresa(v => ({ ...v, status_assinatura: e.target.value }))}>
+                  {STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => { setNovaEmpresa(null); setErro(''); }}
+                  className="text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+                <button onClick={criarEmpresa} disabled={salvando}
+                  className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">
+                  {salvando ? 'Criando...' : 'Criar empresa'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setNovaEmpresa({ ...empresaVazia }); setErro(''); }}
+              className="w-full py-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 font-bold text-sm hover:bg-indigo-50 transition-colors">
+              + Nova empresa
+            </button>
+          )}
+
+          {carregando && <p className="text-center text-sm text-slate-400 py-6 animate-pulse">Carregando...</p>}
+
+          {/* Lista */}
+          {empresas.map(e => (
+            <div key={e.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+
+              {editando?.id === e.id ? (
+                <div className="p-4 space-y-3 bg-amber-50/40">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className={campo} value={editando.nome || ''}
+                      onChange={ev => setEditando(v => ({ ...v, nome: ev.target.value }))} />
+                    <input className={campo} placeholder="CNPJ" value={editando.cnpj || ''}
+                      onChange={ev => setEditando(v => ({ ...v, cnpj: ev.target.value }))} />
+                    <select className={campo} value={editando.plano}
+                      onChange={ev => setEditando(v => ({ ...v, plano: ev.target.value }))}>
+                      {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
+                    <select className={campo} value={editando.status_assinatura}
+                      onChange={ev => setEditando(v => ({ ...v, status_assinatura: ev.target.value }))}>
+                      {STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setEditando(null)}
+                      className="text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+                    <button onClick={salvarEmpresa} disabled={salvando}
+                      className="text-xs px-4 py-2 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-900 disabled:opacity-50">Salvar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-slate-800">{e.nome}</p>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${badgeStatus(e.status_assinatura)}`}>
+                        {e.status_assinatura}
+                      </span>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 uppercase">
+                        {e.plano}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {e.cnpj || 'sem CNPJ'} · {e.total_usuarios} usuário{e.total_usuarios === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={() => abrirEquipe(e.id)}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 hover:bg-indigo-100">
+                      {expandida === e.id ? 'Fechar' : 'Equipe'}
+                    </button>
+                    <button onClick={() => { setEditando({ ...e }); setErro(''); }}
+                      className="text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Editar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Equipe */}
+              {expandida === e.id && (
+                <div className="border-t border-slate-100 bg-slate-50/60 p-4 space-y-2">
+                  {(usuarios[e.id] || []).map(u => (
+                    <div key={u.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-100">
+                      <div className="min-w-0">
+                        <p className={`text-sm font-semibold ${u.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                          {u.username}
+                        </p>
+                        <p className="text-[10px] text-slate-400">{u.email}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 uppercase">
+                          {u.papel === 'admin_empresa' ? 'admin' : u.papel}
+                        </span>
+                        {u.is_active && (
+                          <button onClick={() => desativarUsuario(e.id, u.id, u.username)}
+                            className="text-[10px] text-slate-400 hover:text-red-500" title="Desativar acesso">✕</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {(usuarios[e.id] || []).length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Nenhum usuário nesta empresa.</p>
+                  )}
+
+                  {novoUsuario?.empresa_id === e.id ? (
+                    <div className="bg-white rounded-lg border-2 border-indigo-200 p-3 space-y-2 mt-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className={campo} placeholder="usuário *" value={novoUsuario.username}
+                          onChange={ev => setNovoUsuario(v => ({ ...v, username: ev.target.value }))} />
+                        <input className={campo} placeholder="e-mail *" type="email" value={novoUsuario.email}
+                          onChange={ev => setNovoUsuario(v => ({ ...v, email: ev.target.value }))} />
+                        <input className={campo} placeholder="senha (mín. 8) *" value={novoUsuario.password}
+                          onChange={ev => setNovoUsuario(v => ({ ...v, password: ev.target.value }))} />
+                        <select className={campo} value={novoUsuario.papel}
+                          onChange={ev => setNovoUsuario(v => ({ ...v, papel: ev.target.value }))}>
+                          {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        A senha é definida agora e entregue ao usuário — ele já entra sem confirmar e-mail.
+                      </p>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => { setNovoUsuario(null); setErro(''); }}
+                          className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+                        <button onClick={criarUsuario} disabled={salvando}
+                          className="text-[11px] px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">
+                          {salvando ? 'Criando...' : 'Criar usuário'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setNovoUsuario({ empresa_id: e.id, ...usuarioVazio }); setErro(''); }}
+                      className="text-xs font-bold text-indigo-600 hover:underline mt-1">
+                      + Adicionar usuário
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {!carregando && empresas.length === 0 && !erro && (
+            <p className="text-center text-sm text-slate-400 py-8">Nenhuma empresa cadastrada.</p>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}

@@ -9,6 +9,7 @@ import CalculadoraCargaTermica from './components/CalculadoraCargaTermica.jsx';
 import SelecaoEquipamentos from './components/SelecaoEquipamentos.jsx';
 import ComponentesFluxo from './components/ComponentesFluxo.jsx';
 import ConfiguracoesPage from './components/ConfiguracoesPage.jsx';
+import AdminEmpresas from './components/AdminEmpresas.jsx';
 import ClassificacaoPage from './components/ClassificacaoPage.jsx';
 import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
@@ -64,6 +65,7 @@ function AppContent({ catalogo }) {
   const [triggerGerarProposta, setTriggerGerarProposta] = useState(0);
   const [mostrandoConfiguracoes, setMostrandoConfiguracoes] = useState(false);
   const [mostrandoClassificacao, setMostrandoClassificacao] = useState(false);
+  const [mostrandoAdmin, setMostrandoAdmin] = useState(false);
   const [classificacoes, setClassificacoes] = useState(catalogo.classificacoes);
   const [resumoProjeto, setResumoProjeto] = useState(null); // { projeto, dados } — exibe modal ao carregar
 
@@ -623,6 +625,12 @@ function AppContent({ catalogo }) {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <Settings className="w-4 h-4" /> Classificação de Itens
           </div>
+          {user?.papel === 'superadmin_icenexus' && (
+            <div onClick={() => setMostrandoAdmin(true)}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-amber-600 hover:bg-amber-50 text-sm cursor-pointer transition-colors font-semibold">
+              <Settings className="w-4 h-4" /> Administração
+            </div>
+          )}
         </nav>
 
         {/* Insights */}
@@ -670,6 +678,8 @@ function AppContent({ catalogo }) {
           />
 
           {/* MODAL CONFIGURAÇÕES DE MONTAGEM */}
+          <AdminEmpresas aberto={mostrandoAdmin} aoFechar={() => setMostrandoAdmin(false)} />
+
           {mostrandoClassificacao && (
             <ClassificacaoPage
               onFechar={() => setMostrandoClassificacao(false)}
