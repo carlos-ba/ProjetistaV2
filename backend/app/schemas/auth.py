@@ -53,6 +53,9 @@ class UserOut(BaseModel):
     # Multi-tenancy: o escopo dos dados é a empresa; o id do usuário é só autoria
     empresa_id: UUID | None = None
     papel: str = "admin_empresa"
+    empresa_nome: str | None = None
+    empresa_plano: str | None = None
+    empresa_status: str | None = None
 
     model_config = {"from_attributes": True}
 

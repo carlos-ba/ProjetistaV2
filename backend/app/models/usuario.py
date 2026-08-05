@@ -35,5 +35,19 @@ class Usuario(Base, TimestampMixin):
 
     empresa: Mapped["Empresa | None"] = relationship(back_populates="usuarios")
 
+    # Expostos no /me para a interface identificar o tenant e o estado da assinatura.
+    # Exigem selectinload(Usuario.empresa) — lazy-load quebraria no contexto async.
+    @property
+    def empresa_nome(self) -> str | None:
+        return self.empresa.nome if self.empresa else None
+
+    @property
+    def empresa_plano(self) -> str | None:
+        return self.empresa.plano if self.empresa else None
+
+    @property
+    def empresa_status(self) -> str | None:
+        return self.empresa.status_assinatura if self.empresa else None
+
     projetos: Mapped[List["Projeto"]] = relationship(back_populates="owner")
     clientes: Mapped[List["Cliente"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

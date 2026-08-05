@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
@@ -161,7 +162,9 @@ async def get_current_user(
             detail="Token inválido ou expirado.",
         )
 
-    result = await db.execute(select(Usuario).where(Usuario.id == UUID(user_id)))
+    result = await db.execute(
+        select(Usuario).options(selectinload(Usuario.empresa)).where(Usuario.id == UUID(user_id))
+    )
     usuario = result.scalar_one_or_none()
     if not usuario or not usuario.is_active:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")

@@ -22,7 +22,7 @@ import ModalResumoProjeto from './components/ModalResumoProjeto.jsx';
 import { Button } from './components/ui/button.jsx';
 import { Badge } from './components/ui/badge.jsx';
 import { Separator } from './components/ui/separator.jsx';
-import { LayoutDashboard, FolderOpen, Settings, LogOut, Plus, Save, CopyPlus, CheckCircle2, Circle, Lock, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, Settings, LogOut, Plus, Save, CopyPlus, CheckCircle2, Circle, Lock, ChevronRight, Building2, ShieldAlert } from 'lucide-react';
 
 
 function AppContent({ catalogo }) {
@@ -508,6 +508,51 @@ function AppContent({ catalogo }) {
           <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mt-1">
             Engineering Suite <span className="text-muted-foreground/40 ml-1">v1.2</span>
           </p>
+
+          {/* Identidade do tenant + estado da assinatura */}
+          {user?.empresa_nome && (
+            <div className={`mt-3 rounded-lg border px-3 py-2 ${
+              user.papel === 'superadmin_icenexus'
+                ? 'bg-amber-50 border-amber-200'
+                : 'bg-[#7B2D8B]/5 border-[#7B2D8B]/20'}`}>
+              <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">
+                {user.papel === 'superadmin_icenexus' ? 'Administração IceNexus' : 'Empresa'}
+              </p>
+              <p className={`text-[12px] font-black leading-tight truncate ${
+                user.papel === 'superadmin_icenexus' ? 'text-amber-800' : 'text-[#7B2D8B]'}`}
+                title={user.empresa_nome}>
+                {user.empresa_nome}
+              </p>
+              {user.empresa_plano && (
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                  Plano {user.empresa_plano}
+                </p>
+              )}
+
+              {/* Aviso de assinatura — só aparece quando exige atenção */}
+              {user.empresa_status && user.empresa_status !== 'ativa' && (
+                <div className={`mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 ${
+                  user.empresa_status === 'suspensa'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-red-100 text-red-700'}`}>
+                  <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
+                  <span className="text-[9px] font-bold leading-tight">
+                    {user.empresa_status === 'suspensa'
+                      ? 'Assinatura suspensa — regularize para manter o acesso.'
+                      : 'Assinatura cancelada — contate a IceNexus.'}
+                  </span>
+                </div>
+              )}
+              {user.empresa_plano === 'trial' && user.empresa_status === 'ativa' && (
+                <div className="mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 bg-blue-50 text-blue-700">
+                  <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
+                  <span className="text-[9px] font-bold leading-tight">
+                    Período de avaliação em andamento.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Cabeçalho Centro */}
@@ -537,6 +582,21 @@ function AppContent({ catalogo }) {
                 <Save className="w-4 h-4" /> {salvando ? 'Salvando...' : 'Salvar'}
               </Button>
               <Separator orientation="vertical" className="h-6 mx-1" />
+              {/* Identidade do tenant — cor de fundo guia o olho e sinaliza o papel.
+                  Âmbar para superadmin (tem poder sobre todas as empresas), roxo da
+                  marca para usuário comum. */}
+              {user.empresa_nome && (
+                <span className={`hidden sm:flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                  user.papel === 'superadmin_icenexus'
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-[#7B2D8B]/10 text-[#7B2D8B] border-[#7B2D8B]/20'}`}
+                  title={user.papel === 'superadmin_icenexus'
+                    ? 'Você está operando como administração IceNexus'
+                    : `Empresa: ${user.empresa_nome}`}>
+                  <Building2 className="w-3.5 h-3.5" />
+                  {user.empresa_nome}
+                </span>
+              )}
               <span className="text-xs text-muted-foreground hidden sm:block">{user.username}</span>
               <Button variant="ghost" size="icon" onClick={logout} title="Sair" className="text-muted-foreground hover:text-destructive">
                 <LogOut className="w-4 h-4" />

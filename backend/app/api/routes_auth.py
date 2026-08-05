@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
@@ -29,7 +30,9 @@ async def atualizar_preferencias(
     usuario: UserOut = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-    obj = (await db.execute(select(Usuario).where(Usuario.id == usuario.id))).scalar_one()
+    obj = (await db.execute(
+        select(Usuario).options(selectinload(Usuario.empresa)).where(Usuario.id == usuario.id)
+    )).scalar_one()
     obj.modo_engenharia = payload.modo_engenharia
     await db.commit()
     await db.refresh(obj)
