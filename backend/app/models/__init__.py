@@ -9,6 +9,7 @@ from app.models.catalogo import (
 from app.models.equipamento import Equipamento, PerformanceEquipamento
 from app.models.componente import ComponenteTecnico, PerformanceComponente
 from app.models.material import Material
+from app.models.empresa import Empresa
 from app.models.usuario import Usuario
 from app.models.projeto import Projeto
 from app.models.calculo import Calculo
@@ -31,6 +32,7 @@ __all__ = [
     "ComponenteTecnico",
     "PerformanceComponente",
     "Material",
+    "Empresa",
     "Usuario",
     "Projeto",
     "Calculo",

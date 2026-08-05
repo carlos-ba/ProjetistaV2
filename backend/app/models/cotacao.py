@@ -15,6 +15,9 @@ class Fornecedor(Base, TimestampMixin):
     owner_id: Mapped[UUID] = mapped_column(
         ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False
     )
+    empresa_id: Mapped[UUID] = mapped_column(
+        ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False
+    )
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
     cnpj: Mapped[Optional[str]] = mapped_column(String(18), nullable=True)
     telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -32,6 +35,9 @@ class Cotacao(Base, TimestampMixin):
     codigo: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     owner_id: Mapped[UUID] = mapped_column(
         ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False
+    )
+    empresa_id: Mapped[UUID] = mapped_column(
+        ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False
     )
     fornecedor_id: Mapped[int] = mapped_column(
         ForeignKey("fornecedor.id"), nullable=False

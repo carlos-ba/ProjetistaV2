@@ -24,7 +24,7 @@ from app.models import (  # noqa: F401 — registers all tables with Base.metada
     Equipamento, PerformanceEquipamento,
     ComponenteTecnico, PerformanceComponente,
     Material,
-    Usuario,
+    Empresa, Usuario,
     Projeto,
     Calculo,
 )

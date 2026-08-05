@@ -15,6 +15,9 @@ class PropostaComercial(Base, TimestampMixin):
     owner_id: Mapped[UUID] = mapped_column(
         ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False
     )
+    empresa_id: Mapped[UUID] = mapped_column(
+        ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False
+    )
     projeto_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("projeto.id", ondelete="SET NULL"), nullable=True
     )

@@ -10,6 +10,7 @@ class ConfiguracaoMontagem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
+    empresa_id: Mapped[UUID] = mapped_column(ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False)
     nome: Mapped[str] = mapped_column(String(100), nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=False)
 

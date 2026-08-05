@@ -14,5 +14,6 @@ class Cliente(Base, TimestampMixin):
     celular: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     owner_id: Mapped[UUID] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
+    empresa_id: Mapped[UUID] = mapped_column(ForeignKey("empresa.id", ondelete="CASCADE"), nullable=False)
 
     owner: Mapped["Usuario"] = relationship(back_populates="clientes")
