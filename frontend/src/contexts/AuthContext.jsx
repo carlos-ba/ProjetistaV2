@@ -7,7 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Busca o usuário completo (inclui modo_engenharia); fallback para o username do JWT
+  // Busca o usuário completo (inclui modo_engenharia e empresa_id); fallback para o username do JWT
   const carregarUsuario = async (token, fallbackUsername) => {
     try {
       const { data } = await api.get('/api/auth/me/');
@@ -17,6 +17,10 @@ export function AuthProvider({ children }) {
       setUser({ username: payload.username || fallbackUsername || payload.user_id });
     }
   };
+
+  // Multi-tenancy: sem empresa vinculada, as rotas escopadas respondem 403.
+  // Melhor barrar com mensagem clara do que deixar o app carregar quebrado.
+  const semEmpresa = !!user && !user.empresa_id;
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -57,7 +61,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, atualizarModoEngenharia }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, atualizarModoEngenharia, semEmpresa }}>
       {children}
     </AuthContext.Provider>
   );

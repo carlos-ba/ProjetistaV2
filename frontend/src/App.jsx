@@ -961,7 +961,7 @@ function useCatalogo() {
 }
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, semEmpresa, logout } = useAuth();
   const catalogo = useCatalogo();
 
   if (loading) return (
@@ -971,6 +971,28 @@ function App() {
   );
 
   if (!user) return <LoginPage />;
+
+  // Conta sem empresa vinculada: as rotas de dados respondem 403. Barra aqui com
+  // mensagem clara em vez de deixar o app carregar com tudo vazio.
+  if (semEmpresa) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] to-[#2a1245] p-6">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">
+        <div className="text-4xl mb-3">🏢</div>
+        <h2 className="text-lg font-black text-slate-900 mb-2">Conta sem empresa vinculada</h2>
+        <p className="text-sm text-slate-600 mb-1">
+          O usuário <b>{user.username}</b> não está associado a nenhuma empresa, por isso
+          os projetos e cadastros não podem ser carregados.
+        </p>
+        <p className="text-xs text-slate-400 mb-6">
+          Entre em contato com a administração IceNexus para regularizar o acesso.
+        </p>
+        <button onClick={logout}
+          className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-all">
+          Sair
+        </button>
+      </div>
+    </div>
+  );
 
   if (!catalogo) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] to-[#2a1245]">
