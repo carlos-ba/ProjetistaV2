@@ -83,12 +83,23 @@ class UsuarioCreate(BaseModel):
 class UsuarioUpdate(BaseModel):
     is_active: bool | None = None
     papel: str | None = None
+    email: EmailStr | None = None
+    # Redefinição pelo admin: não há autoatendimento por e-mail garantido, então
+    # este é o caminho confiável para destravar quem esqueceu a senha.
+    password: str | None = None
 
     @field_validator("papel")
     @classmethod
     def papel_valido(cls, v: str | None) -> str | None:
         if v is not None and v not in PAPEIS_PERMITIDOS:
             raise ValueError(f"Papel deve ser um de: {', '.join(PAPEIS_PERMITIDOS)}")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def senha_minima(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 8:
+            raise ValueError("Senha deve ter ao menos 8 caracteres.")
         return v
 
 
@@ -221,6 +232,22 @@ async def atualizar_usuario(
     dados = payload.model_dump(exclude_unset=True)
     if usuario_id == admin.id and dados.get("is_active") is False:
         raise HTTPException(status_code=400, detail="Não é possível desativar a própria conta.")
+
+    # E-mail é único: barra o conflito com mensagem clara em vez de erro de banco
+    novo_email = dados.pop("email", None)
+    if novo_email and novo_email != usuario.email:
+        existe = (await db.execute(
+            select(Usuario).where(Usuario.email == novo_email, Usuario.id != usuario_id)
+        )).scalar_one_or_none()
+        if existe:
+            raise HTTPException(status_code=400, detail={"email": ["Este e-mail já está cadastrado."]})
+        usuario.email = novo_email
+
+    # Senha nova é gravada como hash; qualquer token de reset pendente é invalidado
+    nova_senha = dados.pop("password", None)
+    if nova_senha:
+        usuario.hashed_password = hash_password(nova_senha)
+        usuario.password_reset_token = None
 
     for campo, valor in dados.items():
         setattr(usuario, campo, valor)

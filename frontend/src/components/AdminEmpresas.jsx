@@ -41,6 +41,7 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
   const [expandida, setExpandida]       = useState(null);   // empresa_id com equipe aberta
   const [usuarios, setUsuarios]         = useState({});     // empresa_id -> lista
   const [novoUsuario, setNovoUsuario]   = useState(null);   // { empresa_id, ...campos }
+  const [editUsuario, setEditUsuario]   = useState(null);   // { empresa_id, id, email, password }
   const [salvando, setSalvando]         = useState(false);
 
   const carregar = async () => {
@@ -123,6 +124,26 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
           : dados.is_active === true ? 'Acesso reativado.'
           : 'Papel atualizado.');
     } catch (e) { setErro(msgErro(e, 'Erro ao atualizar usuário.')); }
+  };
+
+  const salvarUsuario = async () => {
+    const { empresa_id, id, email, password } = editUsuario;
+    const dados = {};
+    if (email && email !== editUsuario.emailOriginal) dados.email = email;
+    if (password) {
+      if (password.length < 8) { setErro('A senha deve ter ao menos 8 caracteres.'); return; }
+      dados.password = password;
+    }
+    if (!Object.keys(dados).length) { setEditUsuario(null); return; }
+    setSalvando(true); setErro('');
+    try {
+      await api.patch(`/api/v1/admin/usuarios/${id}`, dados);
+      const { data } = await api.get(`/api/v1/admin/empresas/${empresa_id}/usuarios`);
+      setUsuarios(u => ({ ...u, [empresa_id]: data }));
+      setEditUsuario(null);
+      aviso(dados.password ? 'Senha redefinida — informe-a ao usuário.' : 'Cadastro atualizado.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao salvar usuário.')); }
+    finally { setSalvando(false); }
   };
 
   if (!aberto) return null;
@@ -242,7 +263,8 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
               {expandida === e.id && (
                 <div className="border-t border-slate-100 bg-slate-50/60 p-4 space-y-2">
                   {(usuarios[e.id] || []).map(u => (
-                    <div key={u.id} className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                    <React.Fragment key={u.id}>
+                    <div className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
                       u.is_active ? 'bg-white border-slate-100' : 'bg-slate-100/70 border-slate-200'}`}>
                       <div className="min-w-0">
                         <p className={`text-sm font-semibold ${u.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
@@ -262,6 +284,10 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                           className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none disabled:opacity-50">
                           {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                         </select>
+                        <button
+                          onClick={() => { setEditUsuario({ empresa_id: e.id, id: u.id, email: u.email, emailOriginal: u.email, password: '' }); setErro(''); }}
+                          className="text-[10px] px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          title="Alterar e-mail ou redefinir senha">Editar</button>
                         {u.is_active ? (
                           <button
                             onClick={() => atualizarUsuario(e.id, u.id, { is_active: false },
@@ -276,6 +302,36 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                         )}
                       </div>
                     </div>
+                    {editUsuario?.id === u.id && (
+                      <div className="bg-white rounded-lg border-2 border-amber-200 p-3 space-y-2 -mt-1">
+                        <p className="text-[10px] font-black text-amber-700 uppercase">Editar {u.username}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">E-mail</label>
+                            <input className={campo} value={editUsuario.email}
+                              onChange={ev => setEditUsuario(v => ({ ...v, email: ev.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Nova senha</label>
+                            <input className={campo} placeholder="deixe em branco para manter"
+                              value={editUsuario.password}
+                              onChange={ev => setEditUsuario(v => ({ ...v, password: ev.target.value }))} />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          A senha definida aqui passa a valer imediatamente — anote e entregue ao usuário.
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => { setEditUsuario(null); setErro(''); }}
+                            className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+                          <button onClick={salvarUsuario} disabled={salvando}
+                            className="text-[11px] px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-50">
+                            {salvando ? 'Salvando...' : 'Salvar'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    </React.Fragment>
                   ))}
                   {(usuarios[e.id] || []).length === 0 && (
                     <p className="text-xs text-slate-400 italic">Nenhum usuário nesta empresa.</p>
