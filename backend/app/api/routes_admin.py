@@ -80,6 +80,18 @@ class UsuarioCreate(BaseModel):
         return v
 
 
+class UsuarioUpdate(BaseModel):
+    is_active: bool | None = None
+    papel: str | None = None
+
+    @field_validator("papel")
+    @classmethod
+    def papel_valido(cls, v: str | None) -> str | None:
+        if v is not None and v not in PAPEIS_PERMITIDOS:
+            raise ValueError(f"Papel deve ser um de: {', '.join(PAPEIS_PERMITIDOS)}")
+        return v
+
+
 class UsuarioAdminOut(BaseModel):
     id: UUID
     username: str
@@ -188,19 +200,30 @@ async def criar_usuario(
     return usuario
 
 
-@router.patch("/usuarios/{usuario_id}/desativar", response_model=UsuarioAdminOut)
-async def desativar_usuario(
+@router.patch("/usuarios/{usuario_id}", response_model=UsuarioAdminOut)
+async def atualizar_usuario(
     usuario_id: UUID,
+    payload: UsuarioUpdate,
     db: AsyncSession = Depends(get_db),
     admin: UserOut = Depends(exigir_superadmin),
 ):
-    if usuario_id == admin.id:
-        raise HTTPException(status_code=400, detail="Não é possível desativar a própria conta.")
+    """Ativa/desativa o acesso e ajusta o papel.
+
+    Desativar precisa ser reversível: username e e-mail são únicos, então um
+    usuário desativado não pode ser recriado — sem reativação, o acesso ficaria
+    permanentemente perdido.
+    """
     result = await db.execute(select(Usuario).where(Usuario.id == usuario_id))
     usuario = result.scalar_one_or_none()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    usuario.is_active = False
+
+    dados = payload.model_dump(exclude_unset=True)
+    if usuario_id == admin.id and dados.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="Não é possível desativar a própria conta.")
+
+    for campo, valor in dados.items():
+        setattr(usuario, campo, valor)
     await db.commit()
     await db.refresh(usuario)
     return usuario

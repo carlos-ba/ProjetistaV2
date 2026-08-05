@@ -110,15 +110,19 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
     finally { setSalvando(false); }
   };
 
-  const desativarUsuario = async (empresa_id, uid, username) => {
-    if (!window.confirm(`Desativar o acesso de "${username}"?`)) return;
+  // Um só caminho para ativar/desativar e trocar papel — desativar precisa ser
+  // reversível, já que username e e-mail são únicos e o usuário não pode ser recriado.
+  const atualizarUsuario = async (empresa_id, uid, dados, confirmacao) => {
+    if (confirmacao && !window.confirm(confirmacao)) return;
     setErro('');
     try {
-      await api.patch(`/api/v1/admin/usuarios/${uid}/desativar`);
+      await api.patch(`/api/v1/admin/usuarios/${uid}`, dados);
       const { data } = await api.get(`/api/v1/admin/empresas/${empresa_id}/usuarios`);
       setUsuarios(u => ({ ...u, [empresa_id]: data }));
-      aviso('Usuário desativado.');
-    } catch (e) { setErro(msgErro(e, 'Erro ao desativar.')); }
+      aviso(dados.is_active === false ? 'Acesso desativado.'
+          : dados.is_active === true ? 'Acesso reativado.'
+          : 'Papel atualizado.');
+    } catch (e) { setErro(msgErro(e, 'Erro ao atualizar usuário.')); }
   };
 
   if (!aberto) return null;
@@ -238,20 +242,37 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
               {expandida === e.id && (
                 <div className="border-t border-slate-100 bg-slate-50/60 p-4 space-y-2">
                   {(usuarios[e.id] || []).map(u => (
-                    <div key={u.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-100">
+                    <div key={u.id} className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                      u.is_active ? 'bg-white border-slate-100' : 'bg-slate-100/70 border-slate-200'}`}>
                       <div className="min-w-0">
                         <p className={`text-sm font-semibold ${u.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
                           {u.username}
+                          {!u.is_active && (
+                            <span className="ml-2 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 uppercase no-underline inline-block align-middle">
+                              inativo
+                            </span>
+                          )}
                         </p>
                         <p className="text-[10px] text-slate-400">{u.email}</p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 uppercase">
-                          {u.papel === 'admin_empresa' ? 'admin' : u.papel}
-                        </span>
-                        {u.is_active && (
-                          <button onClick={() => desativarUsuario(e.id, u.id, u.username)}
-                            className="text-[10px] text-slate-400 hover:text-red-500" title="Desativar acesso">✕</button>
+                        <select value={u.papel} disabled={!u.is_active}
+                          onChange={ev => atualizarUsuario(e.id, u.id, { papel: ev.target.value })}
+                          title="Papel na empresa"
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none disabled:opacity-50">
+                          {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                        {u.is_active ? (
+                          <button
+                            onClick={() => atualizarUsuario(e.id, u.id, { is_active: false },
+                              `Desativar o acesso de "${u.username}"? Ele poderá ser reativado depois.`)}
+                            className="text-[10px] px-2 py-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200"
+                            title="Desativar acesso">Desativar</button>
+                        ) : (
+                          <button
+                            onClick={() => atualizarUsuario(e.id, u.id, { is_active: true })}
+                            className="text-[10px] px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 hover:bg-emerald-100"
+                            title="Reativar acesso">Reativar</button>
                         )}
                       </div>
                     </div>
