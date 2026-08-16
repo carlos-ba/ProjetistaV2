@@ -373,7 +373,7 @@ function AppContent({ catalogo }) {
         setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
         alert("Projeto salvo com sucesso!");
         if (mostrandoHistorico) abrirHistorico();
-      } catch { alert("Erro ao salvar o projeto."); }
+      } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
       finally { setSalvando(false); }
       return;
     }
@@ -384,7 +384,7 @@ function AppContent({ catalogo }) {
       await api.patch(`/api/v1/projetos/${projetoAtual.id}`, _montarPayload(projetoAtual.nome, projetoAtual.cliente));
       alert("Projeto atualizado com sucesso!");
       if (mostrandoHistorico) abrirHistorico();
-    } catch { alert("Erro ao salvar o projeto."); }
+    } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
     finally { setSalvando(false); }
   };
 
@@ -402,7 +402,7 @@ function AppContent({ catalogo }) {
       setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
       alert(`Projeto salvo como "${nome}"!`);
       if (mostrandoHistorico) abrirHistorico();
-    } catch { alert("Erro ao salvar o projeto."); }
+    } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
     finally { setSalvando(false); }
   };
 
@@ -501,8 +501,8 @@ function AppContent({ catalogo }) {
         {/* Cabeçalho Esquerda */}
         <div className="w-60 flex-shrink-0 border-r hidden lg:flex flex-col justify-center px-5 py-3">
           <img
-            src="/logoIceNexusIAR _png.png"
-            alt="IceNexus IAR"
+            src="/logo-icenexus.png"
+            alt="IceNexus"
             className="w-full max-h-12 object-contain"
           />
           <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mt-1">

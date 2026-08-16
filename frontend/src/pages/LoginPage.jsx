@@ -58,10 +58,7 @@ export default function LoginPage() {
         {/* Logo / Título */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7B2D8B] to-[#6BBF3F] flex items-center justify-center">
-              <span className="text-white font-black text-lg">PF</span>
-            </div>
-            <span className="text-2xl font-black text-white">Projetista Frigorífico</span>
+            <img src="/logo-icenexus.png" alt="IceNexus" className="h-10 w-auto object-contain" />
           </div>
           <p className="text-white/50 text-sm">Dimensionamento de câmaras frigoríficas</p>
         </div>
