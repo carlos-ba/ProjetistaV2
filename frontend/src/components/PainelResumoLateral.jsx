@@ -40,7 +40,7 @@ const StatusCotacao = ({ projetoId }) => {
 };
 
 // ── Detalhe rico por etapa ────────────────────────────────────────────────
-const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrcamento, deltaT, itensAcessorios, itensTubulacao, projetoAtual }) => {
+const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrcamento, deltaT, tempExterna, itensAcessorios, itensTubulacao, projetoAtual }) => {
 
   if (!passoExpandido) return (
     <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
@@ -73,6 +73,13 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
     const carga = Number(cargaCalculada);
     const tr = (carga / 3024).toFixed(2);
     const kw = (carga / 860).toFixed(2);
+    // Estimativa antes da seleção de equipamento (Card 3) — mesma conta usada
+    // no Painel Técnico da sidebar esquerda: T.Evap = T.Interna − Delta T.
+    // T.Cond segue a regra do projeto: T.Amb + 10°C.
+    const tEvapEstimado = (deltaT != null && dadosGabinete?.temperatura_interna != null)
+      ? (Number(dadosGabinete.temperatura_interna) - Number(deltaT)).toFixed(1)
+      : null;
+    const tCondEstimado = tempExterna != null ? (Number(tempExterna) + 10).toFixed(1) : null;
     return (
       <div className="space-y-3">
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
@@ -80,6 +87,22 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
           <p className="text-3xl font-black text-emerald-700 mt-1">{carga.toLocaleString('pt-BR')}</p>
           <p className="text-xs text-emerald-500 font-bold">kcal/h</p>
         </div>
+        {(tEvapEstimado != null || tCondEstimado != null) && (
+          <div className="flex gap-2">
+            {tEvapEstimado != null && (
+              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">T.Evap (est.)</p>
+                <p className="text-sm font-bold text-slate-700">{tEvapEstimado}°C</p>
+              </div>
+            )}
+            {tCondEstimado != null && (
+              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">T.Cond (est.)</p>
+                <p className="text-sm font-bold text-slate-700">{tCondEstimado}°C</p>
+              </div>
+            )}
+          </div>
+        )}
         <Chip label="Equivalente em TR" valor={`${tr} TR`} />
         <Chip label="Equivalente em kW" valor={`${kw} kW`} />
         {deltaT && <Chip label="Delta T selecionado" valor={`${deltaT}°C`} destaque />}
@@ -215,7 +238,7 @@ const ETAPAS = {
 // ── Componente principal ──────────────────────────────────────────────────
 const PainelResumoLateral = ({
   dadosGabinete, cargaCalculada, itensOrcamento,
-  passoAtual, deltaT, passoExpandido,
+  passoAtual, deltaT, tempExterna, passoExpandido,
   itensAcessorios, itensTubulacao, projetoAtual,
 }) => {
   const volumeBruto      = dadosGabinete
@@ -273,6 +296,7 @@ const PainelResumoLateral = ({
             cargaCalculada={cargaCalculada}
             itensOrcamento={itensOrcamento}
             deltaT={deltaT}
+            tempExterna={tempExterna}
             itensAcessorios={itensAcessorios}
             itensTubulacao={itensTubulacao}
             projetoAtual={projetoAtual}

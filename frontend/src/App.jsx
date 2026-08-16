@@ -628,7 +628,7 @@ function AppContent({ catalogo }) {
                         ${concluido && !ativo ? 'text-emerald-600 hover:bg-muted' : ''}
                         ${!concluido && !ativo ? 'text-muted-foreground' : ''}
                       `}
-                      onClick={() => abrirEtapa(step)}
+                      onClick={() => editarEtapa(step)}
                     >
                       {ativo        ? <Circle className="w-3 h-3 fill-current" />
                       : concluido   ? <CheckCircle2 className="w-3 h-3" />
@@ -984,6 +984,7 @@ function AppContent({ catalogo }) {
           itensOrcamento={itensOrcamento}
           passoAtual={passoAtual}
           deltaT={deltaTCalculado}
+          tempExterna={tempExternaCalculo}
           passoExpandido={passoSelecionado}
           itensAcessorios={itensAcessorios}
           itensTubulacao={itensTubulacao}
