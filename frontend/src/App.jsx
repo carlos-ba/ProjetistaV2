@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from './api';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
+import { version as APP_VERSION } from '../package.json';
+
+const BUILD_DATE_LABEL = new Date(__BUILD_DATE__).toLocaleDateString('pt-BR', {
+  day: '2-digit', month: 'short', year: 'numeric',
+});
 
 // --- IMPORTAÇÕES ---
 import CalculadoraGabinete from './components/CalculadoraGabinete.jsx';
@@ -505,9 +510,6 @@ function AppContent({ catalogo }) {
             alt="IceNexus"
             className="w-full max-h-12 object-contain"
           />
-          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mt-1">
-            Engineering Suite <span className="text-muted-foreground/40 ml-1">v1.2</span>
-          </p>
 
           {/* Identidade do tenant + estado da assinatura */}
           {user?.empresa_nome && (
@@ -712,8 +714,10 @@ function AppContent({ catalogo }) {
         {/* Versão */}
         <div className="px-4 py-3 border-t border-border mt-auto">
           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Versão</p>
-          <p className="text-[11px] font-black text-foreground">v2.1 — Jun 2026</p>
-          <p className="text-[9px] text-muted-foreground mt-0.5">Tubulação ASHRAE · Modo Eng.</p>
+          <p className="text-[11px] font-black text-foreground">v{APP_VERSION} <span className="font-semibold text-muted-foreground">· build {BUILD_DATE_LABEL}</span></p>
+          <p className="text-[9px] text-muted-foreground mt-0.5">
+            Tubulação ASHRAE{user?.modo_engenharia ? ' · Modo Engenharia ativo' : ''}
+          </p>
         </div>
 
       </aside>

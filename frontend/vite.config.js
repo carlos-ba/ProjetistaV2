@@ -4,6 +4,10 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // Data do build, gerada automaticamente a cada deploy — nunca digitada à mão.
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
