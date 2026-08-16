@@ -5,10 +5,36 @@ como rodar localmente, convenções adotadas e o que está pendente de implement
 
 ---
 
+## Checklist de início de sessão (rodar 1x, só em sessão nova)
+
+Antes de iniciar qualquer tarefa em uma sessão nova (não repetir a cada mensagem
+nem em continuações da mesma sessão), rode em paralelo:
+
+```bash
+ls backend/alembic/versions/ | sort | tail -3
+git log -1 --format="%ad %s" --date=short
+```
+
+- Se a migration mais recente for **maior** que a última listada na tabela
+  "Banco de Dados — Migrations" abaixo, ou a data do commit for **posterior** à
+  data em "Estado atual do código" — este arquivo está desatualizado.
+- Avise o usuário em 1-2 frases (não faça auditoria completa sozinho) e pergunte
+  se deve atualizar o CLAUDE.md antes de seguir. Isso evita acumular divergência
+  como a que foi corrigida em 2026-08-10 (arquivo estava 5 migrations e 6 semanas
+  atrasado).
+
+---
+
 ## Identidade do Produto
 
-**IceNexus IAR** — SaaS de dimensionamento frigorífico para técnicos e engenheiros de refrigeração.
+**IceNexus** — SaaS de dimensionamento frigorífico para técnicos e engenheiros de refrigeração.
 Substitui planilhas manuais por um wizard guiado de 6 etapas.
+
+**Não confundir com "IceNexus IAR"** — nome reservado para uma plataforma diferente e
+futura, ainda não desenvolvida (ver projeto `icenexusiar-ai-lab`, já existente no
+Vercel/Render, ainda não explorado). Documentos comerciais antigos
+(`docs/comercial/IceNexus_IAR_*.pdf`, já enviados a um prospect real) mantêm o nome
+antigo por serem registro histórico — não foram reemitidos.
 
 ---
 
@@ -21,7 +47,7 @@ Substitui planilhas manuais por um wizard guiado de 6 etapas.
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
-| Migrations | Alembic (0001→0016), roda no `startCommand` do Render |
+| Migrations | Alembic (0001→0021), roda no `startCommand` do Render |
 
 ---
 
@@ -153,7 +179,33 @@ As buscas rodam em paralelo via `Promise.allSettled`. O tanque de líquido e o c
 
 ---
 
-## Banco de Dados — Migrations (0001→0016)
+## Multi-tenancy (Fase A — em produção desde 2026-08-05)
+
+Tenant = **empresa**. Toda conta pertence a uma `empresa` (nome, plano, status de
+assinatura). Papéis: `superadmin_icenexus` (equipe IceNexus) | `admin_empresa` |
+`membro`.
+
+- `empresa_id` escopa: `projeto`, `cliente`, `fornecedor`, `cotacao`,
+  `proposta_comercial`, `configuracao_montagem`. `owner_id` continua existindo
+  como autor (auditoria), mas o filtro de acesso é sempre por `empresa_id`.
+- Dependência `get_empresa_atual` (`backend/app/services/auth.py`) retorna 403
+  se o usuário não tiver empresa vinculada.
+- Catálogo técnico (equipamento/material/componente) continua **global**, sem
+  dono — preço e código interno por empresa é a **Fase B**, ainda não feita.
+- Painel admin: `frontend/src/components/AdminEmpresas.jsx` + rotas
+  `/api/v1/admin/*` (só `superadmin_icenexus`).
+- Scripts operacionais em `backend/scripts/`: `promover_superadmin.py`,
+  `copiar_projetos.py`, `remover_contas.py`, `backfill_empresa.py` — todos
+  simulam por padrão, só gravam com `--aplicar`.
+
+Detalhes de implantação, armadilhas técnicas (MissingGreenlet, `--reload`
+travando) e o passo manual obrigatório pós-deploy (`promover_superadmin.py`)
+estão na memória — ver `project-fase-a-multitenancy` e
+`project-multitenancy-assinatura`.
+
+---
+
+## Banco de Dados — Migrations (0001→0021)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -173,14 +225,20 @@ As buscas rodam em paralelo via `Promise.allSettled`. O tanque de líquido e o c
 | 0014 | Tabela `cliente` |
 | 0015 | Tabela `peso_tubo_cobre` |
 | 0016 | Campo `qtde_metros` em cotacao_item |
+| 0017 | Classificação de orçamento (`bloco_orcamento`, `classificacao_item`, `item_classificacao`) |
+| 0018 | Correção da VET para R404A |
+| 0019 | Campo `modo_engenharia` em usuário |
+| 0020 | Multi-tenancy: tabela `empresa`, `usuario.empresa_id` + `papel` (nullable) |
+| 0021 | Backfill de `empresa_id` + NOT NULL + FK RESTRICT |
 
 ---
 
-## Endpoints Backend (20 rotas)
+## Endpoints Backend (22 arquivos de rota em `backend/app/api/`)
 
 | Endpoint | Método | Função |
 |----------|--------|--------|
-| `/api/v1/auth/*` | POST/GET | Autenticação JWT |
+| `/api/auth/*` | POST/GET | Autenticação JWT (nota: sem `/v1`) |
+| `/api/v1/admin/*` | GET/PATCH | Empresas + usuários — só `superadmin_icenexus` |
 | `/api/v1/projetos` | GET/POST/PATCH | CRUD projetos + `dados_completos` (JSON) |
 | `/api/v1/clientes` | GET/POST | Gestão de clientes |
 | `/api/v1/catalogo/paineis/fabricantes` | GET | Painéis PIR Kingspan |
@@ -196,10 +254,12 @@ As buscas rodam em paralelo via `Promise.allSettled`. O tanque de líquido e o c
 | `/api/v1/tanque-liquido/selecionar` | POST | Tanque vertical NBR 16.069 (Card 5) |
 | `/api/v1/cavalete/analisar` | POST | Luvas, porcas, reduções (Card 5) |
 | `/api/v1/orcamento` | POST | Consolidação orçamento (Card 6) |
-| `/api/v1/cotacao/*` | GET/POST/PATCH | Geração/importação planilha Excel |
-| `/api/v1/proposta/*` | GET/POST | Proposta comercial PDF |
-| `/api/v1/configuracoes/montagem` | GET/POST | Perfis de montagem (tipo filtro, visor, trechos) |
-| `/api/v1/health` | GET | Health check |
+| `/api/v1/classificacoes` | GET/POST | Árvore de classificação (blocos/tipos) |
+| `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel |
+| `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
+| `/api/v1/configuracoes/*` | GET/POST | Perfis de montagem (tipo filtro, visor, trechos) |
+| `/api/seed/*` | POST | Seed de dados (dev/setup) |
+| `/health` ou `/api/v1/health` | GET | Health check |
 
 ---
 
@@ -274,52 +334,35 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 1. **Fluidos suportados no motor de solenoide:** R404A e R22. Para outros, redirecionar ao CoolSelector
 2. **T.Condensação calculada como:** T.Amb + 10°C (padrão de mercado brasileiro)
 3. **Catálogo de componentes no banco:** separadores de líquido e óleo vêm do banco via `/api/v1/componentes`. VET, filtro secador, solenoide e visor são calculados/selecionados pelo próprio sistema
-4. **Catálogo global × catálogo da empresa:** o catálogo técnico (equipamentos, componentes) é global e gerenciado pelo admin SaaS. Preços e códigos internos por empresa ficam em tabelas separadas — implementar na Fase 2
+4. **Catálogo global × catálogo da empresa:** o catálogo técnico (equipamentos, componentes) é global e gerenciado pelo admin SaaS. Preços e códigos internos por empresa ficam em tabelas separadas — **Fase B**, ainda não implementada (ver seção Multi-tenancy acima)
 5. **Campo `temp_condensacao` no banco** armazena T.Amb conforme publicado nos catálogos dos fabricantes brasileiros. T.Cond real = T.Amb + ΔT (nunca assumir fixo)
 
 ---
 
-## Sessões 2026-07-09 — Classificação via banco + Expansão de catálogo
+## Catálogo Técnico
 
-### Classificação de itens do orçamento (commit 52c1ea1)
-- Migration **0017**: tabelas `bloco_orcamento`, `classificacao_item`, `item_classificacao` + seed
-  (5 blocos, 20 classificações, 27 slugs `tipo_item`). Aplicada em local E produção.
-- Todos os geradores (gabinete, tubulação, cavalete, componentes, equipamentos, portas)
-  emitem `tipo_item` (slug estável). Classificação por string-matching REMOVIDA do frontend.
-- Fonte única: `GET /api/v1/classificacoes` (árvore) + CRUD admin. Página "Classificação de
-  Itens" no menu lateral (renomear/mover blocos, classificações e itens — sem deploy).
-- 4 blocos na proposta: Materiais Termo Isolantes / Equipamentos / Tubulação e Conexões /
-  Componentes de Fluxo. Complemento tem seletor de classificação.
-- Fixes: porta persistida e desacoplada do cálculo (Card 1); projeto novo recarrega o perfil
-  de montagem ATIVO (flags incluir_*); loop infinito de refresh 401 corrigido.
-- Proposta: margens separadas materiais × serviços; modos de exibição no faturamento direto
-  (lista com valores de cotação / resumo global / sem preço); empreitada com preço de venda
-  (nunca custo) e opção "somente totais"; checkbox "incluir lista detalhada" removido.
+Painéis, unidades condensadoras e evaporadoras vêm de múltiplos fabricantes
+(Elgin, Danfoss Optyma, Mipal, Isoeste/MBP). Novo fornecedor = preencher um dos
+templates na raiz (`template_paineis_frigorificos.xlsx`,
+`template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`) e rodar o
+importador correspondente em `backend/scripts/` (`importar_paineis.py`,
+`importar_equipamentos.py`) — upsert idempotente por chave única, nunca duplica.
+Rodar local primeiro, depois em produção com `DATABASE_URL` do Render na env
+(nunca colar a credencial no chat).
 
-### Expansão de catálogo (commit 7761454 + importação em produção)
-- **Importadores** em `backend/scripts/`: `importar_paineis.py` e `importar_equipamentos.py`
-  (upsert idempotente por chave única — NUNCA duplicam; pulam linhas cinza de referência).
-- **Templates** na raiz (fonte de dados versionada): `template_paineis_frigorificos.xlsx`,
-  `template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`.
-- Catálogo atual (local = produção, verificado, zero duplicatas): 37 painéis (Isoeste +
-  MBP Isoblock), 77 equipamentos, 5.576 pontos de performance:
-  - UC: Elgin (13) + **Danfoss Optyma** (39 — HJM/HGM R22, HJZ/HGZ multi-fluido,
-    LJZ/LGZ baixa temperatura; 9 fluidos; extraído do catálogo PDF por parsing).
-  - Evaporadoras: Elgin (12) + **Mipal Mi BX** (13 — R22/R404A, DT1=6K, extraído de
-    tabelas-imagem do catálogo).
-- Novo fornecedor = preencher template + rodar importador (local e depois produção com
-  `DATABASE_URL` do Render na env).
+Classificação de itens do orçamento é via banco (`bloco_orcamento`,
+`classificacao_item`, `item_classificacao`), servida por `GET
+/api/v1/classificacoes`. Todos os geradores (gabinete, tubulação, cavalete,
+componentes, equipamentos, portas) emitem `tipo_item` (slug estável) — **não
+existe mais classificação por string-matching no frontend**. Editável sem
+deploy pela página "Classificação de Itens" no menu lateral.
 
-### Pendências para 2026-07-10
-1. **ROTACIONAR SENHA do Postgres no Render** (credencial passou pelo chat na importação).
-2. Docker: container `projetista_v2_db` (compose) tem banco VAZIO e disputa a porta 5432
-   com o Postgres nativo (que é o banco real) — manter Docker desligado ou remover o serviço db.
-3. Projetos salvos antigos não têm `tipo_item` — recalcular os cards para reclassificar.
-4. Rate-limiting da API: adiado de propósito para pré-lançamento (ver AUDITORIA_2026-07-08.md).
+Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
+`project-auditoria-20260708` na memória).
 
 ---
 
-## Estado atual do código (2026-06-29)
+## Estado atual do código (auditado em 2026-08-10)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -346,13 +389,15 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 | Configurações de montagem (perfis) | ✅ |
 | Gestão de clientes | ✅ |
 | Diagrama SVG do cavalete (flutuante) | ✅ |
-| Admin panel / multi-tenancy | ❌ Fase 2 |
-| IA com Tool Use | ❌ Fase 3 |
-| Billing | ❌ Fase 5 |
+| Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
+| Catálogo/lista de preços por empresa (Fase B) | ❌ próximo passo |
+| Multiusuário/convites + painel admin ampliado (Fase C) | ❌ |
+| Billing real / gateway (Fase D) | ❌ |
+| IA com Tool Use | ❌ |
 
 ---
 
-## Fluxo de Verificação de Cotação — Card 6 (implementado 2026-06-29)
+## Fluxo de Verificação de Cotação — Card 6
 
 ### Lógica ao clicar "💰 GERAR PROPOSTA AO CLIENTE"
 
@@ -376,17 +421,39 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 - Após gerar, aparece seção âmbar com lista dos itens sem preço + inputs para preço manual
 - Botão "Recalcular" regenera a proposta usando `ultimoPrecoMapRef` (preços da cotação) + preços manuais como override
 
-### Pendências conhecidas (retomar aqui)
+### Riscos conhecidos
 
-- Ajustes de lógica identificados pelo usuário — **não detalhados antes da pausa**, retomar com testes
 - O casamento por descrição pode falhar se a descrição gerada no orçamento diferir da descrição gravada na cotação (ex: complementos livres, itens do gabinete com área no detalhe)
-- Fluxo de gestão de cotações ainda simples — módulo dedicado planejado para Fase 2
+- Fluxo de gestão de cotações ainda simples — módulo dedicado planejado para uma fase futura
 
-### Arquivos modificados nesta sessão (2026-06-29)
+Histórico de implementação e pendências já resolvidas: ver `project-cotacao-verificacao` na memória.
 
-| Arquivo | O que mudou |
-|---------|------------|
-| `backend/app/schemas/orcamento.py` | `ItemOrcamento` ganhou `preco_unitario: float \| None = None` |
-| `backend/app/services/orcamento.py` | Usa `preco_unitario` do payload quando presente, fallback para banco |
-| `frontend/src/components/GeradorOrcamento.jsx` | `verificarEGerar`, `gerarOrcamentoComPrecos`, `_gerarComCotacoes`, modal de escolha, aviso de itens sem preço, inputs manuais |
-| `frontend/src/App.jsx` | Prop `onAbrirPainelCotacoes` passada para Card 6 |
+---
+
+## Disciplina de Contexto e Custo (trabalhar comigo)
+
+O `CLAUDE.md` e o índice de memória são recarregados **inteiros a cada mensagem**
+da sessão — por isso ficam enxutos. O que infla o custo de verdade é o que se
+acumula durante a conversa: arquivos lidos, screenshots, saída de comandos. Uma
+sessão que mistura 5 assuntos carrega o peso de todos eles em cada mensagem, até
+a última.
+
+Regras práticas:
+
+1. **Uma sessão por frente de trabalho.** Ao mudar de assunto (ex: terminou o
+   catálogo, vai começar a Fase B), abrir sessão nova em vez de continuar na
+   mesma.
+2. **Ritual de encerramento**, antes de trocar de assunto ou fechar por hoje:
+   pedir para registrar na memória o que foi decidido/pendente e, se mudou algo
+   estrutural (endpoint, migration, fluxo), atualizar este arquivo — depois
+   `/clear`. Isso é compactação controlada, melhor que deixar a automática
+   decidir o que descartar no meio de uma tarefa.
+3. **`/compact` com instrução explícita** (ex: "preserve os arquivos alterados e
+   as pendências, descarte saídas de comando") quando ainda falta trabalho no
+   mesmo assunto e o contexto já passou de ~50%.
+4. **Pedir trecho, não arquivo inteiro**, quando o arquivo é grande — "lê a
+   função X em `arquivo.py`" custa uma fração de "lê o `arquivo.py`".
+5. **Extrair PDF/imagem uma vez, trabalhar sobre o texto** — não repassar página
+   por página como imagem.
+6. **Modelo por tarefa:** Sonnet para tarefas mecânicas (rodar script, conferir
+   migration, ajustar texto); Opus para arquitetura e depuração difícil.
