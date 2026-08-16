@@ -22,3 +22,9 @@ class EquipamentoSelecionado(BaseModel):
     volume_interno_kg: float | None = None
     conexao_liquido:   str   | None = None
     conexao_succao:    str   | None = None
+    consumo_kw: float | None = None
+    # Corrente de trabalho (A): campo ainda não existe no cadastro (Equipamento/
+    # PerformanceEquipamento) — sempre None por enquanto. Deixado no schema pra o
+    # card do frontend já saber exibir assim que o cadastro/importador ganhar essa
+    # coluna e o service passar a preenchê-la.
+    corrente_a: float | None = None

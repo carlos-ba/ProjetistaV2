@@ -167,6 +167,8 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       volume_interno_kg: item.volume_interno_kg ?? null,
       conexao_liquido:   item.conexao_liquido   ?? null,
       conexao_succao:    item.conexao_succao     ?? null,
+      consumo_kw:        item.consumo_kw ?? null,
+      corrente_a:        item.corrente_a ?? null,
     }]);
   };
 
@@ -350,6 +352,19 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                         <span className="text-2xl font-black text-slate-900">{item.capacidade_real}</span>
                         <span className="text-xs font-bold text-slate-400 uppercase">kcal/h</span>
                       </div>
+                      {/* Corrente (A) só aparece quando o cadastro tiver o campo — hoje
+                          nenhum equipamento tem, então esta linha fica pronta e muda
+                          sozinha assim que existir dado (nada a fazer aqui depois). */}
+                      {(item.consumo_kw != null || item.corrente_a != null) && (
+                        <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
+                          {item.consumo_kw != null && (
+                            <span className="flex items-center gap-1">⚡ {item.consumo_kw} kW</span>
+                          )}
+                          {item.corrente_a != null && (
+                            <span className="flex items-center gap-1">🔌 {item.corrente_a} A</span>
+                          )}
+                        </div>
+                      )}
                       <div className="text-xl font-bold text-blue-600">R$ {item.preco.toLocaleString('pt-BR')}</div>
 
                       <div className="mt-4 pt-4 border-t border-slate-100">
