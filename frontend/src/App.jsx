@@ -645,16 +645,15 @@ function AppContent({ catalogo }) {
         </div>
 
         {/* Cabeçalho Direita */}
-        <div className="w-80 flex-shrink-0 border-l hidden xl:flex flex-col justify-center px-5 py-3"
-             style={{ background: 'linear-gradient(135deg, #1a0d2e 0%, #2a1245 100%)' }}>
-          <div className="flex items-center justify-between">
+        <div className="w-80 flex-shrink-0 border-l hidden xl:flex flex-col justify-center px-5 py-3">
+          <div className="flex items-center justify-between rounded-lg border bg-[#7B2D8B]/5 border-[#7B2D8B]/20 px-3 py-2">
             <div>
-              <h3 className="text-sm font-black text-white uppercase tracking-widest">Painel Técnico</h3>
-              <p className="text-xs text-purple-300/70 font-bold uppercase mt-0.5">Indicadores em tempo real</p>
+              <h3 className="text-xs font-black text-[#7B2D8B] uppercase tracking-widest">Painel Técnico</h3>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase mt-0.5">Indicadores em tempo real</p>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-              <span className="text-[10px] text-emerald-400 font-medium">Conectado</span>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+              <span className="text-[10px] text-emerald-600 font-medium">Conectado</span>
             </div>
           </div>
         </div>

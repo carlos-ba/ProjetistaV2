@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    /* Sem dark mode real ainda — evita o navegador "ajudar" pintando
+       campos nativos (input/select) no escuro quando o SO está em modo escuro. */
+    color-scheme: light;
     --background:   0 0% 100%;
     --foreground:   222.2 84% 4.9%;
     --card:         0 0% 100%;
