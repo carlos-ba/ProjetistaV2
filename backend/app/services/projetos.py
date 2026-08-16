@@ -1,6 +1,7 @@
 from __future__ import annotations
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,9 +9,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.projeto import Projeto
 from app.schemas.projeto import ProjetoCreate, ProjetoUpdate
 
+NOME_DUPLICADO_MSG = "Já existe um projeto com esse nome nesta empresa."
+
+
+async def _nome_em_uso(db: AsyncSession, empresa_id: UUID, nome: str, excluir_id: UUID | None = None) -> bool:
+    stmt = select(Projeto.id).where(Projeto.empresa_id == empresa_id, Projeto.nome == nome)
+    if excluir_id is not None:
+        stmt = stmt.where(Projeto.id != excluir_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None
+
 
 async def create_projeto(db: AsyncSession, projeto_in: ProjetoCreate, owner_id: UUID | None = None,
                          empresa_id: UUID | None = None) -> Projeto:
+    if empresa_id is not None and await _nome_em_uso(db, empresa_id, projeto_in.nome):
+        raise HTTPException(status_code=400, detail=NOME_DUPLICADO_MSG)
     db_projeto = Projeto(
         nome=projeto_in.nome,
         cliente=projeto_in.cliente,
@@ -45,7 +58,9 @@ async def get_projetos(db: AsyncSession, skip: int = 0, limit: int = 100, empres
 
 
 async def update_projeto(db: AsyncSession, db_projeto: Projeto, projeto_in: ProjetoUpdate) -> Projeto:
-    if projeto_in.nome is not None:
+    if projeto_in.nome is not None and projeto_in.nome != db_projeto.nome:
+        if await _nome_em_uso(db, db_projeto.empresa_id, projeto_in.nome, excluir_id=db_projeto.id):
+            raise HTTPException(status_code=400, detail=NOME_DUPLICADO_MSG)
         db_projeto.nome = projeto_in.nome
     if projeto_in.cliente is not None:
         db_projeto.cliente = projeto_in.cliente

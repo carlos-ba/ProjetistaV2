@@ -1,7 +1,7 @@
 from typing import Any, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -9,6 +9,9 @@ from app.models.base import Base, TimestampMixin
 
 class Projeto(Base, TimestampMixin):
     __tablename__ = "projeto"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "nome", name="uq_projeto_empresa_nome"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     nome: Mapped[str] = mapped_column(String(200), nullable=False)
