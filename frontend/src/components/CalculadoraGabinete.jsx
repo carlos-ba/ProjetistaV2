@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../api';
 import VisualizadorProjeto from './VisualizadorProjeto';
 
+// Preenchimento por voz (DITAR): frontend pronto, mas depende do endpoint
+// POST /api/v1/calculos/processar-voz/, que ainda não existe no backend —
+// faz parte do agente IA conversa→orçamento planejado (ver auditoria
+// 2026-07-08), ainda não iniciado. Escondido até o backend existir; troque
+// para true quando for retomado.
+const DITAR_HABILITADO = false;
+
 const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange, jaFinalizado = false }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
@@ -380,10 +387,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           <span className="bg-white/20 p-1.5 rounded-lg text-lg">📏</span>
           1. Configuração do Gabinete
         </h2>
-        <button onClick={iniciarOuvinteVoz}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${ouvindo ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-          {ouvindo ? <><span className="w-2 h-2 bg-white rounded-full animate-ping"></span>OUVINDO...</> : <><span>🎤</span> DITAR</>}
-        </button>
+        {DITAR_HABILITADO && (
+          <button onClick={iniciarOuvinteVoz}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${ouvindo ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+            {ouvindo ? <><span className="w-2 h-2 bg-white rounded-full animate-ping"></span>OUVINDO...</> : <><span>🎤</span> DITAR</>}
+          </button>
+        )}
       </div>
 
       <div className="p-6" onFocus={() => { carregandoDoArquivo.current = false; }} onInput={() => { carregandoDoArquivo.current = false; }}>
