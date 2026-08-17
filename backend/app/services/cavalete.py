@@ -43,6 +43,12 @@ def _porca(bitola: str, posicao: str) -> dict:
             "unidade": "un", "detalhe": posicao, "tipo_item": "porca"}
 
 
+def _valvula_bloqueio_gbc(bitola: str, lado: str, posicao: str) -> dict:
+    """Válvula de bloqueio (esfera/globo) do cavalete — GBC Entrada ou Saída."""
+    return {"item": f"Válvula de Bloqueio (GBC {lado}) {bitola}", "quantidade": 1,
+            "unidade": "un", "detalhe": posicao, "tipo_item": "valvula_bloqueio_gbc"}
+
+
 # Ordem de tamanho das bitolas padrão
 _ORDEM = [
     '3/8"', '1/2"', '5/8"', '3/4"', '7/8"',
@@ -136,6 +142,7 @@ def analisar_cavalete(
     if incluir_gbc_entrada:
         r = _reducao(origem_linha, dl, "Condensadora/Tanque → GBC Entrada (linha líquido)")
         if r: itens_liquido.insert(0, r)
+        itens_liquido.insert(0, _valvula_bloqueio_gbc(dl, "Entrada", "Bloqueio na entrada do cavalete — linha de líquido"))
         bitola_apos_gbc_entrada = dl
     else:
         r = _reducao(origem_linha, dl, "Condensadora/Tanque → Linha de Líquido")
@@ -218,8 +225,9 @@ def analisar_cavalete(
     # 5. Trecho Contra-sifão → GBC sucção
     itens_succao += _luvas_passagem(ds, trecho_sifao_gbc_m)
 
-    # 6. GBC sucção (bitola = ds, passante — sem redução, se incluir_gbc_saida)
-    # Não gera item adicional pois é passante; a flag controla apenas se consta no orçamento
+    # 6. GBC sucção — válvula de bloqueio na bitola ds, passante (sem redução)
+    if incluir_gbc_saida:
+        itens_succao.append(_valvula_bloqueio_gbc(ds, "Saída", "Bloqueio na saída do cavalete — linha de sucção"))
 
     # 7. Linha de sucção corrida (com luvas de passagem)
     itens_succao += _luvas_passagem(ds, comprimento_succao_m)
