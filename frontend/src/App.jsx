@@ -501,10 +501,10 @@ function AppContent({ catalogo }) {
       )}
 
       {/* ══ BARRA DE CABEÇALHO ÚNICA — alinha as 3 colunas ══ */}
-      <div className="sticky top-0 z-20 flex border-b bg-card print:hidden">
+      <div className="sticky top-0 z-20 flex border-b border-[#D9EAF0] bg-[#F5FAFC] print:hidden">
 
         {/* Cabeçalho Esquerda */}
-        <div className="w-60 flex-shrink-0 border-r hidden lg:flex flex-col justify-center px-5 py-3">
+        <div className="w-60 flex-shrink-0 border-r border-[#D9EAF0] hidden lg:flex flex-col justify-center px-5 py-3">
           <img
             src="/logo-icenexus.png"
             alt="IceNexus"
@@ -516,7 +516,7 @@ function AppContent({ catalogo }) {
             <div className={`mt-3 rounded-lg border px-3 py-2 ${
               user.papel === 'superadmin_icenexus'
                 ? 'bg-amber-50 border-amber-200'
-                : 'bg-[#7B2D8B]/5 border-[#7B2D8B]/20'}`}>
+                : 'bg-[#E8F4F8] border-[#C9E3EC]'}`}>
               <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">
                 {user.papel === 'superadmin_icenexus' ? 'Administração IceNexus' : 'Empresa'}
               </p>
@@ -591,7 +591,7 @@ function AppContent({ catalogo }) {
                 <span className={`hidden sm:flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${
                   user.papel === 'superadmin_icenexus'
                     ? 'bg-amber-100 text-amber-800 border-amber-300'
-                    : 'bg-[#7B2D8B]/10 text-[#7B2D8B] border-[#7B2D8B]/20'}`}
+                    : 'bg-[#E8F4F8] text-[#7B2D8B] border-[#C9E3EC]'}`}
                   title={user.papel === 'superadmin_icenexus'
                     ? 'Você está operando como administração IceNexus'
                     : `Empresa: ${user.empresa_nome}`}>
@@ -645,8 +645,8 @@ function AppContent({ catalogo }) {
         </div>
 
         {/* Cabeçalho Direita */}
-        <div className="w-80 flex-shrink-0 border-l hidden xl:flex flex-col justify-center px-5 py-3">
-          <div className="flex items-center justify-between rounded-lg border bg-[#7B2D8B]/5 border-[#7B2D8B]/20 px-3 py-2">
+        <div className="w-80 flex-shrink-0 border-l border-[#D9EAF0] hidden xl:flex flex-col justify-center px-5 py-3">
+          <div className="flex items-center justify-between rounded-lg border bg-[#E8F4F8] border-[#C9E3EC] px-3 py-2">
             <div>
               <h3 className="text-xs font-black text-[#7B2D8B] uppercase tracking-widest">Painel Técnico</h3>
               <p className="text-[10px] text-muted-foreground font-bold uppercase mt-0.5">Indicadores em tempo real</p>
