@@ -56,6 +56,7 @@ from app.api.routes_cavalete import router as cavalete_router
 from app.api.routes_configuracoes import router as configuracoes_router
 from app.api.routes_classificacao import router as classificacao_router
 from app.api.routes_admin import router as admin_router
+from app.api.routes_embalagem_fluido import router as embalagem_fluido_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -95,3 +96,4 @@ app.include_router(cavalete_router)
 app.include_router(configuracoes_router)
 app.include_router(classificacao_router)
 app.include_router(admin_router)
+app.include_router(embalagem_fluido_router)

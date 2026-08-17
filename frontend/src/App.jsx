@@ -946,6 +946,7 @@ function AppContent({ catalogo }) {
                 onSalvarProjeto={salvarProjeto}
                 onSalvarComo={salvarComo}
                 classificacoes={classificacoes}
+                embalagensFluido={catalogo.embalagensFluido}
                 resumoTecnico={dadosDoGabinete ? {
                   comprimento: dadosDoGabinete.comprimento,
                   largura: dadosDoGabinete.largura,
@@ -1008,16 +1009,18 @@ function useCatalogo() {
     const carregar = async () => {
       while (!cancelado) {
         try {
-          const [fabricantesRes, portasRes, classifRes] = await Promise.all([
+          const [fabricantesRes, portasRes, classifRes, embalagensRes] = await Promise.all([
             api.get('/api/v1/catalogo/paineis/fabricantes'),
             api.get('/api/v1/catalogo/portas'),
             api.get('/api/v1/classificacoes'),
+            api.get('/api/v1/embalagem-fluido'),
           ]);
           if (!cancelado) {
             setCatalogo({
               fabricantes: fabricantesRes.data,
               portasCatalogo: portasRes.data,
               classificacoes: classifRes.data,
+              embalagensFluido: embalagensRes.data,
             });
           }
           return; // sucesso — encerra o loop

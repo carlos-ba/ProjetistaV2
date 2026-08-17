@@ -20,7 +20,7 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [] }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -70,6 +70,56 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [materiaisAtivos,     setMateriaisAtivos]     = useState({});
   const [equipamentosAtivos,  setEquipamentosAtivos]  = useState({});
   const [listaAprovada,       setListaAprovada]       = useState(false);
+
+  // ── Embalagem de fluido refrigerante (Card 6) ─────────────────────────
+  // Fluido não é vendido a granel — converte o item "Carga de Fluido X kg"
+  // numa peça comprável (N cilindros de Y kg). Ver DESIGN_EMBALAGEM_FLUIDO_2026-08-17.md.
+  const itemCargaFluidoBruto = (dadosAutomaticos?.materiais || []).find(m => m.tipo_item === 'carga_fluido');
+  const infoEmbalagem = React.useMemo(() => {
+    if (!itemCargaFluidoBruto) return null;
+    const necessario = Number(itemCargaFluidoBruto.quantidade) || 0;
+    const doFluido = embalagensFluido
+      .filter(e => e.fluido === itemCargaFluidoBruto.fluido)
+      .sort((a, b) => a.peso_kg - b.peso_kg);
+    if (doFluido.length === 0) return null;
+    const suficientes = doFluido.filter(e => e.peso_kg >= necessario);
+    return { necessario, opcoes: doFluido, suficientes, maior: doFluido[doFluido.length - 1] };
+  }, [itemCargaFluidoBruto?.quantidade, itemCargaFluidoBruto?.fluido, embalagensFluido]);
+
+  // Embalagem escolhida pelo técnico — peso_kg da opção selecionada (entre as suficientes)
+  const [embalagemEscolhidaKg, setEmbalagemEscolhidaKg] = useState(null);
+  useEffect(() => {
+    if (!infoEmbalagem) { setEmbalagemEscolhidaKg(null); return; }
+    // Default: a maior entre as opções que cobrem a carga sozinha (comportamento observado em
+    // campo — deixar sobra de fluido pra eventual atendimento de garantia)
+    if (infoEmbalagem.suficientes.length > 0) {
+      setEmbalagemEscolhidaKg(infoEmbalagem.suficientes[infoEmbalagem.suficientes.length - 1].peso_kg);
+    } else {
+      setEmbalagemEscolhidaKg(null); // sem opção suficiente sozinha — cai pro fallback da maior, sem escolha
+    }
+  }, [infoEmbalagem?.necessario, infoEmbalagem?.opcoes?.length]);
+
+  // Aplica a embalagem escolhida (ou o fallback de múltiplas unidades da maior) sobre o item
+  // "Carga de Fluido" — ponto único de transformação, usado tanto na lista de seleção quanto em
+  // tudo que deriva de materiaisAprovados (payload do orçamento, PDF, Excel de cotação).
+  const materiaisComEmbalagem = React.useMemo(() => {
+    const materiais = dadosAutomaticos?.materiais || [];
+    if (!infoEmbalagem) return materiais;
+    const usarFallback = infoEmbalagem.suficientes.length === 0;
+    const pesoEscolhido = usarFallback ? infoEmbalagem.maior.peso_kg : embalagemEscolhidaKg;
+    if (!pesoEscolhido) return materiais;
+    const qtdEmbalagens = Math.ceil(infoEmbalagem.necessario / pesoEscolhido);
+    return materiais.map(m => {
+      if (m.tipo_item !== 'carga_fluido') return m;
+      return {
+        ...m,
+        item: `${m.item} — Cilindro ${pesoEscolhido}kg`,
+        quantidade: qtdEmbalagens,
+        unidade: 'un',
+        detalhe: `${m.detalhe} | Embalagem: ${qtdEmbalagens}× ${pesoEscolhido}kg = ${(qtdEmbalagens * pesoEscolhido).toFixed(2)}kg`,
+      };
+    });
+  }, [dadosAutomaticos?.materiais, infoEmbalagem, embalagemEscolhidaKg]);
 
   // ── Complementos livres (sem catálogo) ───────────────────────────────
   // Restaura os complementos salvos com o projeto; senão começa com uma linha em branco
@@ -145,7 +195,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const toggleMaterial    = (i) => setMateriaisAtivos(p => ({ ...p, [i]: !p[i] }));
   const toggleEquipamento = (i) => setEquipamentosAtivos(p => ({ ...p, [i]: !p[i] }));
 
-  const materiaisAprovados    = (dadosAutomaticos?.materiais    || []).filter((_, i) => materiaisAtivos[i]);
+  const materiaisAprovados    = materiaisComEmbalagem.filter((_, i) => materiaisAtivos[i]);
   const equipamentosAprovados = (dadosAutomaticos?.equipamentos || []).filter((_, i) => equipamentosAtivos[i]);
   const totalItens = materiaisAprovados.length + equipamentosAprovados.length;
 
@@ -1003,9 +1053,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           {/* Materiais */}
           <div>
             <h4 className="text-xs font-black text-amber-700 uppercase mb-3 tracking-widest">Materiais e Componentes</h4>
-            {(dadosAutomaticos?.materiais || []).length === 0
+            {materiaisComEmbalagem.length === 0
               ? <p className="text-amber-600/50 italic text-sm">Nenhum material calculado.</p>
-              : (dadosAutomaticos.materiais.map((item, i) => (
+              : (materiaisComEmbalagem.map((item, i) => (
                 <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${materiaisAtivos[i] ? 'bg-white border-amber-200 shadow-sm' : 'bg-amber-50/30 border-amber-100 opacity-50'}`}>
                   <input type="checkbox" checked={!!materiaisAtivos[i]} onChange={() => toggleMaterial(i)} className="mt-0.5 w-4 h-4 accent-amber-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1016,6 +1066,24 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       )}
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.descricao || item.detalhe}</p>
+                    {item.tipo_item === 'carga_fluido' && infoEmbalagem?.suficientes.length > 1 && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.preventDefault()}>
+                        <span className="text-[9px] font-black text-amber-600 uppercase">Embalagem:</span>
+                        {infoEmbalagem.suficientes.map(op => (
+                          <button
+                            key={op.peso_kg}
+                            type="button"
+                            onClick={() => setEmbalagemEscolhidaKg(op.peso_kg)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                              embalagemEscolhidaKg === op.peso_kg
+                                ? 'bg-amber-600 text-white border-amber-600'
+                                : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-100'}`}
+                          >
+                            {op.peso_kg}kg
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
                     <span className="text-amber-700 font-black text-xs block">

@@ -338,6 +338,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       itens.push({
         item: `Carga de Fluido ${fluido}`,
         tipo_item: 'carga_fluido',
+        fluido,
         quantidade: cargaFluido.carga_total_kg,
         unidade: 'kg',
         detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | UC ${cargaFluido.carga_uc_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
