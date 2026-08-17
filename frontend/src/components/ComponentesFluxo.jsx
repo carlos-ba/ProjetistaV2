@@ -184,6 +184,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     api.post('/api/v1/carga-fluido/estimar', {
       fluido,
       volume_interno_evap_kg: evaporador?.volume_interno_kg ?? null,
+      volume_interno_uc_kg:   condensadora?.volume_interno_kg ?? null,
       bitola_liquido:         dadosTubulacao.diametro_liquido,
       comprimento_liquido_m:  lm,
       bitola_succao:          dadosTubulacao.diametro_succao,
@@ -339,7 +340,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         tipo_item: 'carga_fluido',
         quantidade: cargaFluido.carga_total_kg,
         unidade: 'kg',
-        detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
+        detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | UC ${cargaFluido.carga_uc_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
+        aviso: cargaFluido.aviso_volume_uc || null,
         custo_unitario: 0, preco: 0,
       });
     }
@@ -672,9 +674,10 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </button>
 
                 {cargaFluido && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                     {[
                       { label: 'Evaporador', valor: cargaFluido.carga_evaporador_kg },
+                      { label: 'UC', valor: cargaFluido.carga_uc_kg },
                       { label: 'Linha Líquido', valor: cargaFluido.carga_linha_liquido_kg },
                       { label: 'Linha Sucção', valor: cargaFluido.carga_linha_succao_kg },
                     ].map(item => (
@@ -687,6 +690,9 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 )}
                 {cargaFluido?.nota && (
                   <p className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1 border border-amber-200">{cargaFluido.nota}</p>
+                )}
+                {cargaFluido?.aviso_volume_uc && (
+                  <p className="mt-2 text-[10px] text-red-600 bg-red-50 rounded px-2 py-1 border border-red-200">⚠ {cargaFluido.aviso_volume_uc}</p>
                 )}
               </div>
             )}

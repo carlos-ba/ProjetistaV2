@@ -1199,6 +1199,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                             {m.detalhe || m.descricao}
                           </p>
                         )}
+                        {m.aviso && (
+                          <p className="text-[10px] text-red-600 mt-0.5 leading-tight font-semibold">
+                            ⚠ {m.aviso}
+                          </p>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-400 flex-shrink-0 text-right">
                         <span className="block">{qtdeExibir(m)}</span>

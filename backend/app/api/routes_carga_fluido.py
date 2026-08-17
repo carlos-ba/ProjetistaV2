@@ -8,6 +8,7 @@ router = APIRouter(prefix="/api/v1", tags=["carga_fluido"])
 class CargaFluidoRequest(BaseModel):
     fluido:                  str   = Field(...,  examples=["R404A"])
     volume_interno_evap_kg:  float | None = Field(None, description="Volume interno do evaporador em kg (catálogo)")
+    volume_interno_uc_kg:    float | None = Field(None, description="Volume interno da unidade condensadora em kg (catálogo) — hoje raramente cadastrado")
     bitola_liquido:          str   = Field(...,  examples=['1/2"'])
     comprimento_liquido_m:   float = Field(...,  gt=0)
     bitola_succao:           str   = Field(...,  examples=['7/8"'])
@@ -24,6 +25,7 @@ def estimar(req: CargaFluidoRequest):
             comprimento_liquido_m=req.comprimento_liquido_m,
             bitola_succao=req.bitola_succao,
             comprimento_succao_m=req.comprimento_succao_m,
+            volume_interno_uc_kg=req.volume_interno_uc_kg,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

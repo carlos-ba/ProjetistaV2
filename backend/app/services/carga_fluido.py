@@ -63,6 +63,12 @@ def _volume_tubo_litros(bitola: str, comprimento_m: float) -> float:
     return math.pi * raio_m ** 2 * comprimento_m * 1000  # m³ → litros
 
 
+AVISO_VOLUME_UC = (
+    "Volume interno da unidade condensadora não informado pelo fabricante — "
+    "não incluído no cálculo."
+)
+
+
 def estimar_carga_fluido(
     fluido: str,
     volume_interno_evap_kg: float | None,
@@ -70,6 +76,7 @@ def estimar_carga_fluido(
     comprimento_liquido_m: float,
     bitola_succao: str,
     comprimento_succao_m: float,
+    volume_interno_uc_kg: float | None = None,
 ) -> dict:
     """
     Estima a carga total de fluido refrigerante do sistema.
@@ -81,6 +88,12 @@ def estimar_carga_fluido(
         comprimento_liquido_m:  comprimento da linha de líquido em metros
         bitola_succao:          ex: '7/8"'
         comprimento_succao_m:   comprimento da linha de sucção em metros
+        volume_interno_uc_kg:   volume interno da unidade condensadora em kg (do
+                                 catálogo) — hoje nenhum modelo tem esse dado
+                                 cadastrado, então normalmente vem None. Enquanto
+                                 não vier, a carga da UC entra como 0 e o retorno
+                                 sinaliza isso em `aviso_volume_uc` pra aparecer na
+                                 lista de peças.
 
     Returns:
         dict com carga por componente e total em kg
@@ -95,7 +108,8 @@ def estimar_carga_fluido(
     carga_liq  = round(vol_liq_L * rho_liq, 3)
     carga_suc  = round(vol_suc_L * rho_vap, 3)
     carga_evap = round(float(volume_interno_evap_kg), 3) if volume_interno_evap_kg else 0.0
-    carga_total = round(carga_evap + carga_liq + carga_suc, 2)
+    carga_uc   = round(float(volume_interno_uc_kg), 3) if volume_interno_uc_kg else 0.0
+    carga_total = round(carga_evap + carga_uc + carga_liq + carga_suc, 2)
 
     nota = ""
     if fluido_key not in _RHO_LIQUIDO:
@@ -104,6 +118,7 @@ def estimar_carga_fluido(
     return {
         "fluido":              fluido,
         "carga_evaporador_kg": carga_evap,
+        "carga_uc_kg":         carga_uc,
         "carga_linha_liquido_kg": carga_liq,
         "carga_linha_succao_kg":  carga_suc,
         "carga_total_kg":      carga_total,
@@ -116,4 +131,5 @@ def estimar_carga_fluido(
             "bitola_succao":  bitola_succao,
         },
         "nota": nota,
+        "aviso_volume_uc": None if volume_interno_uc_kg else AVISO_VOLUME_UC,
     }
