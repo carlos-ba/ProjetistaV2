@@ -20,7 +20,7 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [] }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -1127,6 +1127,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 — fluido de limpeza, material elétrico, etc.
               </span>
             </h4>
+            {onAbrirClassificacoes && (
+              <button
+                type="button"
+                onClick={onAbrirClassificacoes}
+                className="text-[10px] font-bold text-indigo-600 hover:underline whitespace-nowrap"
+                title="Abrir gerenciador de classificações"
+              >
+                + Nova classificação
+              </button>
+            )}
           </div>
 
           <div className="space-y-2">

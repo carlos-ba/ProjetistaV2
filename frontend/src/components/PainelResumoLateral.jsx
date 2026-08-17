@@ -249,6 +249,9 @@ const PainelResumoLateral = ({
   const valorCarga = cargaCalculada ? Number(cargaCalculada) : null;
   const etapaAtual = ETAPAS[passoExpandido];
 
+  const numMaquinas = Number(inputsEquipamentos?.numMaquinas) || 1;
+  const valorPorCircuito = valorCarga != null && numMaquinas > 1 ? Math.round(valorCarga / numMaquinas) : null;
+
   // Regime de seleção — parâmetros usados para buscar os equipamentos (Etapa 3)
   const regimeEvap   = inputsEquipamentos?.evap   !== '' && inputsEquipamentos?.evap   != null && !isNaN(inputsEquipamentos.evap)   ? Number(inputsEquipamentos.evap)   : null;
   const regimeCond   = inputsEquipamentos?.cond   !== '' && inputsEquipamentos?.cond   != null && !isNaN(inputsEquipamentos.cond)   ? Number(inputsEquipamentos.cond)   : null;
@@ -322,6 +325,12 @@ const PainelResumoLateral = ({
               </>
             ) : (
               <div className="text-slate-400 italic text-sm py-2">Aguardando cálculo...</div>
+            )}
+            {valorPorCircuito != null && (
+              <div className="mt-2 pt-2 border-t border-emerald-100">
+                <div className="text-base font-black text-emerald-600">{valorPorCircuito.toLocaleString('pt-BR')}</div>
+                <div className="text-[9px] font-bold text-emerald-500 uppercase">kcal/h por circuito (÷{numMaquinas})</div>
+              </div>
             )}
           </div>
 

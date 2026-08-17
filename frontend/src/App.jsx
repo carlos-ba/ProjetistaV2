@@ -947,6 +947,7 @@ function AppContent({ catalogo }) {
                 onSalvarComo={salvarComo}
                 classificacoes={classificacoes}
                 embalagensFluido={catalogo.embalagensFluido}
+                onAbrirClassificacoes={() => setMostrandoClassificacao(true)}
                 resumoTecnico={dadosDoGabinete ? {
                   comprimento: dadosDoGabinete.comprimento,
                   largura: dadosDoGabinete.largura,

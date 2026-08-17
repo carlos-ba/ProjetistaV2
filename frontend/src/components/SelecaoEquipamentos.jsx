@@ -262,7 +262,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
           <div className="mb-6">
 
             {/* Abas */}
-            <div className="flex border-b border-slate-200 mb-4">
+            <div className="flex gap-3 mb-4">
               {TIPOS.map(t => {
                 const qtdResultados = t.id === 'Unidade Condensadora' ? resultadosUC.length : resultadosEvap.length;
                 const qtdSelecionados = selecionados.filter(s => s.categoria === t.id).length;
@@ -271,23 +271,25 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                   <button
                     key={t.id}
                     onClick={() => setAbaAtiva(t.id)}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 transition-all ${
+                    className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border transition-all active:scale-[0.98] ${
                       ativa
-                        ? 'border-[#7B2D8B] text-[#7B2D8B]'
-                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                        ? 'bg-[#7B2D8B] border-[#7B2D8B] text-white shadow-md shadow-purple-200'
+                        : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-700'
                     }`}
                   >
                     <span>{t.icone}</span>
                     <span>{t.label}</span>
                     {qtdResultados > 0 && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                        ativa ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
+                        ativa ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'
                       }`}>
                         {qtdResultados}
                       </span>
                     )}
                     {qtdSelecionados > 0 && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-700">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                        ativa ? 'bg-emerald-400 text-white' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
                         ✓ {qtdSelecionados}
                       </span>
                     )}
