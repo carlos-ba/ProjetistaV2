@@ -88,6 +88,13 @@ const EtapaCard = ({
             <Badge variant="success" className="text-[10px] hidden sm:flex">Concluído</Badge>
           )}
 
+          {/* Aviso de desatualizado — etapa anterior recalculou depois desta */}
+          {status === 'concluido' && !expandido && invalidado && (
+            <Badge variant="warning" className="text-[10px] hidden sm:flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> Pode estar desatualizado
+            </Badge>
+          )}
+
           {/* Botão Editar */}
           {!somenteLeitura && status === 'concluido' && !expandido && (
             <Button

@@ -843,6 +843,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={2} titulo="Cálculo de Carga Térmica" icone="❄️"
               status={statusEtapa(2)} resumo={resumoEtapa(2)}
+              invalidado={invalidados[2]}
               expandido={passoExpandido === 2}
               selecionado={passoSelecionado === 2 && passoExpandido !== 2}
               onSelecionar={() => selecionarEtapa(2)}
@@ -857,6 +858,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={3} titulo="Seleção de Equipamentos" icone="⚙️"
               status={statusEtapa(3)} resumo={resumoEtapa(3)}
+              invalidado={invalidados[3]}
               expandido={passoExpandido === 3}
               selecionado={passoSelecionado === 3 && passoExpandido !== 3}
               onSelecionar={() => selecionarEtapa(3)}
@@ -882,6 +884,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={4} titulo="Dimensionamento de Tubulação" icone="🔩"
               status={statusEtapa(4)} resumo={resumoEtapa(4)}
+              invalidado={invalidados[4]}
               expandido={passoExpandido === 4}
               selecionado={passoSelecionado === 4 && passoExpandido !== 4}
               onSelecionar={() => selecionarEtapa(4)}
@@ -896,6 +899,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={5} titulo="Componentes e Acessórios" icone="🔧"
               status={statusEtapa(5)} resumo={resumoEtapa(5)}
+              invalidado={invalidados[5]}
               expandido={passoExpandido === 5}
               selecionado={passoSelecionado === 5 && passoExpandido !== 5}
               onSelecionar={() => selecionarEtapa(5)}
@@ -929,6 +933,7 @@ function AppContent({ catalogo }) {
               titulo={user?.modo_engenharia ? 'Lista de Engenharia' : 'Gerador de Orçamento'}
               icone={user?.modo_engenharia ? '📋' : '💰'}
               status={statusEtapa(6)} resumo={resumoEtapa(6)}
+              invalidado={invalidados[6]}
               somenteLeitura
               expandido={passoExpandido === 6}
               selecionado={passoSelecionado === 6 && passoExpandido !== 6}
