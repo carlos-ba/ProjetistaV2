@@ -240,6 +240,7 @@ const PainelResumoLateral = ({
   dadosGabinete, cargaCalculada, itensOrcamento,
   passoAtual, deltaT, tempExterna, passoExpandido,
   itensAcessorios, itensTubulacao, projetoAtual,
+  inputsEquipamentos,
 }) => {
   const volumeBruto      = dadosGabinete
     ? dadosGabinete.comprimento * dadosGabinete.largura * dadosGabinete.altura
@@ -247,6 +248,11 @@ const PainelResumoLateral = ({
 
   const valorCarga = cargaCalculada ? Number(cargaCalculada) : null;
   const etapaAtual = ETAPAS[passoExpandido];
+
+  // Regime de seleção — parâmetros usados para buscar os equipamentos (Etapa 3)
+  const regimeEvap   = inputsEquipamentos?.evap   !== '' && inputsEquipamentos?.evap   != null && !isNaN(inputsEquipamentos.evap)   ? Number(inputsEquipamentos.evap)   : null;
+  const regimeCond   = inputsEquipamentos?.cond   !== '' && inputsEquipamentos?.cond   != null && !isNaN(inputsEquipamentos.cond)   ? Number(inputsEquipamentos.cond)   : null;
+  const regimeFluido = inputsEquipamentos?.fluido || null;
 
   // Trocas de ar
   const evaporadores      = itensOrcamento.equipamentos.filter(e => e.vazao_ar > 0);
@@ -318,6 +324,24 @@ const PainelResumoLateral = ({
               <div className="text-slate-400 italic text-sm py-2">Aguardando cálculo...</div>
             )}
           </div>
+
+          {/* Regime de seleção — só aparece depois de calculada a carga térmica */}
+          {valorCarga != null && (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
+                <span className="text-[9px] font-black text-slate-400 uppercase block">T. Evap</span>
+                <span className="text-sm font-bold text-slate-700">{regimeEvap != null ? `${regimeEvap}°C` : '—'}</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
+                <span className="text-[9px] font-black text-slate-400 uppercase block">T. Cond</span>
+                <span className="text-sm font-bold text-slate-700">{regimeCond != null ? `${regimeCond}°C` : '—'}</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
+                <span className="text-[9px] font-black text-slate-400 uppercase block">Fluido</span>
+                <span className="text-sm font-bold text-blue-600">{regimeFluido || '—'}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── VOLUME E TROCAS DE AR ── */}

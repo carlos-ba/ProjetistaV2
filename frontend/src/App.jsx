@@ -989,6 +989,7 @@ function AppContent({ catalogo }) {
           itensAcessorios={itensAcessorios}
           itensTubulacao={itensTubulacao}
           projetoAtual={projetoAtual}
+          inputsEquipamentos={inputsEquipamentos}
         />
       </aside>
 
