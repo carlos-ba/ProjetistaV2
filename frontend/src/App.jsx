@@ -20,6 +20,7 @@ import CalculadoraTubulacao from './components/CalculadoraTubulacao.jsx';
 import GeradorOrcamento from './components/GeradorOrcamento.jsx';
 import PainelResumoLateral from './components/PainelResumoLateral.jsx';
 import PainelInsights from './components/PainelInsights.jsx';
+import InsightCapacidadeEstimada from './components/InsightCapacidadeEstimada.jsx';
 import PainelCotacoes from './components/PainelCotacoes.jsx';
 import EtapaCard from './components/EtapaCard.jsx';
 import CavaleteIlustracao from './components/CavaleteIlustracao.jsx';
@@ -707,6 +708,11 @@ function AppContent({ catalogo }) {
               produto={null}
               compacto={true}
             />
+            <div className="mt-2">
+              <InsightCapacidadeEstimada
+                volumeM3={(parseFloat(dadosDoGabinete.comprimento) || 0) * (parseFloat(dadosDoGabinete.largura) || 0) * (parseFloat(dadosDoGabinete.altura) || 0)}
+              />
+            </div>
           </div>
         )}
 
