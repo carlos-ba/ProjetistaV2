@@ -47,7 +47,7 @@ antigo por serem registro histórico — não foram reemitidos.
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
-| Migrations | Alembic (0001→0021), roda no `startCommand` do Render |
+| Migrations | Alembic (0001→0022), roda no `startCommand` do Render |
 
 ---
 
@@ -205,7 +205,7 @@ estão na memória — ver `project-fase-a-multitenancy` e
 
 ---
 
-## Banco de Dados — Migrations (0001→0021)
+## Banco de Dados — Migrations (0001→0022)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -230,6 +230,7 @@ estão na memória — ver `project-fase-a-multitenancy` e
 | 0019 | Campo `modo_engenharia` em usuário |
 | 0020 | Multi-tenancy: tabela `empresa`, `usuario.empresa_id` + `papel` (nullable) |
 | 0021 | Backfill de `empresa_id` + NOT NULL + FK RESTRICT |
+| 0022 | Nome de projeto único por empresa (desambigua duplicatas existentes antes de criar a constraint) |
 
 ---
 
@@ -362,7 +363,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-08-10)
+## Estado atual do código (auditado em 2026-08-16)
 
 | Funcionalidade | Status |
 |---------------|--------|
