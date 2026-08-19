@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import ExcelJS from 'exceljs';
 import ModalCotacaoFornecedor from './ModalCotacaoFornecedor';
 
 // ── Linha de complemento em branco ───────────────────────────────────────
@@ -197,7 +198,6 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
   const materiaisAprovados    = materiaisComEmbalagem.filter((_, i) => materiaisAtivos[i]);
   const equipamentosAprovados = (dadosAutomaticos?.equipamentos || []).filter((_, i) => equipamentosAtivos[i]);
-  const totalItens = materiaisAprovados.length + equipamentosAprovados.length;
 
   // ── Complementos ─────────────────────────────────────────────────────
   const updateComplemento = (i, f, v) => {
@@ -205,6 +205,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   };
   const removerComplemento = (i) => setComplementos(complementos.filter((_, j) => j !== i));
   const complementosPreenchidos = complementos.filter(c => c.descricao.trim());
+
+  const totalItens = materiaisAprovados.length + equipamentosAprovados.length + complementosPreenchidos.length;
 
   useEffect(() => {
     if (onValoresChange) onValoresChange({
@@ -907,15 +909,24 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     finally { setLoading(false); }
   };
 
-  // ── Exportar lista de materiais (PDF / Excel) ────────────────────────
+  // ── Exportar Lista de Engenharia (PDF / Excel) ────────────────────────
+  // Cores no mesmo padrão da planilha de cotação (backend/app/services/cotacao_excel.py)
+  const COR_HEADER = 'FF1E3A5F';       // navy do cabeçalho
+  const COR_PREENCHER = 'FFFFFACD';    // amarelo — colunas para preenchimento manual
+  const COR_EQUIP = 'FFEBF5FB';        // azul claro — linhas de equipamento
+  const COR_MATERIAL = 'FFFDFEFE';     // quase branco — demais linhas
+  const COR_RODAPE = 'FFF4F6F6';       // cinza claro — nota de rodapé
+  const BORDA_FINA = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+
   const _montarLinhasLista = () => {
     const linhas = [];
     equipamentosAprovados.forEach(e => {
-      linhas.push({ item: e.nome || e.item, detalhe: e.detalhe || '', qtde: e.qtde ?? 1, unidade: 'un', tipo: 'Equipamento' });
+      linhas.push({ codigo: e.id ?? '', item: e.nome || e.item, detalhe: e.detalhe || '', qtde: e.qtde ?? 1, unidade: 'un', tipo: 'Equipamento' });
     });
     materiaisAprovados.forEach(m => {
       const kg = kgSeTubo(m);  // tubo de cobre em kg (cotado por kg)
       linhas.push({
+        codigo: m.id ?? '',
         item: m.item, detalhe: m.detalhe || m.descricao || '',
         qtde: kg != null ? kg : (m.quantidade || m.qtd || 1),
         unidade: kg != null ? 'kg' : (m.comprimento ? 'm' : 'un'),
@@ -923,58 +934,198 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       });
     });
     complementos.filter(c => c.descricao).forEach(c => {
-      linhas.push({ item: c.descricao, detalhe: '', qtde: c.qtde || 1, unidade: c.unidade || 'un', tipo: 'Complemento' });
+      linhas.push({ codigo: '', item: c.descricao, detalhe: '', qtde: c.qtde || 1, unidade: c.unidade || 'un', tipo: 'Complemento' });
     });
     return linhas;
   };
 
-  const exportarListaExcel = () => {
+  const exportarListaExcel = async () => {
+    if (!projetoSalvo) { setErro('Salve o projeto antes de exportar a Lista de Engenharia — o nome do projeto é usado no cabeçalho da planilha.'); return; }
     const linhas = _montarLinhasLista();
     const nome = projetoAtual?.nome || 'Projeto';
-    const header = ['Item', 'Descrição / Detalhe', 'Qtde', 'Unidade', 'Tipo'];
-    const rows = linhas.map(l => [l.item, l.detalhe, l.qtde, l.unidade, l.tipo]);
-    const csv = [header, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
-    const bom = '﻿'; // BOM para Excel reconhecer UTF-8
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const cliente = dadosCliente?.nome?.trim() || '';
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Lista de Engenharia', { properties: { defaultRowHeight: 18 } });
+    ws.views = [{ showGridLines: false }];
+
+    const larguras = [10, 14, 30, 32, 9, 8, 14, 20, 26];
+    ws.columns = larguras.map(w => ({ width: w }));
+    const NCOL = larguras.length; // A..I
+
+    const preencherLinha = (rowIdx, cor, negrito = false, tamanho = 11) => {
+      const row = ws.getRow(rowIdx);
+      for (let c = 1; c <= NCOL; c++) {
+        const cell = row.getCell(c);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor } };
+        cell.font = { name: 'Arial', bold: negrito, size: tamanho, color: { argb: cor === COR_HEADER ? 'FFFFFFFF' : 'FF1E293B' } };
+      }
+      return row;
+    };
+
+    // Linha 1 — título
+    ws.mergeCells(1, 1, 1, NCOL);
+    preencherLinha(1, COR_HEADER, true, 14).getCell(1).value = 'LISTA DE ENGENHARIA — MATERIAIS E EQUIPAMENTOS';
+    ws.getRow(1).getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+    ws.getRow(1).height = 24;
+
+    // Linha 2 — projeto / cliente / data
+    ws.mergeCells(2, 1, 2, NCOL);
+    const linha2 = preencherLinha(2, 'FFEAF2FF', false, 10);
+    const dataEmissao = new Date().toLocaleDateString('pt-BR');
+    linha2.getCell(1).value = `Projeto: ${nome}` + (cliente ? `   |   Cliente: ${cliente}` : '') + `   |   Emitido em: ${dataEmissao}`;
+    linha2.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF1E293B' } };
+
+    // Linha 3 — instrução de preenchimento
+    ws.mergeCells(3, 1, 3, NCOL);
+    const linha3 = preencherLinha(3, COR_PREENCHER, false, 9);
+    linha3.getCell(1).value = 'Preencha manualmente as colunas em amarelo (Valor Unit., Fabricante, Observação) — uso interno de engenharia, não é uma cotação com fornecedor.';
+    linha3.getCell(1).font = { name: 'Arial', italic: true, size: 9, color: { argb: 'FF7A6900' } };
+
+    // Linha 4 — cabeçalhos de coluna
+    const headers = ['Código', 'Tipo', 'Item', 'Detalhe', 'Qtde', 'Un', 'Valor Unit. (R$)', 'Fabricante', 'Observação'];
+    const colsEditaveis = new Set([7, 8, 9]); // Valor, Fabricante, Observação
+    const linha4 = ws.getRow(4);
+    headers.forEach((h, i) => {
+      const cell = linha4.getCell(i + 1);
+      cell.value = h;
+      const cor = colsEditaveis.has(i + 1) ? COR_PREENCHER : COR_HEADER;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor } };
+      cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: colsEditaveis.has(i + 1) ? 'FF7A6900' : 'FFFFFFFF' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = { top: BORDA_FINA, bottom: BORDA_FINA, left: BORDA_FINA, right: BORDA_FINA };
+    });
+    linha4.height = 26;
+
+    // Corpo
+    const primeiraLinhaItem = 5;
+    linhas.forEach((l, idx) => {
+      const rowIdx = primeiraLinhaItem + idx;
+      const row = ws.getRow(rowIdx);
+      const cor = l.tipo === 'Equipamento' ? COR_EQUIP : COR_MATERIAL;
+      const valores = [l.codigo, l.tipo, l.item, l.detalhe, l.qtde, l.unidade, null, null, null];
+      valores.forEach((v, i) => {
+        const cell = row.getCell(i + 1);
+        if (v !== null) cell.value = v;
+        const editavel = colsEditaveis.has(i + 1);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: editavel ? COR_PREENCHER : cor } };
+        cell.font = { name: 'Arial', size: 10 };
+        cell.alignment = { vertical: 'middle', horizontal: [5, 7].includes(i + 1) ? 'right' : 'left', wrapText: true };
+        cell.border = { top: BORDA_FINA, bottom: BORDA_FINA, left: BORDA_FINA, right: BORDA_FINA };
+      });
+      row.getCell(7).numFmt = 'R$ #,##0.00';
+    });
+
+    // Rodapé
+    const ultimaLinhaItem = primeiraLinhaItem + linhas.length - 1;
+    const rodapeIdx = ultimaLinhaItem + 2;
+    ws.mergeCells(rodapeIdx, 1, rodapeIdx, NCOL);
+    const rodape = preencherLinha(rodapeIdx, COR_RODAPE, false, 8);
+    rodape.getCell(1).value = 'Lista gerada automaticamente pelo IceNexus a partir do dimensionamento do projeto — não constitui cotação nem orçamento fechado.';
+    rodape.getCell(1).font = { name: 'Arial', italic: true, size: 8, color: { argb: 'FF64748B' } };
+
+    ws.views = [{ showGridLines: false, state: 'frozen', ySplit: primeiraLinhaItem - 1 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `Lista_Materiais_${nome.replace(/\s+/g, '_')}.csv`;
+    a.href = url; a.download = `Lista_Engenharia_${nome.replace(/\s+/g, '_')}.xlsx`;
     a.click(); URL.revokeObjectURL(url);
     marcarGerada('listaExcel');
   };
 
   const exportarListaPDF = () => {
+    if (!projetoSalvo) { setErro('Salve o projeto antes de exportar a Lista de Engenharia — o nome do projeto é usado no cabeçalho do PDF.'); return; }
     const linhas = _montarLinhasLista();
     const nome = projetoAtual?.nome || 'Projeto';
-    const pdf = new jsPDF('p', 'mm', 'a4');
+    const cliente = dadosCliente?.nome?.trim() || '';
+
+    const pdf = new jsPDF('l', 'mm', 'a4'); // paisagem — mais colunas
     const pw = pdf.internal.pageSize.getWidth();
-    let y = 18;
+    const ph = pdf.internal.pageSize.getHeight();
+    const ML = 14, MR = pw - 14;
 
-    pdf.setFontSize(13); pdf.setFont('helvetica', 'bold');
-    pdf.text('Lista de Materiais — ' + nome, 14, y); y += 7;
-    pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(120); pdf.text(new Date().toLocaleDateString('pt-BR'), 14, y); pdf.setTextColor(0); y += 8;
-
-    pdf.setFillColor(241, 245, 249);
-    pdf.rect(14, y - 4, pw - 28, 6, 'F');
+    // Faixa superior escura
+    pdf.setFillColor(30, 58, 95);
+    pdf.rect(0, 0, pw, 22, 'F');
+    pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
-    pdf.text('Item / Descrição', 15, y);
-    pdf.text('Qtde', pw - 30, y, { align: 'right' });
-    pdf.text('Un.', pw - 14, y, { align: 'right' });
-    y += 6;
+    pdf.text('LISTA DE ENGENHARIA', ML, 9);
+    pdf.setFontSize(14);
+    pdf.text(nome, ML, 17);
+    pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+    const dataEmissao = new Date().toLocaleDateString('pt-BR');
+    pdf.text(`Emitido em: ${dataEmissao}`, MR, 9, { align: 'right' });
+    if (cliente) pdf.text(`Cliente: ${cliente}`, MR, 17, { align: 'right' });
+    pdf.setTextColor(0, 0, 0);
 
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
-    linhas.forEach((l, idx) => {
-      if (y > 280) { pdf.addPage(); y = 18; }
-      if (idx % 2 === 0) { pdf.setFillColor(248, 250, 252); pdf.rect(14, y - 3.5, pw - 28, 6, 'F'); }
-      const itemText = pdf.splitTextToSize(l.item + (l.detalhe ? ` — ${l.detalhe}` : ''), pw - 55);
-      pdf.text(itemText, 15, y);
-      pdf.text(String(l.qtde), pw - 30, y, { align: 'right' });
-      pdf.text(l.unidade, pw - 14, y, { align: 'right' });
-      y += itemText.length > 1 ? itemText.length * 4.5 + 1 : 6;
+    // Nota de instrução
+    let y = 29;
+    pdf.setFillColor(255, 250, 205);
+    pdf.rect(ML, y - 4, MR - ML, 6, 'F');
+    pdf.setFontSize(7.5); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(122, 105, 0);
+    pdf.text('Preencha manualmente Valor Unit., Fabricante e Observação — uso interno de engenharia, não é uma cotação com fornecedor.', ML + 1, y);
+    pdf.setTextColor(0, 0, 0);
+    y += 8;
+
+    // Colunas da tabela (soma = MR-ML)
+    const cols = [
+      { label: 'Código', w: 16, align: 'left' },
+      { label: 'Tipo', w: 22, align: 'left' },
+      { label: 'Item', w: 48, align: 'left' },
+      { label: 'Detalhe', w: 50, align: 'left' },
+      { label: 'Qtde', w: 14, align: 'right' },
+      { label: 'Un', w: 10, align: 'center' },
+      { label: 'Valor Unit. (R$)', w: 24, align: 'right' },
+      { label: 'Fabricante', w: 30, align: 'left' },
+      { label: 'Observação', w: 55, align: 'left' },
+    ];
+    const editaveis = new Set(['Valor Unit. (R$)', 'Fabricante', 'Observação']);
+    const colX = [ML];
+    cols.forEach((c, i) => { if (i > 0) colX.push(colX[i - 1] + cols[i - 1].w); });
+
+    const desenharCabecalho = () => {
+      pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold');
+      cols.forEach((c, i) => {
+        const editavel = editaveis.has(c.label);
+        pdf.setFillColor(...(editavel ? [255, 250, 205] : [30, 58, 95]));
+        pdf.rect(colX[i], y - 4.5, c.w, 7, 'F');
+        pdf.setTextColor(...(editavel ? [122, 105, 0] : [255, 255, 255]));
+        const tx = c.align === 'right' ? colX[i] + c.w - 1 : c.align === 'center' ? colX[i] + c.w / 2 : colX[i] + 1;
+        pdf.text(c.label, tx, y, { align: c.align === 'left' ? 'left' : c.align });
+      });
+      pdf.setTextColor(0, 0, 0);
+      y += 5;
+    };
+
+    desenharCabecalho();
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5);
+
+    linhas.forEach(l => {
+      const linhasItem = pdf.splitTextToSize(l.item || '', cols[2].w - 2);
+      const linhasDetalhe = pdf.splitTextToSize(l.detalhe || '', cols[3].w - 2);
+      const nLinhas = Math.max(linhasItem.length, linhasDetalhe.length, 1);
+      const rowH = Math.max(nLinhas * 3.6 + 2, 6.5);
+
+      if (y + rowH > ph - 12) { pdf.addPage(); y = 16; desenharCabecalho(); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); }
+
+      const valores = [String(l.codigo ?? ''), l.tipo, linhasItem, linhasDetalhe, String(l.qtde), l.unidade, '', '', ''];
+      cols.forEach((c, i) => {
+        pdf.setDrawColor(204, 204, 204);
+        pdf.setFillColor(...(editaveis.has(c.label) ? [255, 250, 205] : [255, 255, 255]));
+        pdf.rect(colX[i], y - 4, c.w, rowH, 'FD');
+        const v = valores[i];
+        const tx = c.align === 'right' ? colX[i] + c.w - 1 : c.align === 'center' ? colX[i] + c.w / 2 : colX[i] + 1;
+        pdf.text(v, tx, y, { align: c.align === 'left' ? 'left' : c.align });
+      });
+      y += rowH;
     });
 
-    pdf.save(`Lista_Materiais_${nome.replace(/\s+/g, '_')}.pdf`);
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(100);
+    pdf.text('Lista gerada automaticamente pelo IceNexus a partir do dimensionamento do projeto — não constitui cotação nem orçamento fechado.', ML, ph - 6);
+
+    pdf.save(`Lista_Engenharia_${nome.replace(/\s+/g, '_')}.pdf`);
     marcarGerada('listaPdf');
   };
 
@@ -1214,7 +1365,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       {listaAprovada && (
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden print:hidden animate-in fade-in duration-500">
           <div className="bg-slate-800 px-6 py-4 text-white flex justify-between items-center">
-            <h3 className="font-bold flex items-center gap-2">🛒 Carrinho de Compras</h3>
+            <h3 className="font-bold flex items-center gap-2">📋 Lista de Engenharia</h3>
             <div className="flex items-center gap-3">
               <span className="text-[10px] bg-white/20 px-2 py-1 rounded uppercase font-bold tracking-widest">
                 {totalItens} itens aprovados
@@ -1235,25 +1386,38 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Itens do Dimensionamento</span>
-                <div className="flex gap-2 items-center">
-                  <button
-                    onClick={() => exportarListaPDF()}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
-                      estaDesatualizada('listaPdf')
-                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
-                        : 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200'}`}
-                  >
-                    {estaDesatualizada('listaPdf') ? '🔄 Atualizar PDF' : '📄 PDF'}
-                  </button>
-                  <button
-                    onClick={() => exportarListaExcel()}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
-                      estaDesatualizada('listaExcel')
-                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
-                        : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'}`}
-                  >
-                    {estaDesatualizada('listaExcel') ? '🔄 Atualizar Excel' : '📊 Excel'}
-                  </button>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={() => exportarListaPDF()}
+                      disabled={!projetoSalvo}
+                      title={!projetoSalvo ? 'Salve o projeto para habilitar a exportação' : undefined}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                        !projetoSalvo
+                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                          : estaDesatualizada('listaPdf')
+                            ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                            : 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200'}`}
+                    >
+                      {estaDesatualizada('listaPdf') ? '🔄 Atualizar PDF' : '📄 PDF'}
+                    </button>
+                    <button
+                      onClick={() => exportarListaExcel()}
+                      disabled={!projetoSalvo}
+                      title={!projetoSalvo ? 'Salve o projeto para habilitar a exportação' : undefined}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                        !projetoSalvo
+                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                          : estaDesatualizada('listaExcel')
+                            ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                            : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'}`}
+                    >
+                      {estaDesatualizada('listaExcel') ? '🔄 Atualizar Excel' : '📊 Excel'}
+                    </button>
+                  </div>
+                  {!projetoSalvo && (
+                    <span className="text-[9px] text-slate-400">Salve o projeto para exportar a Lista de Engenharia</span>
+                  )}
                 </div>
               </div>
               <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
