@@ -376,9 +376,11 @@ function AppContent({ catalogo }) {
       setSalvando(true);
       try {
         const resp = await api.post('/api/v1/projetos', _montarPayload(nome));
-        setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
+        const salvo = { id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente };
+        setProjetoAtual(salvo);
         alert("Projeto salvo com sucesso!");
         if (mostrandoHistorico) abrirHistorico();
+        return salvo;
       } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
       finally { setSalvando(false); }
       return;
@@ -390,6 +392,7 @@ function AppContent({ catalogo }) {
       await api.patch(`/api/v1/projetos/${projetoAtual.id}`, _montarPayload(projetoAtual.nome, projetoAtual.cliente));
       alert("Projeto atualizado com sucesso!");
       if (mostrandoHistorico) abrirHistorico();
+      return projetoAtual;
     } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
     finally { setSalvando(false); }
   };
@@ -405,9 +408,11 @@ function AppContent({ catalogo }) {
     setSalvando(true);
     try {
       const resp = await api.post('/api/v1/projetos', _montarPayload(nome, projetoAtual?.cliente));
-      setProjetoAtual({ id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente });
+      const salvo = { id: resp.data.id, nome: resp.data.nome, cliente: resp.data.cliente };
+      setProjetoAtual(salvo);
       alert(`Projeto salvo como "${nome}"!`);
       if (mostrandoHistorico) abrirHistorico();
+      return salvo;
     } catch (error) { alert(error.response?.data?.detail || "Erro ao salvar o projeto."); }
     finally { setSalvando(false); }
   };

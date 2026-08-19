@@ -939,10 +939,22 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     return linhas;
   };
 
+  // Garante que o projeto está salvo antes de exportar — se ainda não foi salvo,
+  // dispara o mesmo fluxo do botão "Salvar" (que pede o nome) e só segue se der certo.
+  const garantirProjetoSalvo = async () => {
+    if (projetoSalvo) return projetoAtual?.nome || 'Projeto';
+    if (!onSalvarProjeto) {
+      setErro('Salve o projeto antes de exportar a Lista de Engenharia — o nome do projeto é usado no cabeçalho.');
+      return null;
+    }
+    const salvo = await onSalvarProjeto();
+    return salvo?.id ? salvo.nome : null;
+  };
+
   const exportarListaExcel = async () => {
-    if (!projetoSalvo) { setErro('Salve o projeto antes de exportar a Lista de Engenharia — o nome do projeto é usado no cabeçalho da planilha.'); return; }
+    const nome = await garantirProjetoSalvo();
+    if (!nome) return;
     const linhas = _montarLinhasLista();
-    const nome = projetoAtual?.nome || 'Projeto';
     const cliente = dadosCliente?.nome?.trim() || '';
 
     const wb = new ExcelJS.Workbook();
@@ -1035,10 +1047,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     marcarGerada('listaExcel');
   };
 
-  const exportarListaPDF = () => {
-    if (!projetoSalvo) { setErro('Salve o projeto antes de exportar a Lista de Engenharia — o nome do projeto é usado no cabeçalho do PDF.'); return; }
+  const exportarListaPDF = async () => {
+    const nome = await garantirProjetoSalvo();
+    if (!nome) return;
     const linhas = _montarLinhasLista();
-    const nome = projetoAtual?.nome || 'Projeto';
     const cliente = dadosCliente?.nome?.trim() || '';
 
     const pdf = new jsPDF('l', 'mm', 'a4'); // paisagem — mais colunas
@@ -1386,38 +1398,27 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Itens do Dimensionamento</span>
-                <div className="flex flex-col items-end gap-1">
-                  <div className="flex gap-2 items-center">
-                    <button
-                      onClick={() => exportarListaPDF()}
-                      disabled={!projetoSalvo}
-                      title={!projetoSalvo ? 'Salve o projeto para habilitar a exportação' : undefined}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
-                        !projetoSalvo
-                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
-                          : estaDesatualizada('listaPdf')
-                            ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
-                            : 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200'}`}
-                    >
-                      {estaDesatualizada('listaPdf') ? '🔄 Atualizar PDF' : '📄 PDF'}
-                    </button>
-                    <button
-                      onClick={() => exportarListaExcel()}
-                      disabled={!projetoSalvo}
-                      title={!projetoSalvo ? 'Salve o projeto para habilitar a exportação' : undefined}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
-                        !projetoSalvo
-                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
-                          : estaDesatualizada('listaExcel')
-                            ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
-                            : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'}`}
-                    >
-                      {estaDesatualizada('listaExcel') ? '🔄 Atualizar Excel' : '📊 Excel'}
-                    </button>
-                  </div>
-                  {!projetoSalvo && (
-                    <span className="text-[9px] text-slate-400">Salve o projeto para exportar a Lista de Engenharia</span>
-                  )}
+                <div className="flex gap-2 items-center">
+                  <button
+                    onClick={() => exportarListaPDF()}
+                    title={!projetoSalvo ? 'Salva o projeto e gera o PDF' : undefined}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                      estaDesatualizada('listaPdf')
+                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                        : 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200'}`}
+                  >
+                    {estaDesatualizada('listaPdf') ? '🔄 Atualizar PDF' : '📄 PDF'}
+                  </button>
+                  <button
+                    onClick={() => exportarListaExcel()}
+                    title={!projetoSalvo ? 'Salva o projeto e gera o Excel' : undefined}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors border flex items-center gap-1 ${
+                      estaDesatualizada('listaExcel')
+                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                        : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'}`}
+                  >
+                    {estaDesatualizada('listaExcel') ? '🔄 Atualizar Excel' : '📊 Excel'}
+                  </button>
                 </div>
               </div>
               <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
