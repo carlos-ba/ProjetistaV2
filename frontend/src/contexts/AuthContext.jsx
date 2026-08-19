@@ -54,7 +54,10 @@ export function AuthProvider({ children }) {
     setUser(data);
   };
 
-  const logout = () => {
+  // Logout real: avisa o servidor pra revogar a sessão antes de limpar o navegador —
+  // sem isso, o access token continuava válido até expirar sozinho mesmo após "Sair".
+  const logout = async () => {
+    try { await api.post('/api/auth/logout/'); } catch { /* token já inválido — segue o logout local */ }
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);

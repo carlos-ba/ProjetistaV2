@@ -19,7 +19,11 @@ export default function LoginPage() {
     try {
       await login(form.username, form.password);
     } catch (err) {
-      setErro('Usuário ou senha inválidos.');
+      // 403 = credenciais corretas mas limite de sessões simultâneas atingido —
+      // mensagem específica do backend, não "senha inválida"
+      setErro(err.response?.status === 403
+        ? (err.response?.data?.detail || 'Limite de sessões atingido.')
+        : 'Usuário ou senha inválidos.');
     } finally {
       setLoading(false);
     }

@@ -275,7 +275,19 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                             </span>
                           )}
                         </p>
-                        <p className="text-[10px] text-slate-400">{u.email}</p>
+                        <p className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                          {u.email}
+                          {u.is_active && (
+                            <span className="text-slate-300">
+                              · {u.sessoes_ativas} sess{u.sessoes_ativas === 1 ? 'ão' : 'ões'} ativa{u.sessoes_ativas === 1 ? '' : 's'}
+                              {u.ips_distintos_hoje > 1 && (
+                                <span className="ml-1 text-amber-600 font-semibold" title="IP é um sinal ruidoso (técnico de campo troca de rede várias vezes por dia) — use como subsídio, não como prova.">
+                                  · {u.ips_distintos_hoje} IPs distintos/24h
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <select value={u.papel} disabled={!u.is_active}
