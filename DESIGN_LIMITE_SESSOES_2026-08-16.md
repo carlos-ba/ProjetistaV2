@@ -100,14 +100,23 @@ IP) como sinal mais informativo — não é bloqueante para a primeira versão.
 
 ---
 
-## 5. Decisões ainda em aberto (para quando formos codar)
+## 5. Decisões (fechadas em 2026-08-19)
 
-1. **Número do limite de sessões** — sugestão: 2 como padrão.
-2. **Comportamento ao estourar o limite** — bloquear o login novo com aviso explícito, ou derrubar
-   automaticamente a sessão mais parada (`ultimo_uso_em` mais antigo) para abrir vaga?
-3. **Retenção de `sessao_usuario`** (IP e user-agent são dado pessoal, LGPD) — sugestão: janela de
-   60-90 dias, não acumular indefinidamente.
-4. Se o limite deve ser fixo no código ou configurável por empresa/plano.
+1. **Número do limite de sessões: 2.**
+2. **Comportamento ao estourar o limite: bloquear o login novo com aviso explícito** (ex: "Limite de
+   sessões atingido — saia de outro dispositivo primeiro"). Não derruba a sessão mais antiga em
+   silêncio — o usuário precisa agir.
+3. **Retenção de `sessao_usuario`: janela de 60-90 dias.** Sessões revogadas/expiradas mais antigas
+   que isso podem ser limpas (mecanismo de limpeza a definir na implementação — provavelmente script
+   manual em `backend/scripts/`, seguindo o padrão dos demais scripts do projeto, já que não há
+   infraestrutura de cron hoje).
+4. **Limite fixo no código por enquanto**, não configurável por empresa/plano — a Fase B (planos por
+   empresa) ainda não existe, então não há um conceito de "plano" pra atrelar o limite ainda. Pode
+   virar configurável quando a Fase B chegar.
+
+**Confirmado explicitamente fora de escopo:** fechar o navegador/aba sem clicar em "Sair" continua
+sem exigir novo login — sessão guardada em `localStorage` (persistente), como já era antes deste
+design. Esse comportamento não muda com a implementação abaixo.
 
 ---
 

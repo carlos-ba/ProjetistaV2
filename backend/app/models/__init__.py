@@ -11,6 +11,7 @@ from app.models.componente import ComponenteTecnico, PerformanceComponente
 from app.models.material import Material
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
+from app.models.sessao_usuario import SessaoUsuario
 from app.models.projeto import Projeto
 from app.models.calculo import Calculo
 from app.models.cotacao import Fornecedor, Cotacao, CotacaoItem
@@ -35,6 +36,7 @@ __all__ = [
     "Material",
     "Empresa",
     "Usuario",
+    "SessaoUsuario",
     "Projeto",
     "Calculo",
     "Fornecedor",

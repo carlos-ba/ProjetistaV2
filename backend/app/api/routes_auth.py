@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +14,19 @@ from app.schemas.auth import (
 )
 from app.services.auth import (
     registrar_usuario, autenticar_usuario, renovar_token,
-    verificar_email, solicitar_reset_senha, redefinir_senha, get_current_user,
+    verificar_email, solicitar_reset_senha, redefinir_senha, get_current_user, encerrar_sessao,
 )
+
+_bearer = HTTPBearer()
+
+
+def _ip_do_cliente(request: Request) -> str | None:
+    # Atrás do proxy do Render, request.client.host é o IP do proxy — o IP real do
+    # cliente vem no X-Forwarded-For (primeiro da lista, os demais são proxies intermediários).
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -46,8 +58,22 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> M
 
 
 @router.post("/token/", response_model=TokenResponse)
-async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
-    return await autenticar_usuario(payload.username, payload.password, db)
+async def login(payload: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
+    return await autenticar_usuario(
+        payload.username, payload.password, db,
+        ip=_ip_do_cliente(request), user_agent=request.headers.get("user-agent"),
+    )
+
+
+@router.post("/logout/", response_model=MessageResponse)
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Logout real — revoga a sessão no servidor (o botão "Sair" antes só limpava
+    o navegador; o token continuava criptograficamente válido até expirar sozinho)."""
+    await encerrar_sessao(credentials.credentials, db)
+    return MessageResponse(detail="Sessão encerrada.")
 
 
 @router.post("/token/refresh/", response_model=TokenRefreshResponse)

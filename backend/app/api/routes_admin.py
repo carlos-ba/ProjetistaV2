@@ -7,7 +7,7 @@ O cadastro público (/api/auth/register/) continua criando 1 empresa por usuári
 serve ao profissional individual. Usuários ADICIONAIS de uma empresa existente só
 nascem aqui.
 """
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +19,7 @@ from app.core.security import hash_password
 from app.database.session import get_db
 from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_MEMBRO
 from app.models.usuario import Usuario
+from app.models.sessao_usuario import SessaoUsuario
 from app.schemas.auth import UserOut
 from app.services.auth import exigir_superadmin
 
@@ -110,6 +111,11 @@ class UsuarioAdminOut(BaseModel):
     papel: str
     is_active: bool
     email_verified: bool
+    # Métrica de visibilidade (DESIGN_LIMITE_SESSOES_2026-08-16.md) — só subsídio pro
+    # admin investigar, NÃO bloqueia nada automaticamente. IP é sinal ruidoso pra
+    # técnico de campo em 4G/5G.
+    sessoes_ativas: int = 0
+    ips_distintos_hoje: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -174,7 +180,31 @@ async def listar_usuarios(
     result = await db.execute(
         select(Usuario).where(Usuario.empresa_id == empresa_id).order_by(Usuario.username)
     )
-    return result.scalars().all()
+    usuarios = result.scalars().all()
+    if not usuarios:
+        return []
+
+    # Sessões ativas + IPs distintos nas últimas 24h, por usuário — só visibilidade
+    # pro admin (ver DESIGN_LIMITE_SESSOES_2026-08-16.md), não bloqueia nada.
+    desde = datetime.now(timezone.utc) - timedelta(days=1)
+    metricas = await db.execute(
+        select(
+            SessaoUsuario.usuario_id,
+            func.count().filter(SessaoUsuario.revogada_em.is_(None)),
+            func.count(func.distinct(SessaoUsuario.ip)).filter(SessaoUsuario.created_at >= desde),
+        )
+        .where(SessaoUsuario.usuario_id.in_([u.id for u in usuarios]))
+        .group_by(SessaoUsuario.usuario_id)
+    )
+    por_usuario = {uid: (ativas, ips) for uid, ativas, ips in metricas.all()}
+
+    return [
+        UsuarioAdminOut.model_validate(u).model_copy(update={
+            "sessoes_ativas": por_usuario.get(u.id, (0, 0))[0],
+            "ips_distintos_hoje": por_usuario.get(u.id, (0, 0))[1],
+        })
+        for u in usuarios
+    ]
 
 
 @router.post("/empresas/{empresa_id}/usuarios", response_model=UsuarioAdminOut,

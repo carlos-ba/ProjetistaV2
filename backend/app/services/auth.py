@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,10 +15,16 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.database.session import get_db
 from app.models.usuario import Usuario
 from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEMBRO
+from app.models.sessao_usuario import SessaoUsuario
 from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
 from app.services.email import enviar_verificacao_email, enviar_reset_senha
 
 _bearer = HTTPBearer()
+
+# DESIGN_LIMITE_SESSOES_2026-08-16.md — decisão fechada em 2026-08-19: 2 sessões
+# simultâneas por usuário, fixo no código (Fase B/planos ainda não existe pra
+# tornar isso configurável por empresa).
+LIMITE_SESSOES = 2
 
 
 async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
@@ -104,7 +111,10 @@ async def redefinir_senha(token: str, nova_senha: str, db: AsyncSession) -> None
     await db.commit()
 
 
-async def autenticar_usuario(username: str, password: str, db: AsyncSession) -> TokenResponse:
+async def autenticar_usuario(
+    username: str, password: str, db: AsyncSession,
+    ip: str | None = None, user_agent: str | None = None,
+) -> TokenResponse:
     result = await db.execute(select(Usuario).where(Usuario.username == username))
     usuario = result.scalar_one_or_none()
 
@@ -116,12 +126,45 @@ async def autenticar_usuario(username: str, password: str, db: AsyncSession) -> 
     if not usuario.is_active:
         raise HTTPException(status_code=400, detail="Conta desativada.")
 
+    sessoes_ativas = (await db.execute(
+        select(func.count()).select_from(SessaoUsuario)
+        .where(SessaoUsuario.usuario_id == usuario.id, SessaoUsuario.revogada_em.is_(None))
+    )).scalar_one()
+    if sessoes_ativas >= LIMITE_SESSOES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Limite de {LIMITE_SESSOES} sessões simultâneas atingido. "
+                   "Saia de outro dispositivo para continuar.",
+        )
+
+    sessao = SessaoUsuario(usuario_id=usuario.id, ip=ip, user_agent=user_agent)
+    db.add(sessao)
+    await db.flush()
+
     user_id = str(usuario.id)
-    return TokenResponse(
-        access=create_access_token(usuario.username, user_id),
-        refresh=create_refresh_token(user_id),
-        email_verified=usuario.email_verified,
-    )
+    session_id = str(sessao.id)
+    access = create_access_token(usuario.username, user_id, session_id)
+    refresh = create_refresh_token(user_id, session_id)
+    await db.commit()
+    return TokenResponse(access=access, refresh=refresh, email_verified=usuario.email_verified)
+
+
+async def encerrar_sessao(access_token: str, db: AsyncSession) -> None:
+    """Logout real — revoga a sessão no servidor. Falha em silêncio se o token já
+    estiver expirado/inválido: nesse caso a sessão já é inútil, não há o que revogar."""
+    try:
+        payload = decode_token(access_token)
+        sid = payload.get("sid")
+    except JWTError:
+        return
+    if not sid:
+        return
+
+    result = await db.execute(select(SessaoUsuario).where(SessaoUsuario.id == UUID(sid)))
+    sessao = result.scalar_one_or_none()
+    if sessao and sessao.revogada_em is None:
+        sessao.revogada_em = datetime.now(timezone.utc)
+        await db.commit()
 
 
 async def renovar_token(refresh_token: str, db: AsyncSession) -> TokenRefreshResponse:
@@ -130,7 +173,8 @@ async def renovar_token(refresh_token: str, db: AsyncSession) -> TokenRefreshRes
         if payload.get("type") != "refresh":
             raise ValueError
         user_id = payload.get("sub")
-        if not user_id:
+        sid = payload.get("sid")
+        if not user_id or not sid:
             raise ValueError
     except (JWTError, ValueError):
         raise HTTPException(status_code=401, detail="Token de refresh inválido.")
@@ -140,8 +184,17 @@ async def renovar_token(refresh_token: str, db: AsyncSession) -> TokenRefreshRes
     if not usuario or not usuario.is_active:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
+    sessao = (await db.execute(
+        select(SessaoUsuario).where(SessaoUsuario.id == UUID(sid))
+    )).scalar_one_or_none()
+    if not sessao or sessao.revogada_em is not None:
+        raise HTTPException(status_code=401, detail="Sessão encerrada. Faça login novamente.")
+
+    sessao.ultimo_uso_em = datetime.now(timezone.utc)
+    await db.commit()
+
     return TokenRefreshResponse(
-        access=create_access_token(usuario.username, str(usuario.id))
+        access=create_access_token(usuario.username, str(usuario.id), sid)
     )
 
 
@@ -154,13 +207,20 @@ async def get_current_user(
         if payload.get("type") != "access":
             raise ValueError
         user_id = payload.get("sub")
-        if not user_id:
+        sid = payload.get("sid")
+        if not user_id or not sid:
             raise ValueError
     except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido ou expirado.",
         )
+
+    sessao = (await db.execute(
+        select(SessaoUsuario).where(SessaoUsuario.id == UUID(sid))
+    )).scalar_one_or_none()
+    if not sessao or sessao.revogada_em is not None:
+        raise HTTPException(status_code=401, detail="Sessão encerrada. Faça login novamente.")
 
     result = await db.execute(
         select(Usuario).options(selectinload(Usuario.empresa)).where(Usuario.id == UUID(user_id))
