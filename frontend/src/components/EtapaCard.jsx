@@ -26,7 +26,9 @@ const EtapaCard = ({
 
   const handleHeaderClick = () => {
     if (!clicavelHeader) return
-    if (somenteLeitura) {
+    if (somenteLeitura || status !== 'concluido') {
+      // Etapa ainda não concluída não tem botão "Editar" separado — sem isso, recolher
+      // o card (Descartar/Recolher) antes de terminar deixava sem nenhum jeito de reabrir.
       expandido ? onFechar() : onEditar()
     } else {
       onSelecionar()
