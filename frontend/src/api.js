@@ -15,8 +15,10 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   async error => {
-    const ehRefresh = error.config?.url?.includes('/token/refresh');
-    if (error.response?.status === 401 && !error.config._retry && !ehRefresh) {
+    // Cobre tanto /api/auth/token/ (login) quanto /api/auth/token/refresh/ (refresh) —
+    // um 401 nessas duas rotas significa credencial/refresh inválido, não sessão expirada.
+    const ehLoginOuRefresh = error.config?.url?.includes('/auth/token/');
+    if (error.response?.status === 401 && !error.config._retry && !ehLoginOuRefresh) {
       error.config._retry = true;
       const refresh = localStorage.getItem('refresh_token');
       if (refresh) {
