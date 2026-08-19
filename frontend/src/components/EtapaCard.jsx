@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Lock, Pencil, X, ChevronDown, ChevronUp, ChevronRight, AlertTriangle } from "lucide-react"
+import { CheckCircle2, Lock, Pencil, ChevronDown, ChevronUp, ChevronRight, AlertTriangle } from "lucide-react"
 
 const EtapaCard = ({
   numero,
@@ -108,14 +108,15 @@ const EtapaCard = ({
             </Button>
           )}
 
-          {/* Botão Descartar */}
+          {/* Botão Recolher — só fecha o card, não apaga nada preenchido/calculado */}
           {!somenteLeitura && expandido && (
             <Button
               variant="ghost" size="sm"
               onClick={e => { e.stopPropagation(); onFechar() }}
               className="h-7 text-xs gap-1 text-muted-foreground"
+              title="Recolhe o card — o que já foi preenchido ou calculado continua salvo"
             >
-              <X className="w-3 h-3" /> Descartar
+              <ChevronUp className="w-3 h-3" /> Recolher
             </Button>
           )}
 

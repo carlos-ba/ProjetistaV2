@@ -254,7 +254,7 @@ function AppContent({ catalogo }) {
     }
   };
 
-  // Clique em "Descartar edição" → fecha sem perder dados, mantém selecionado
+  // Clique em "Recolher" → fecha sem perder dados, mantém selecionado
   const fecharEtapa = () => { setPassoExpandido(null); setProximaEtapa(null); };
 
   // Confirmação do usuário para avançar à próxima etapa
