@@ -108,9 +108,11 @@ export default function ClassificacaoPage({ onFechar, onAtualizar }) {
                               value={c.id}
                               onChange={e => remapear(t, parseInt(e.target.value))}
                               className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full px-1.5 py-0.5 outline-none appearance-none cursor-pointer"
-                              title={`${t} — mover para outra classificação`}
+                              title={`${t} — mover para outra classificação dentro de "${b.nome}"`}
                             >
-                              {classificacoes.map(cc => <option key={cc.id} value={cc.id}>{t} → {cc.nome}</option>)}
+                              {/* Só classificações do mesmo bloco — mover para outro bloco é
+                                  feito movendo a classificação inteira, não o item individual. */}
+                              {classesDoBloco(c.bloco_id).map(cc => <option key={cc.id} value={cc.id}>{t} → {cc.nome}</option>)}
                             </select>
                           </span>
                         ))}
@@ -133,7 +135,9 @@ export default function ClassificacaoPage({ onFechar, onAtualizar }) {
             <b>Como funciona:</b> cada item do dimensionamento tem um <b>tipo</b> fixo (slug).
             A <b>classificação</b> agrupa tipos; o <b>bloco</b> agrupa classificações e aparece na proposta.
             Renomeie clicando no texto; mova uma classificação de bloco ou um item de classificação pelos seletores.
-            As mudanças valem para orçamentos gerados a partir de agora.
+            Um item só pode trocar de classificação dentro do mesmo bloco — para mudar de bloco,
+            mova a classificação inteira (o item segue junto). As mudanças valem para orçamentos
+            gerados a partir de agora.
           </div>
         </div>
       </div>
