@@ -1,6 +1,7 @@
 # Design — Limite de sessões simultâneas, logout real e monitoramento de IP
 
-**Data:** 2026-08-16 · **Status:** design aprovado pelo usuário, nada implementado ainda.
+**Data:** 2026-08-16 · **Status:** implementado, testado e em produção desde 2026-08-19
+(commits `12db5a1` backend, `590de60` frontend; migration `0025_sessao_usuario`).
 Discussão sem código, documentado antes de mexer no banco/backend.
 
 ---
