@@ -7,11 +7,12 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+from app.core.user_agent import descrever_dispositivo
 from app.database.session import get_db
 from app.models.usuario import Usuario
 from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEMBRO
@@ -111,10 +112,7 @@ async def redefinir_senha(token: str, nova_senha: str, db: AsyncSession) -> None
     await db.commit()
 
 
-async def autenticar_usuario(
-    username: str, password: str, db: AsyncSession,
-    ip: str | None = None, user_agent: str | None = None,
-) -> TokenResponse:
+async def _validar_credenciais(username: str, password: str, db: AsyncSession) -> Usuario:
     result = await db.execute(select(Usuario).where(Usuario.username == username))
     usuario = result.scalar_one_or_none()
 
@@ -125,18 +123,12 @@ async def autenticar_usuario(
         )
     if not usuario.is_active:
         raise HTTPException(status_code=400, detail="Conta desativada.")
+    return usuario
 
-    sessoes_ativas = (await db.execute(
-        select(func.count()).select_from(SessaoUsuario)
-        .where(SessaoUsuario.usuario_id == usuario.id, SessaoUsuario.revogada_em.is_(None))
-    )).scalar_one()
-    if sessoes_ativas >= LIMITE_SESSOES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Limite de {LIMITE_SESSOES} sessões simultâneas atingido. "
-                   "Saia de outro dispositivo para continuar.",
-        )
 
+async def _emitir_tokens(
+    usuario: Usuario, db: AsyncSession, ip: str | None, user_agent: str | None,
+) -> TokenResponse:
     sessao = SessaoUsuario(usuario_id=usuario.id, ip=ip, user_agent=user_agent)
     db.add(sessao)
     await db.flush()
@@ -147,6 +139,71 @@ async def autenticar_usuario(
     refresh = create_refresh_token(user_id, session_id)
     await db.commit()
     return TokenResponse(access=access, refresh=refresh, email_verified=usuario.email_verified)
+
+
+async def autenticar_usuario(
+    username: str, password: str, db: AsyncSession,
+    ip: str | None = None, user_agent: str | None = None,
+) -> TokenResponse:
+    usuario = await _validar_credenciais(username, password, db)
+
+    result = await db.execute(
+        select(SessaoUsuario)
+        .where(SessaoUsuario.usuario_id == usuario.id, SessaoUsuario.revogada_em.is_(None))
+        .order_by(SessaoUsuario.ultimo_uso_em.asc())
+    )
+    sessoes = result.scalars().all()
+    if len(sessoes) >= LIMITE_SESSOES:
+        # Bloqueia (não derruba a sessão antiga em silêncio — decisão de
+        # DESIGN_LIMITE_SESSOES_2026-08-16.md), mas devolve a lista de sessões
+        # ativas pra o usuário poder encerrar uma delas explicitamente e continuar
+        # — sem isso, uma sessão esquecida aberta (aba fechada sem logout) trava o
+        # login em qualquer outro dispositivo até o token expirar sozinho em até 30
+        # dias (REFRESH_TOKEN_EXPIRE_DAYS) ou alguém rodar a limpeza manual.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "erro": "limite_sessoes",
+                "mensagem": f"Limite de {LIMITE_SESSOES} sessões simultâneas atingido. "
+                            "Encerre uma sessão abaixo para continuar.",
+                "sessoes": [
+                    {
+                        "id": str(s.id),
+                        "dispositivo": descrever_dispositivo(s.user_agent),
+                        "ip": s.ip,
+                        "ultimo_uso_em": s.ultimo_uso_em.isoformat() if s.ultimo_uso_em else None,
+                    }
+                    for s in sessoes
+                ],
+            },
+        )
+
+    return await _emitir_tokens(usuario, db, ip, user_agent)
+
+
+async def encerrar_sessao_e_entrar(
+    username: str, password: str, sessao_id: UUID, db: AsyncSession,
+    ip: str | None = None, user_agent: str | None = None,
+) -> TokenResponse:
+    """Segunda etapa do fluxo de limite de sessões: usuário já provou a senha uma vez
+    (recebeu a lista no 403 de autenticar_usuario) e escolheu qual sessão encerrar.
+    Reexige a senha aqui — mais simples e seguro que emitir um token intermediário só
+    pra essa decisão, e o usuário acabou de digitá-la mesmo."""
+    usuario = await _validar_credenciais(username, password, db)
+
+    result = await db.execute(
+        select(SessaoUsuario).where(
+            SessaoUsuario.id == sessao_id, SessaoUsuario.usuario_id == usuario.id,
+        )
+    )
+    sessao = result.scalar_one_or_none()
+    if not sessao:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    if sessao.revogada_em is None:
+        sessao.revogada_em = datetime.now(timezone.utc)
+        await db.commit()
+
+    return await _emitir_tokens(usuario, db, ip, user_agent)
 
 
 async def encerrar_sessao(access_token: str, db: AsyncSession) -> None:

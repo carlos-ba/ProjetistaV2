@@ -28,6 +28,12 @@ class UserLogin(BaseModel):
     password: str
 
 
+class EncerrarSessaoLoginRequest(BaseModel):
+    username: str
+    password: str
+    sessao_id: UUID
+
+
 class TokenResponse(BaseModel):
     access: str
     refresh: str

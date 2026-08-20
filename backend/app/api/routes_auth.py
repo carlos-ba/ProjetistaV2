@@ -11,10 +11,12 @@ from app.models.usuario import Usuario
 from app.schemas.auth import (
     UserCreate, UserLogin, TokenResponse, TokenRefreshRequest, TokenRefreshResponse,
     MessageResponse, ForgotPasswordRequest, ResetPasswordRequest, UserOut, PreferenciasUpdate,
+    EncerrarSessaoLoginRequest,
 )
 from app.services.auth import (
     registrar_usuario, autenticar_usuario, renovar_token,
     verificar_email, solicitar_reset_senha, redefinir_senha, get_current_user, encerrar_sessao,
+    encerrar_sessao_e_entrar,
 )
 
 _bearer = HTTPBearer()
@@ -61,6 +63,18 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> M
 async def login(payload: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
     return await autenticar_usuario(
         payload.username, payload.password, db,
+        ip=_ip_do_cliente(request), user_agent=request.headers.get("user-agent"),
+    )
+
+
+@router.post("/token/encerrar-sessao/", response_model=TokenResponse)
+async def login_encerrando_sessao(
+    payload: EncerrarSessaoLoginRequest, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Segunda etapa do login quando o limite de sessões foi atingido: o usuário
+    escolheu, na lista devolvida pelo 403 de /token/, qual sessão encerrar."""
+    return await encerrar_sessao_e_entrar(
+        payload.username, payload.password, payload.sessao_id, db,
         ip=_ip_do_cliente(request), user_agent=request.headers.get("user-agent"),
     )
 
