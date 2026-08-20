@@ -216,6 +216,12 @@ o login novo com aviso explícito — não derruba a sessão antiga em silêncio
   `sid` embutido no access e no refresh token é o elo entre o token e a linha.
 - `POST /api/auth/logout/` revoga a sessão de verdade no servidor — antes o
   "Sair" só limpava o `localStorage` e o token continuava válido até expirar.
+- **Liberação remota de sessão (2026-08-20):** fechar a aba sem logout não expira
+  nada (refresh token dura 30 dias) — sessão "fantasma" travava login em outro
+  dispositivo. O 403 de limite agora devolve a lista de sessões ativas (dispositivo/
+  IP/último uso) e `POST /api/auth/token/encerrar-sessao/` (reautentica com
+  usuário+senha) encerra uma delas e completa o login — sem precisar acessar o
+  dispositivo antigo. UI em `LoginPage.jsx`. Detalhe em `project-design-limite-sessoes`.
 - Métrica de sessões ativas + IPs distintos/24h visível pro admin (`AdminEmpresas.jsx`)
   — só visibilidade, não bloqueia nada automaticamente (IP é sinal ruidoso).
 - Retenção de 90 dias (LGPD) — limpeza via
