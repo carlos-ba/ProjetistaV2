@@ -2,30 +2,59 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 
+// "há 2h", "há 5min" etc a partir de um ISO — só pra dar noção de quão parada
+// está aquela sessão na hora de escolher qual encerrar.
+const formatarUsoRelativo = (iso) => {
+  if (!iso) return 'uso desconhecido';
+  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return 'agora mesmo';
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `há ${diffH}h`;
+  return `há ${Math.floor(diffH / 24)}d`;
+};
+
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginEncerrandoSessao } = useAuth();
   const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro'
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessoesConflito, setSessoesConflito] = useState(null); // lista devolvida pelo 403 de limite
+  const [encerrandoId, setEncerrandoId] = useState(null);
 
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleLogin = async e => {
     e.preventDefault();
     setErro('');
+    setSessoesConflito(null);
     setLoading(true);
     try {
       await login(form.username, form.password);
     } catch (err) {
-      // 403 = credenciais corretas mas limite de sessões simultâneas atingido —
-      // mensagem específica do backend, não "senha inválida"
-      setErro(err.response?.status === 403
-        ? (err.response?.data?.detail || 'Limite de sessões atingido.')
-        : 'Usuário ou senha inválidos.');
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 403 && detail?.erro === 'limite_sessoes') {
+        setErro(detail.mensagem || 'Limite de sessões atingido.');
+        setSessoesConflito(detail.sessoes || []);
+      } else {
+        setErro(err.response?.status === 403 ? 'Limite de sessões atingido.' : 'Usuário ou senha inválidos.');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEncerrarSessao = async (sessaoId) => {
+    setEncerrandoId(sessaoId);
+    setErro('');
+    try {
+      await loginEncerrandoSessao(form.username, form.password, sessaoId);
+    } catch {
+      setErro('Não foi possível encerrar essa sessão. Tente novamente.');
+    } finally {
+      setEncerrandoId(null);
     }
   };
 
@@ -72,13 +101,13 @@ export default function LoginPage() {
           {/* Abas */}
           <div className="flex">
             <button
-              onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); }}
+              onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); setSessoesConflito(null); }}
               className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'entrar' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               Entrar
             </button>
             <button
-              onClick={() => { setAba('cadastro'); setErro(''); setSucesso(''); }}
+              onClick={() => { setAba('cadastro'); setErro(''); setSucesso(''); setSessoesConflito(null); }}
               className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'cadastro' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               Criar Conta
@@ -95,6 +124,29 @@ export default function LoginPage() {
             {erro && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {erro}
+              </div>
+            )}
+
+            {sessoesConflito && sessoesConflito.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {sessoesConflito.map(s => (
+                  <div key={s.id} className="flex items-center justify-between gap-3 border border-slate-200 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate">{s.dispositivo}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {s.ip || 'IP desconhecido'} · {formatarUsoRelativo(s.ultimo_uso_em)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleEncerrarSessao(s.id)}
+                      disabled={encerrandoId === s.id}
+                      className="flex-shrink-0 text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                    >
+                      {encerrandoId === s.id ? 'Encerrando...' : 'Encerrar e continuar'}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 

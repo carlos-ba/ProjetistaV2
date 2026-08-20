@@ -41,11 +41,24 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (username, password) => {
-    const { data } = await api.post('/api/auth/token/', { username, password });
+  const aplicarTokens = async (data, fallbackUsername) => {
     localStorage.setItem('access_token', data.access);
     localStorage.setItem('refresh_token', data.refresh);
-    await carregarUsuario(data.access, username);
+    await carregarUsuario(data.access, fallbackUsername);
+  };
+
+  const login = async (username, password) => {
+    const { data } = await api.post('/api/auth/token/', { username, password });
+    await aplicarTokens(data, username);
+  };
+
+  // Segunda etapa do login quando o limite de sessões foi atingido: usuário escolheu
+  // qual sessão encerrar (lista veio no 403 de login()) e reenvia a senha pra confirmar.
+  const loginEncerrandoSessao = async (username, password, sessaoId) => {
+    const { data } = await api.post('/api/auth/token/encerrar-sessao/', {
+      username, password, sessao_id: sessaoId,
+    });
+    await aplicarTokens(data, username);
   };
 
   // Atualiza o modo do app (engenharia × completo) e reflete no contexto
@@ -64,7 +77,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, atualizarModoEngenharia, semEmpresa }}>
+    <AuthContext.Provider value={{ user, loading, login, loginEncerrandoSessao, logout, atualizarModoEngenharia, semEmpresa }}>
       {children}
     </AuthContext.Provider>
   );
