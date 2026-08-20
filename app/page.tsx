@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageFrame, Placeholder } from "./components";
 
 export default function Home() {
@@ -11,8 +10,8 @@ export default function Home() {
             <h1>Um ecossistema para transformar a refrigeração.</h1>
             <p className="hero-lead">Ferramentas técnicas e capacitação conectadas para tornar decisões complexas mais simples, rápidas e acessíveis.</p>
             <div className="hero-actions">
-              <Link className="button primary" href="/projeto-camara-fria">Conhecer o primeiro produto</Link>
-              <Link className="button ghost" href="/acessar">Já sou cliente</Link>
+              <a className="button primary" href="/projeto-camara-fria">Conhecer o primeiro produto</a>
+              <a className="button ghost" href="/acessar">Já sou cliente</a>
             </div>
           </div>
           <div className="nexus-visual" aria-label="Áreas conectadas do ecossistema IceNexus">
@@ -35,14 +34,14 @@ export default function Home() {
               <div className="mini-product-ui" aria-hidden="true"><div className="mini-rail"><i /><i /><i /><i /></div><div className="mini-stage"><b>Projeto guiado</b><span /><span /><span /></div></div>
               <h3>Projeto de Câmara Fria</h3>
               <p>Uma jornada guiada para calcular, selecionar componentes e gerar os documentos técnicos do projeto.</p>
-              <Link className="text-link" href="/projeto-camara-fria">Explorar a ferramenta <span>→</span></Link>
+              <a className="text-link" href="/projeto-camara-fria">Explorar a ferramenta <span>→</span></a>
             </article>
             <article className="solution-card">
               <div className="card-top"><span className="live-badge green">Área ativa</span><span>Capacitação</span></div>
               <Placeholder label="Treinamentos IceNexus" className="card-placeholder" />
               <h3>Treinamentos</h3>
               <p>Capacitação técnica para profissionais e empresas acompanharem a evolução da refrigeração.</p>
-              <Link className="text-link" href="/treinamentos">Conhecer treinamentos <span>→</span></Link>
+              <a className="text-link" href="/treinamentos">Conhecer treinamentos <span>→</span></a>
             </article>
           </div>
         </section>
@@ -62,7 +61,7 @@ export default function Home() {
         <section className="section final-cta">
           <p className="eyebrow">PRIMEIRA FERRAMENTA</p>
           <h2>Seu próximo projeto de câmara fria pode começar aqui.</h2>
-          <div><Link className="button primary" href="/projeto-camara-fria">Ver como funciona</Link><Link className="button ghost" href="/acessar">Acessar ambiente</Link></div>
+          <div><a className="button primary" href="/projeto-camara-fria">Ver como funciona</a><a className="button ghost" href="/acessar">Acessar ambiente</a></div>
         </section>
       </main>
     </PageFrame>

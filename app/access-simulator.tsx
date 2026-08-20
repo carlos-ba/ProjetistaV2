@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
 
 export function AccessSimulator() {
   const [opened, setOpened] = useState(false);
@@ -19,7 +18,7 @@ export function AccessSimulator() {
   return (
     <div className="access-layout">
       <section><p className="eyebrow">ÁREA DO CLIENTE</p><h1>Um acesso. Seus ambientes IceNexus.</h1><p className="hero-lead">Hoje, você seguirá diretamente para o Projeto de Câmara Fria. No futuro, esta entrada reunirá os produtos liberados para sua conta.</p><ul className="access-benefits"><li>Acesso direto, sem repetir a jornada comercial</li><li>Produtos exibidos conforme sua assinatura</li><li>Base preparada para novas ferramentas</li></ul></section>
-      <form className="login-card" onSubmit={simulate}><span className="simulation-label">Simulação — não use uma senha real</span><h2>Entrar na IceNexus</h2><label>E-mail<input type="email" placeholder="usuario@exemplo.com" required /></label><label>Senha<input type="password" placeholder="••••••••" required minLength={4} /></label><button className="button primary full" type="submit">Simular entrada</button><button className="text-link centered" type="button">Esqueci minha senha</button><div className="form-divider"><span>ou</span></div><Link className="button ghost full" href="/projeto-camara-fria">Conhecer o Projeto de Câmara Fria</Link></form>
+      <form className="login-card" onSubmit={simulate}><span className="simulation-label">Simulação — não use uma senha real</span><h2>Entrar na IceNexus</h2><label>E-mail<input type="email" placeholder="usuario@exemplo.com" required /></label><label>Senha<input type="password" placeholder="••••••••" required minLength={4} /></label><button className="button primary full" type="submit">Simular entrada</button><button className="text-link centered" type="button">Esqueci minha senha</button><div className="form-divider"><span>ou</span></div><a className="button ghost full" href="/projeto-camara-fria">Conhecer o Projeto de Câmara Fria</a></form>
     </div>
   );
 }

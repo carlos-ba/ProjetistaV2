@@ -1,12 +1,11 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function Brand() {
   return (
-    <Link className="brand" href="/" aria-label="IceNexus — página inicial">
+    <a className="brand" href="/" aria-label="IceNexus — página inicial">
       <span className="brand-symbol" aria-hidden="true">✦</span>
       <span><b>ICE</b>NEXUS</span>
-    </Link>
+    </a>
   );
 }
 
@@ -15,18 +14,18 @@ export function Header() {
     <header className="topbar">
       <Brand />
       <nav className="desktop-nav" aria-label="Navegação principal">
-        <Link href="/">Ecossistema</Link>
-        <Link href="/projeto-camara-fria">Projeto de Câmara Fria</Link>
-        <Link href="/treinamentos">Treinamentos</Link>
-        <Link className="access-link" href="/acessar">Acessar</Link>
+        <a href="/">Ecossistema</a>
+        <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
+        <a href="/treinamentos">Treinamentos</a>
+        <a className="access-link" href="/acessar">Acessar</a>
       </nav>
       <details className="mobile-menu">
         <summary aria-label="Abrir navegação">Menu</summary>
         <nav aria-label="Navegação para celular">
-          <Link href="/">Ecossistema</Link>
-          <Link href="/projeto-camara-fria">Projeto de Câmara Fria</Link>
-          <Link href="/treinamentos">Treinamentos</Link>
-          <Link href="/acessar">Acessar</Link>
+          <a href="/">Ecossistema</a>
+          <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
+          <a href="/treinamentos">Treinamentos</a>
+          <a href="/acessar">Acessar</a>
         </nav>
       </details>
     </header>
@@ -58,9 +57,9 @@ export function Footer() {
     <footer className="footer">
       <div><Brand /><p>Tecnologia, engenharia e conhecimento para refrigeração.</p></div>
       <div className="footer-links">
-        <Link href="/projeto-camara-fria">Projeto de Câmara Fria</Link>
-        <Link href="/treinamentos">Treinamentos</Link>
-        <Link href="/acessar">Acessar</Link>
+        <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
+        <a href="/treinamentos">Treinamentos</a>
+        <a href="/acessar">Acessar</a>
       </div>
       <div className="footer-pending">
         <strong>Contato</strong>

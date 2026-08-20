@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { PageFrame } from "../components";
 
@@ -28,7 +27,7 @@ export default function ColdRoomProject() {
             <p className="eyebrow">PROJETO DE CÂMARA FRIA</p>
             <h1>Do primeiro dado ao projeto técnico, passo a passo.</h1>
             <p className="hero-lead">Uma jornada guiada por cards que ajuda técnicos e empresas a calcular, selecionar componentes e preparar os documentos de uma câmara fria.</p>
-            <div className="hero-actions"><Link className="button primary" href="#planos">Ver planos</Link><Link className="button ghost" href="/acessar">Já sou assinante</Link></div>
+            <div className="hero-actions"><a className="button primary" href="#planos">Ver planos</a><a className="button ghost" href="/acessar">Já sou assinante</a></div>
             <p className="micro-proof">Jornada simples demonstrada em condições controladas. O tempo varia conforme dados, projeto e perfil de uso.</p>
           </div>
           <div className="product-window" aria-label="Representação da jornada guiada do programa">
@@ -57,7 +56,7 @@ export default function ColdRoomProject() {
         <section className="section audience-section">
           <div className="section-heading"><p className="eyebrow">PARA QUEM É</p><h2>Uma base técnica, jornadas comerciais diferentes.</h2></div>
           <div className="audience-grid">
-            <article><span>Compra online</span><h3>Técnico instalador</h3><p>Ganhe autonomia para desenvolver o projeto e organizar os materiais mesmo sem dominar softwares tradicionais de engenharia.</p><Link className="text-link" href="#planos">Comparar planos →</Link></article>
+            <article><span>Compra online</span><h3>Técnico instalador</h3><p>Ganhe autonomia para desenvolver o projeto e organizar os materiais mesmo sem dominar softwares tradicionais de engenharia.</p><a className="text-link" href="#planos">Comparar planos →</a></article>
             <article><span>Atendimento especializado</span><h3>Empresa montadora</h3><p>Padronize a preparação de projetos e propostas entre equipes e reduza dependências externas.</p><a className="text-link" href="#empresas">Falar com especialista →</a></article>
             <article><span>Atendimento especializado</span><h3>Empresa revendedora</h3><p>Ajude vendedores e técnicos de balcão a responder ao cliente usando produtos e preços da própria operação.</p><a className="text-link" href="#empresas">Falar com especialista →</a></article>
           </div>
@@ -66,9 +65,9 @@ export default function ColdRoomProject() {
         <section className="section pricing-section" id="planos">
           <div className="section-heading"><p className="eyebrow">PLANOS INDIVIDUAIS</p><h2>Experimente com um projeto. Assine para continuar.</h2><p>Esta tabela representa a oferta V1 para validação. Regras ainda pendentes aparecem sinalizadas.</p></div>
           <div className="pricing-grid">
-            <article className="price-card"><p className="plan-name">Free</p><div className="price"><strong>R$ 0</strong><span>por 30 dias</span></div><ul><li>1 projeto de câmara fria</li><li>Todas as funcionalidades nesse projeto</li><li>Orçamento para 1 destinatário</li><li>WhatsApp para dúvidas do programa</li></ul><Link className="button ghost full" href="/contratar/free">Simular plano Free</Link></article>
-            <article className="price-card"><p className="plan-name">Mensal</p><div className="price"><strong>R$ 159</strong><span>por mês</span></div><ul><li>Todas as funcionalidades</li><li>WhatsApp incluído</li><li className="pending-item">Quantidade de projetos: confirmar</li><li className="pending-item">Cancelamento: confirmar</li></ul><Link className="button ghost full" href="/contratar/mensal">Simular assinatura mensal</Link></article>
-            <article className="price-card preferred"><span className="recommended">Oferta em destaque</span><p className="plan-name">Semestral</p><div className="price"><strong>6 × R$ 99</strong><span>total de R$ 594</span></div><ul><li>Todas as funcionalidades</li><li>WhatsApp incluído</li><li>Live em grupo a cada 15 dias</li><li>1 validação de projeto/mês</li><li>1 mês adicional por indicação convertida</li></ul><Link className="button primary full" href="/contratar/semestral">Simular plano semestral</Link></article>
+            <article className="price-card"><p className="plan-name">Free</p><div className="price"><strong>R$ 0</strong><span>por 30 dias</span></div><ul><li>1 projeto de câmara fria</li><li>Todas as funcionalidades nesse projeto</li><li>Orçamento para 1 destinatário</li><li>WhatsApp para dúvidas do programa</li></ul><a className="button ghost full" href="/contratar/free">Simular plano Free</a></article>
+            <article className="price-card"><p className="plan-name">Mensal</p><div className="price"><strong>R$ 159</strong><span>por mês</span></div><ul><li>Todas as funcionalidades</li><li>WhatsApp incluído</li><li className="pending-item">Quantidade de projetos: confirmar</li><li className="pending-item">Cancelamento: confirmar</li></ul><a className="button ghost full" href="/contratar/mensal">Simular assinatura mensal</a></article>
+            <article className="price-card preferred"><span className="recommended">Oferta em destaque</span><p className="plan-name">Semestral</p><div className="price"><strong>6 × R$ 99</strong><span>total de R$ 594</span></div><ul><li>Todas as funcionalidades</li><li>WhatsApp incluído</li><li>Live em grupo a cada 15 dias</li><li>1 validação de projeto/mês</li><li>1 mês adicional por indicação convertida</li></ul><a className="button primary full" href="/contratar/semestral">Simular plano semestral</a></article>
           </div>
           <p className="pricing-note">A validação por engenheiro, os encontros e o WhatsApp terão escopo e condições detalhados antes da publicação definitiva.</p>
         </section>
