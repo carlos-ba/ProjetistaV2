@@ -323,8 +323,21 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     setLoading(true); setErro(null);
     const semPreco = [];
 
+    // Fase B: preço da própria empresa (lista cadastrada ou última cotação histórica,
+    // resolvido pelo backend) preenche o que a cotação deste projeto não cobriu — nunca
+    // sobrescreve um preço que já veio de uma cotação escolhida pra este orçamento.
+    const mapaCompleto = new Map(precoMap);
+    try {
+      const { data: mapaEmpresa } = await api.get('/api/v1/produto-empresa/mapa-precos');
+      for (const [chave, info] of Object.entries(mapaEmpresa)) {
+        if (!mapaCompleto.has(chave)) mapaCompleto.set(chave, info.preco);
+      }
+    } catch {
+      // Sem empresa vinculada ou erro pontual — segue só com o precoMap da cotação
+    }
+
     const buscarPreco = (descricao) => {
-      const p = precoMap.get(norm(descricao));
+      const p = mapaCompleto.get(norm(descricao));
       if (p == null) semPreco.push(descricao);
       return p ?? null;
     };
@@ -1805,6 +1818,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       Ver painel de cotações
                     </button>
                   )}
+                  <button onClick={() => { setCotacaoAviso(null); gerarOrcamentoComPrecos(); }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-white text-amber-700 font-bold hover:bg-amber-50 border border-amber-300"
+                    title="Usa a lista de preços cadastrada da sua empresa (Catálogo de Preços, no menu) — sem precisar cotar com fornecedor">
+                    💰 Gerar com meu catálogo de preços
+                  </button>
                 </div>
               </div>
             )}

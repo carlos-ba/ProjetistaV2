@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api';
+import CatalogoPrecosEmpresa from './CatalogoPrecosEmpresa';
 
 /**
  * Administração IceNexus — gestão de empresas (tenants) e seus usuários.
@@ -39,6 +40,7 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
   const [novaEmpresa, setNovaEmpresa]   = useState(null);
   const [editando, setEditando]         = useState(null);
   const [expandida, setExpandida]       = useState(null);   // empresa_id com equipe aberta
+  const [expandidaCatalogo, setExpandidaCatalogo] = useState(null); // empresa_id com catálogo de preços aberto
   const [usuarios, setUsuarios]         = useState({});     // empresa_id -> lista
   const [novoUsuario, setNovoUsuario]   = useState(null);   // { empresa_id, ...campos }
   const [editUsuario, setEditUsuario]   = useState(null);   // { empresa_id, id, email, password }
@@ -253,6 +255,10 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                       className="text-[10px] px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 hover:bg-indigo-100">
                       {expandida === e.id ? 'Fechar' : 'Equipe'}
                     </button>
+                    <button onClick={() => setExpandidaCatalogo(v => v === e.id ? null : e.id)}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 hover:bg-emerald-100">
+                      {expandidaCatalogo === e.id ? 'Fechar' : '📦 Catálogo'}
+                    </button>
                     <button onClick={() => { setEditando({ ...e }); setErro(''); }}
                       className="text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Editar</button>
                   </div>
@@ -381,6 +387,17 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                       + Adicionar usuário
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Catálogo de preços — implantação (superadmin cadastra pela empresa) */}
+              {expandidaCatalogo === e.id && (
+                <div className="border-t border-slate-100 bg-emerald-50/30 p-4">
+                  <p className="text-[10px] text-slate-400 mb-2">
+                    Lista de preços de <b>{e.nome}</b> — o cliente também pode editar isso
+                    sozinho, em "Catálogo de Preços" no menu dele.
+                  </p>
+                  <CatalogoPrecosEmpresa apiBase={`/api/v1/admin/empresas/${e.id}/produtos`} />
                 </div>
               )}
             </div>
