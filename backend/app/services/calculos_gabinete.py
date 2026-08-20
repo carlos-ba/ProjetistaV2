@@ -73,12 +73,16 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         materiais_extras.append(MaterialExtra(
             item=f"Placas Isolamento ({req.nucleo})",
             qtd=f"{area_piso * 2:.2f} m²",
+            quantidade=round(area_piso * 2, 2),
+            unidade="m²",
             detalhe=f"2 camadas de {esp_camada:.0f}mm (Juntas Desencontradas)",
             tipo_item="placa_isolamento",
         ))
         materiais_extras.append(MaterialExtra(
             item="Barreira de Vapor",
             qtd=f"{area_piso * 1.1:.2f} m²",
+            quantidade=round(area_piso * 1.1, 2),
+            unidade="m²",
             detalhe="Sob isolamento (1 camada)",
             tipo_item="barreira_vapor",
         ))
@@ -88,6 +92,8 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             materiais_extras.append(MaterialExtra(
                 item="Concreto Armado",
                 qtd=f"{vol:.2f} m³",
+                quantidade=round(vol, 2),
+                unidade="m³",
                 detalhe=f"Esp. {req.espessura_concreto_cm}cm{nota}",
                 tipo_item="concreto_armado",
             ))
@@ -99,6 +105,8 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
     materiais_extras.append(MaterialExtra(
         item="Acessórios de Montagem (Kit)",
         qtd=f"{area_total_paineis:.2f} m²",
+        quantidade=round(area_total_paineis, 2),
+        unidade="m²",
         detalhe="Silicone, Fixadores, Cantoneiras (Base: Área Total de Painéis)",
         tipo_item="acessorio_montagem",
     ))

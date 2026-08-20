@@ -33,7 +33,9 @@ class ItemCorte(BaseModel):
 
 class MaterialExtra(BaseModel):
     item: str
-    qtd: str
+    qtd: str  # texto pronto pra exibição inline (ex: "126.89 m²") — usado na prévia do Card 1
+    quantidade: float  # valor numérico puro, pra planilhas/orçamento (colunas separadas)
+    unidade: str
     detalhe: str
     tipo_item: str | None = None
 
