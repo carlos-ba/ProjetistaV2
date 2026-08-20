@@ -13,21 +13,19 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
     total_eq = 0.0
 
     for i in req.materiais:
-        # Preco injetado pelo frontend (da cotação) tem prioridade; fallback para banco
-        if i.preco_unitario is not None:
-            custo = i.preco_unitario
-            nome = i.item or "Item Dimensionado"
-            unidade = "un"
-        elif i.id:
+        # Preço injetado pelo frontend tem prioridade — cotação do projeto, senão a
+        # cascata da empresa (lista própria → última cotação histórica), resolvida no
+        # frontend antes de chamar este endpoint (ver GeradorOrcamento.jsx). O catálogo
+        # global (Material.custo) não é mais fonte de preço (Fase B) — só de nome, quando
+        # o frontend não mandou um.
+        nome = i.item
+        if not nome and i.id:
             result = await db.execute(select(Material).where(Material.id == i.id))
             mat = result.scalar_one_or_none()
-            custo = float(mat.custo) if mat else 0.0
-            nome = f"(Mat) {mat.nome}" if mat else (i.item or "Item Dimensionado")
-            unidade = "un"
-        else:
-            custo = 0.0
-            nome = i.item or "Item Dimensionado"
-            unidade = "un"
+            nome = f"(Mat) {mat.nome}" if mat else None
+        nome = nome or "Item Dimensionado"
+        custo = i.preco_unitario if i.preco_unitario is not None else 0.0
+        unidade = "un"
         subtotal = i.qtde * custo
         total_mat += subtotal
         itens.append(ItemDetalhado(
@@ -42,17 +40,13 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
         ))
 
     for i in req.equipamentos:
-        if i.preco_unitario is not None:
-            custo = i.preco_unitario
-            nome = i.item or "Equipamento Dimensionado"
-        elif i.id:
+        nome = i.item
+        if not nome and i.id:
             result = await db.execute(select(Equipamento).where(Equipamento.id == i.id))
             eq = result.scalar_one_or_none()
-            custo = float(eq.custo) if eq else 0.0
-            nome = f"(Eq) {eq.modelo}" if eq else (i.item or "Equipamento Dimensionado")
-        else:
-            custo = 0.0
-            nome = i.item or "Equipamento Dimensionado"
+            nome = f"(Eq) {eq.modelo}" if eq else None
+        nome = nome or "Equipamento Dimensionado"
+        custo = i.preco_unitario if i.preco_unitario is not None else 0.0
         subtotal = i.qtde * custo
         total_eq += subtotal
         itens.append(ItemDetalhado(

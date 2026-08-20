@@ -14,6 +14,8 @@ from typing import Any
 
 from openpyxl import load_workbook
 
+from app.core.matching import norm
+
 # Colunas da planilha v2 (1-based)
 # A=1 Código, B=2 Tipo, C=3 Descrição, D=4 Detalhe, E=5 Qtde(m), F=6 Qtde, G=7 Un
 # H=8 Preço Unit., I=9 Total, J=10 Marca/Modelo, K=11 Prazo, L=12 Obs
@@ -120,9 +122,6 @@ def casar_itens(itens_banco: list, itens_planilha: list[dict]) -> list[dict]:
     Estratégia: descrição exata → descrição normalizada → sem correspondência.
     Retorna um relatório por item do banco + linhas extras da planilha.
     """
-    def norm(s: str) -> str:
-        return re.sub(r"\s+", " ", str(s or "").strip().lower())
-
     usados: set[int] = set()
     relatorio: list[dict] = []
 

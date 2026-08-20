@@ -21,7 +21,9 @@ from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_MEMBRO
 from app.models.usuario import Usuario
 from app.models.sessao_usuario import SessaoUsuario
 from app.schemas.auth import UserOut
+from app.schemas.produto_empresa import ProdutoEmpresaCreate, ProdutoEmpresaUpdate, ProdutoEmpresaOut
 from app.services.auth import exigir_superadmin
+from app.services.produto_empresa import listar_produtos, criar_produto, atualizar_produto, remover_produto
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -284,6 +286,53 @@ async def atualizar_usuario(
     await db.commit()
     await db.refresh(usuario)
     return usuario
+
+
+# ── Lista de preços de uma empresa (implantação — Fase B) ──────────────────
+
+@router.get("/empresas/{empresa_id}/produtos", response_model=list[ProdutoEmpresaOut])
+async def listar_produtos_empresa(
+    empresa_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    await _obter_empresa(db, empresa_id)
+    return await listar_produtos(db, empresa_id)
+
+
+@router.post("/empresas/{empresa_id}/produtos", response_model=ProdutoEmpresaOut,
+             status_code=status.HTTP_201_CREATED)
+async def criar_produto_empresa(
+    empresa_id: UUID,
+    payload: ProdutoEmpresaCreate,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    await _obter_empresa(db, empresa_id)
+    return await criar_produto(db, empresa_id, payload)
+
+
+@router.patch("/empresas/{empresa_id}/produtos/{produto_id}", response_model=ProdutoEmpresaOut)
+async def atualizar_produto_empresa(
+    empresa_id: UUID,
+    produto_id: int,
+    payload: ProdutoEmpresaUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    await _obter_empresa(db, empresa_id)
+    return await atualizar_produto(db, empresa_id, produto_id, payload)
+
+
+@router.delete("/empresas/{empresa_id}/produtos/{produto_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remover_produto_empresa(
+    empresa_id: UUID,
+    produto_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    await _obter_empresa(db, empresa_id)
+    await remover_produto(db, empresa_id, produto_id)
 
 
 async def _obter_empresa(db: AsyncSession, empresa_id: UUID) -> Empresa:
