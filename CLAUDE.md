@@ -47,7 +47,7 @@ antigo por serem registro histórico — não foram reemitidos.
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
-| Migrations | Alembic (0001→0022), roda no `startCommand` do Render |
+| Migrations | Alembic (0001→0025), roda no `startCommand` do Render |
 
 ---
 
@@ -106,7 +106,7 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 | 3 | `SelecaoEquipamentos.jsx` | Seleção de UC + Evaporadora do banco de dados |
 | 4 | `CalculadoraTubulacao.jsx` | Dimensionamento de tubulação (bitolas ASHRAE) + isolamento Armacel |
 | 5 | `ComponentesFluxo.jsx` | Componentes de fluxo: solenoide, filtro, visor, separadores, tanque, cavalete, carga fluido |
-| 6 | `GeradorOrcamento.jsx` | Geração de orçamento + cotação Excel + proposta comercial PDF |
+| 6 | `GeradorOrcamento.jsx` | Geração de orçamento + Lista de Engenharia (Excel/PDF) + cotação Excel + proposta comercial PDF |
 
 **Atenção:** o Card 5 (ComponentesFluxo) é o mais complexo — leia a seção abaixo com atenção.
 
@@ -205,7 +205,26 @@ estão na memória — ver `project-fase-a-multitenancy` e
 
 ---
 
-## Banco de Dados — Migrations (0001→0022)
+## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
+
+Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
+(fixo no código, ainda não configurável por empresa). Estourar o limite bloqueia
+o login novo com aviso explícito — não derruba a sessão antiga em silêncio.
+
+- Tabela `sessao_usuario` (migration 0025): uma linha por sessão ativa; claim
+  `sid` embutido no access e no refresh token é o elo entre o token e a linha.
+- `POST /api/auth/logout/` revoga a sessão de verdade no servidor — antes o
+  "Sair" só limpava o `localStorage` e o token continuava válido até expirar.
+- Métrica de sessões ativas + IPs distintos/24h visível pro admin (`AdminEmpresas.jsx`)
+  — só visibilidade, não bloqueia nada automaticamente (IP é sinal ruidoso).
+- Retenção de 90 dias (LGPD) — limpeza via
+  `backend/scripts/limpar_sessoes_antigas.py`, manual (sem cron no projeto).
+
+Detalhe completo, decisões e testes: ver `project-design-limite-sessoes` na memória.
+
+---
+
+## Banco de Dados — Migrations (0001→0025)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -231,14 +250,17 @@ estão na memória — ver `project-fase-a-multitenancy` e
 | 0020 | Multi-tenancy: tabela `empresa`, `usuario.empresa_id` + `papel` (nullable) |
 | 0021 | Backfill de `empresa_id` + NOT NULL + FK RESTRICT |
 | 0022 | Nome de projeto único por empresa (desambigua duplicatas existentes antes de criar a constraint) |
+| 0023 | Classificação "Válvulas de Bloqueio (GBC)" (`valvula_bloqueio_gbc`) |
+| 0024 | Tabela `embalagem_fluido` (embalagem descartável por fluido, seed de teste só R404A) |
+| 0025 | Tabela `sessao_usuario` (limite de sessões simultâneas + logout real + métrica de IP) |
 
 ---
 
-## Endpoints Backend (22 arquivos de rota em `backend/app/api/`)
+## Endpoints Backend (24 arquivos de rota em `backend/app/api/`)
 
 | Endpoint | Método | Função |
 |----------|--------|--------|
-| `/api/auth/*` | POST/GET | Autenticação JWT (nota: sem `/v1`) |
+| `/api/auth/*` | POST/GET | Autenticação JWT + sessão (limite 2 simultâneas, `/logout/` revoga no servidor) — nota: sem `/v1` |
 | `/api/v1/admin/*` | GET/PATCH | Empresas + usuários — só `superadmin_icenexus` |
 | `/api/v1/projetos` | GET/POST/PATCH | CRUD projetos + `dados_completos` (JSON) |
 | `/api/v1/clientes` | GET/POST | Gestão de clientes |
@@ -253,7 +275,8 @@ estão na memória — ver `project-fase-a-multitenancy` e
 | `/api/v1/acessorios/selecionar` | POST | Filtro DML/DMC + Visor SGN (Card 5) |
 | `/api/v1/carga-fluido/estimar` | POST | Estimativa carga fluido em kg (Card 5) |
 | `/api/v1/tanque-liquido/selecionar` | POST | Tanque vertical NBR 16.069 (Card 5) |
-| `/api/v1/cavalete/analisar` | POST | Luvas, porcas, reduções (Card 5) |
+| `/api/v1/cavalete/analisar` | POST | Luvas, porcas, reduções + válvulas de bloqueio GBC (Card 5) |
+| `/api/v1/embalagem-fluido` | GET | Catálogo de embalagens de fluido por fluido (Card 6) |
 | `/api/v1/orcamento` | POST | Consolidação orçamento (Card 6) |
 | `/api/v1/classificacoes` | GET/POST | Árvore de classificação (blocos/tipos) |
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel |
@@ -363,7 +386,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-08-16)
+## Estado atual do código (auditado em 2026-08-20)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -379,8 +402,10 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 5 — Visor de líquido automático (SGN) | ✅ |
 | Card 5 — Tanque de Líquido (NBR 16.069) | ✅ |
 | Card 5 — Carga de Fluido (kg por trecho) | ✅ |
-| Card 5 — Cavalete (luvas/porcas/reduções) | ✅ |
+| Card 5 — Cavalete (luvas/porcas/reduções + válvulas GBC) | ✅ |
 | Card 5 — Modo Engenharia (CoolSelector) | ✅ |
+| Card 6 — Embalagem de fluido (Card 6, converte kg em cilindros) | ✅ só R404A tem dado real |
+| Insight de estimativa de capacidade (coluna esquerda) | ✅ informativo, nunca usado em cálculo |
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -391,7 +416,9 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Gestão de clientes | ✅ |
 | Diagrama SVG do cavalete (flutuante) | ✅ |
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
-| Catálogo/lista de preços por empresa (Fase B) | ❌ próximo passo |
+| Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
+| Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
+| Catálogo/lista de preços por empresa (Fase B) | ❌ design refinado 2026-08-19, implementação começando 2026-08-20 |
 | Multiusuário/convites + painel admin ampliado (Fase C) | ❌ |
 | Billing real / gateway (Fase D) | ❌ |
 | IA com Tool Use | ❌ |
