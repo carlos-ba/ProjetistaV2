@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -56,6 +57,81 @@ async def remover_produto(db: AsyncSession, empresa_id: UUID, produto_id: int) -
     produto = await _obter_produto(db, empresa_id, produto_id)
     await db.delete(produto)
     await db.commit()
+
+
+@dataclass
+class ItemImportacao:
+    """Uma linha a importar — já convertida pra este formato por quem lê o arquivo de
+    origem (cada implantação tem seu próprio conversor, ver importar_produtos_em_lote)."""
+    descricao: str
+    preco: float | None
+    codigo_interno: str | None = None
+    unidade: str = "un"
+
+
+@dataclass
+class ResultadoImportacao:
+    inseridos: int = 0
+    atualizados: int = 0
+    erros: list[str] = field(default_factory=list)
+
+
+async def importar_produtos_em_lote(
+    db: AsyncSession, empresa_id: UUID, itens: list[ItemImportacao],
+) -> ResultadoImportacao:
+    """Motor de importação em lote — upsert por descrição normalizada (mesma chave da
+    cascata de preço em obter_mapa_precos). Deliberadamente sem UI e sem formato de
+    arquivo fixo: cada implantação de cliente traz preços num formato diferente (ERP
+    próprio, planilha do fornecedor, CSV) — a peça que se repete não é o parser do
+    arquivo, é validar e gravar; então só essa parte foi construída agora. Quando uma
+    implantação acontecer de verdade, escreve-se um script pontual em backend/scripts/
+    que lê o arquivo do cliente (formato dele) e chama esta função — ver
+    project-jornada-assinatura-saas na memória para o raciocínio completo por trás
+    dessa decisão.
+    """
+    resultado = ResultadoImportacao()
+    vistos: set[str] = set()
+
+    existentes = await listar_produtos(db, empresa_id)
+    por_chave = {norm(p.descricao): p for p in existentes}
+
+    for idx, item in enumerate(itens, start=1):
+        descricao = (item.descricao or "").strip()
+        if not descricao:
+            resultado.erros.append(f"item {idx}: descrição vazia, ignorado")
+            continue
+        if item.preco is None or item.preco < 0:
+            resultado.erros.append(f"item {idx} ({descricao}): preço inválido, ignorado")
+            continue
+
+        chave = norm(descricao)
+        if chave in vistos:
+            resultado.erros.append(
+                f"item {idx} ({descricao}): descrição duplicada nesta importação, "
+                "ignorado (mantida a primeira ocorrência)"
+            )
+            continue
+        vistos.add(chave)
+
+        existente = por_chave.get(chave)
+        if existente:
+            existente.descricao = descricao
+            existente.preco = item.preco
+            existente.codigo_interno = item.codigo_interno
+            existente.unidade = item.unidade or "un"
+            existente.ativo = True
+            resultado.atualizados += 1
+        else:
+            novo = ProdutoEmpresa(
+                empresa_id=empresa_id, descricao=descricao, preco=item.preco,
+                codigo_interno=item.codigo_interno, unidade=item.unidade or "un",
+            )
+            db.add(novo)
+            por_chave[chave] = novo
+            resultado.inseridos += 1
+
+    await db.commit()
+    return resultado
 
 
 async def obter_mapa_precos(db: AsyncSession, empresa_id: UUID) -> dict[str, dict]:
