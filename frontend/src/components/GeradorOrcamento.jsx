@@ -1369,7 +1369,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         <div className={`mt-6 pt-5 border-t border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-4 ${listaAprovada ? 'bg-emerald-50 -mx-6 -mb-6 px-6 pb-6 rounded-b-2xl' : ''}`}>
           <p className="text-sm text-amber-700 font-medium">
             <span className="font-black">{materiaisAprovados.length}</span> materiais +{' '}
-            <span className="font-black">{equipamentosAprovados.length}</span> equipamentos selecionados
+            <span className="font-black">{equipamentosAprovados.length}</span> equipamentos
+            {complementosPreenchidos.length > 0 && (
+              <> + <span className="font-black">{complementosPreenchidos.length}</span> complementos</>
+            )}{' '}selecionados
             {totalItens === 0 && <span className="text-red-500 ml-2">— selecione ao menos 1 item</span>}
           </p>
           {!listaAprovada ? (
