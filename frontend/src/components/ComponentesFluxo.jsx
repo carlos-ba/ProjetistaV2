@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS/toFixed.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const CATEGORIAS_MANUAL = [
   'Válvula de Expansão Termostática',
   'Filtro Secador',
@@ -282,7 +285,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         item: `Válvula Solenoide ${solenoidResult.modelo}`,
         tipo_item: 'valvula_solenoide',
         quantidade: 1, unidade: 'un',
-        detalhe: `Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
+        detalhe: `Danfoss | Kv ${fmtQtd(solenoidResult.kv)} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
         custo_unitario: 0, preco: 0,
       });
     }
@@ -315,7 +318,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         item: `Tanque de Líquido ${t.fabricante} ${t.modelo}`,
         tipo_item: 'tanque_liquido',
         quantidade: 1, unidade: 'un',
-        detalhe: `Vol. total ${t.volume_total_l} L | Vol. útil ${t.volume_util_l} L (NBR 16.069) | ${t.conexao}`,
+        detalhe: `Vol. total ${fmtQtd(t.volume_total_l)} L | Vol. útil ${fmtQtd(t.volume_util_l)} L (NBR 16.069) | ${t.conexao}`,
         custo_unitario: 0, preco: 0,
       });
     }
@@ -341,7 +344,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         fluido,
         quantidade: cargaFluido.carga_total_kg,
         unidade: 'kg',
-        detalhe: `Evaporador ${cargaFluido.carga_evaporador_kg} kg | UC ${cargaFluido.carga_uc_kg} kg | Linha líquido ${cargaFluido.carga_linha_liquido_kg} kg | Linha sucção ${cargaFluido.carga_linha_succao_kg} kg`,
+        detalhe: `Evaporador ${fmtQtd(cargaFluido.carga_evaporador_kg)} kg | UC ${fmtQtd(cargaFluido.carga_uc_kg)} kg | Linha líquido ${fmtQtd(cargaFluido.carga_linha_liquido_kg)} kg | Linha sucção ${fmtQtd(cargaFluido.carga_linha_succao_kg)} kg`,
         aviso: cargaFluido.aviso_volume_uc || null,
         custo_unitario: 0, preco: 0,
       });
@@ -368,7 +371,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         item: `${l.categoria} ${l.modelo}`,
         tipo_item: slugPorCategoria(l.categoria),
         quantidade: 1, unidade: 'un',
-        detalhe: [l.fabricante, l.conexao, l.capacidade ? `${l.capacidade} kcal/h` : ''].filter(Boolean).join(' | '),
+        detalhe: [l.fabricante, l.conexao, l.capacidade ? `${fmtQtd(l.capacidade)} kcal/h` : ''].filter(Boolean).join(' | '),
         custo_unitario: parseFloat(l.custo) || 0,
         preco: parseFloat(l.custo) || 0,
       }));
@@ -497,7 +500,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 <div>
                   <span className="text-[10px] font-black text-slate-400 uppercase">Referência de Projeto</span>
                   <div className="text-sm font-bold text-slate-700">
-                    {cargaAlvo?.toLocaleString('pt-BR')} kcal/h | {fluido} | {tempEvap}°C Evap.
+                    {cargaAlvo?.toLocaleString('pt-BR')} kcal/h | {fluido} | {fmtQtd(tempEvap)}°C Evap.
                   </div>
                 </div>
                 <button onClick={buscarComponentes} className="text-xs font-bold text-emerald-600 hover:underline">
@@ -577,8 +580,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   onToggle={() => setSolenoidSelecionado(prev => !prev)}
                   categoria="Válvula Solenoide"
                   titulo={solenoidResult.modelo}
-                  detalhe={`Danfoss | Kv ${solenoidResult.kv} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`}
-                  nota={`⚡ Calculado por Kv — ${fluido} ${tempEvap}°C / T.Cond ${tempCond}°C`}
+                  detalhe={`Danfoss | Kv ${fmtQtd(solenoidResult.kv)} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`}
+                  nota={`⚡ Calculado por Kv — ${fluido} ${fmtQtd(tempEvap)}°C / T.Cond ${fmtQtd(tempCond)}°C`}
                   badge={`FS ${solenoidResult.fator_servico}×`}
                   corBorda="purple"
                 />
@@ -634,12 +637,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Estimativa de Carga de Fluido</span>
                     <p className="text-xs text-indigo-700 mt-0.5">
                       Bitolas: líquido <strong>{dadosTubulacao.diametro_liquido}</strong> | sucção <strong>{dadosTubulacao.diametro_succao}</strong>
-                      {evaporador?.volume_interno_kg ? ` | evap. ${evaporador.volume_interno_kg} kg` : ' | volume evap. não disponível'}
+                      {evaporador?.volume_interno_kg ? ` | evap. ${fmtQtd(evaporador.volume_interno_kg)} kg` : ' | volume evap. não disponível'}
                     </p>
                   </div>
                   {cargaFluido && (
                     <div className="text-right">
-                      <div className="text-2xl font-black text-indigo-700">{cargaFluido.carga_total_kg} kg</div>
+                      <div className="text-2xl font-black text-indigo-700">{fmtQtd(cargaFluido.carga_total_kg)} kg</div>
                       <div className="text-[10px] text-indigo-400 font-bold">CARGA TOTAL</div>
                     </div>
                   )}
@@ -683,7 +686,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                       { label: 'Linha Sucção', valor: cargaFluido.carga_linha_succao_kg },
                     ].map(item => (
                       <div key={item.label} className="bg-white rounded-lg p-2 border border-indigo-100">
-                        <div className="text-xs font-black text-indigo-700">{item.valor} kg</div>
+                        <div className="text-xs font-black text-indigo-700">{fmtQtd(item.valor)} kg</div>
                         <div className="text-[9px] text-indigo-400 font-bold uppercase">{item.label}</div>
                       </div>
                     ))}
@@ -705,8 +708,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 onToggle={() => setTanqueSelecionado(prev => !prev)}
                 categoria="Tanque de Líquido"
                 titulo={`${tanqueResult.tanque.fabricante} ${tanqueResult.tanque.modelo}`}
-                detalhe={`Vol. total ${tanqueResult.tanque.volume_total_l} L | Vol. útil ${tanqueResult.tanque.volume_util_l} L | Conexão ${tanqueResult.tanque.conexao}`}
-                nota={`🔵 NBR 16.069 — vol. necessário ${tanqueResult.volume_necessario_l} L | carga ${tanqueResult.carga_total_kg} kg`}
+                detalhe={`Vol. total ${fmtQtd(tanqueResult.tanque.volume_total_l)} L | Vol. útil ${fmtQtd(tanqueResult.tanque.volume_util_l)} L | Conexão ${tanqueResult.tanque.conexao}`}
+                nota={`🔵 NBR 16.069 — vol. necessário ${fmtQtd(tanqueResult.volume_necessario_l)} L | carga ${fmtQtd(tanqueResult.carga_total_kg)} kg`}
                 badge={tanqueResult.tanque.fabricante}
                 aviso={tanqueResult.aviso}
                 corBorda="violet"
@@ -840,7 +843,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     <p className="text-[9px] text-blue-500 uppercase font-bold">Capacidade</p>
                     <p className="text-sm font-black text-blue-800">{cargaAlvo?.toLocaleString('pt-BR')} kcal/h</p>
                     <div className="mt-1 bg-orange-100 rounded px-2 py-0.5 border border-orange-300">
-                      <p className="text-[10px] font-black text-orange-700">→ {cargaKw} kW</p>
+                      <p className="text-[10px] font-black text-orange-700">→ {fmtQtd(cargaKw)} kW</p>
                       <p className="text-[8px] text-orange-500 font-bold">⚠️ usar kW no CoolSelector</p>
                     </div>
                   </div>
@@ -850,12 +853,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   </div>
                   <div className="bg-blue-50 rounded-lg px-2 py-2">
                     <p className="text-[9px] text-blue-400 uppercase font-bold">T. Evaporação</p>
-                    <p className="text-sm font-black text-blue-800">{tempEvap}°C</p>
+                    <p className="text-sm font-black text-blue-800">{fmtQtd(tempEvap)}°C</p>
                   </div>
                   <div className="bg-emerald-50 rounded-lg px-2 py-2 border border-emerald-200">
                     <p className="text-[9px] text-emerald-500 uppercase font-bold">T. Condensação</p>
-                    <p className="text-sm font-black text-emerald-800">{tempCond}°C</p>
-                    <p className="text-[9px] text-emerald-400">T.Amb {tempAmb}°C+10</p>
+                    <p className="text-sm font-black text-emerald-800">{fmtQtd(tempCond)}°C</p>
+                    <p className="text-[9px] text-emerald-400">T.Amb {fmtQtd(tempAmb)}°C+10</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
@@ -865,7 +868,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     onChange={e => setTempAmb(parseInt(e.target.value) || 32)}
                     className="w-16 px-2 py-1 rounded border border-slate-300 text-center text-sm font-bold outline-none"
                   />
-                  <span className="text-[10px] text-slate-400">°C → T.Cond = {tempAmb} + 10 = <strong>{tempCond}°C</strong></span>
+                  <span className="text-[10px] text-slate-400">°C → T.Cond = {fmtQtd(tempAmb)} + 10 = <strong>{fmtQtd(tempCond)}°C</strong></span>
                 </div>
               </div>
 
@@ -873,7 +876,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 <span className="text-orange-500 text-lg flex-shrink-0">⚠️</span>
                 <p className="text-xs text-orange-700 font-medium">
                   <strong>Atenção:</strong> O CoolSelector usa <strong>kW</strong>.
-                  Use <strong className="text-orange-800">{cargaKw} kW</strong> ao invés de {cargaAlvo?.toLocaleString('pt-BR')} kcal/h.
+                  Use <strong className="text-orange-800">{fmtQtd(cargaKw)} kW</strong> ao invés de {cargaAlvo?.toLocaleString('pt-BR')} kcal/h.
                 </p>
               </div>
 
@@ -896,7 +899,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 <ol className="space-y-2">
                   {[
                     { n:1, txt: 'Aguarde carregar. Clique em "Language" → "Portuguese (Brazil)"' },
-                    { n:2, txt: `Parâmetros: Fluido ${fluido} | T.Evap ${tempEvap}°C | T.Cond ${tempCond}°C | Cap. ${cargaKw} kW` },
+                    { n:2, txt: `Parâmetros: Fluido ${fluido} | T.Evap ${fmtQtd(tempEvap)}°C | T.Cond ${fmtQtd(tempCond)}°C | Cap. ${fmtQtd(cargaKw)} kW` },
                     { n:3, txt: 'VET: menu "Válvulas" → "VET" → calcular → anotar modelo' },
                     { n:4, txt: 'Filtro Secador: menu "Filtros" → Filtro Secador → anotar modelo' },
                     { n:5, txt: 'Válvula Solenoide: menu "Válvulas" → Solenoide → anotar modelo' },

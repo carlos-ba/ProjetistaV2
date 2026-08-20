@@ -12,6 +12,11 @@ const norm = (s) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
 const fmt = (v) => (v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Quantidades (m², kg, un, m) — vírgula decimal (padrão BR), sem casas decimais forçadas
+// em número inteiro (10, não 10,00). Interpolação direta de número em template string
+// usa "." (padrão JS), o que confunde no campo — sempre passar por aqui.
+const fmtQtd = (v) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
 const CONDICOES_PADRAO = {
   pagamento: '40% na aprovação do pedido · 40% na entrega dos materiais · 20% na entrega técnica',
   validade_dias: 10,
@@ -117,7 +122,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         item: `${m.item} — Cilindro ${pesoEscolhido}kg`,
         quantidade: qtdEmbalagens,
         unidade: 'un',
-        detalhe: `${m.detalhe} | Embalagem: ${qtdEmbalagens}× ${pesoEscolhido}kg = ${(qtdEmbalagens * pesoEscolhido).toFixed(2)}kg`,
+        detalhe: `${m.detalhe} | Embalagem: ${qtdEmbalagens}× ${fmtQtd(pesoEscolhido)}kg = ${fmtQtd(qtdEmbalagens * pesoEscolhido)}kg`,
       };
     });
   }, [dadosAutomaticos?.materiais, infoEmbalagem, embalagemEscolhidaKg]);
@@ -256,8 +261,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // Texto de quantidade para exibição: tubo de cobre em kg; demais mantêm o padrão original
   const qtdeExibir = (m) => {
     const kg = kgSeTubo(m);
-    if (kg != null) return `${kg} kg`;
-    return m.quantidade ? `${m.quantidade} un` : (m.qtd ?? '');
+    if (kg != null) return `${fmtQtd(kg)} kg`;
+    return m.quantidade != null ? `${fmtQtd(m.quantidade)} ${m.unidade || 'un'}` : (m.qtd ?? '');
   };
 
   // ── Clientes cadastrados ──────────────────────────────────────────────
@@ -355,7 +360,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           id: m.id,
           item: descricao,
           qtde: kgTotal != null ? kgTotal : qtd,
-          detalhe: [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : null].filter(Boolean).join(' — '),
+          detalhe: [m.detalhe || m.descricao, m.area_total ? `${fmtQtd(m.area_total)} m²` : null].filter(Boolean).join(' — '),
           preco_unitario: precoManual ?? buscarPreco(descricao),
           tipo_item: m.tipo_item ?? null,
         };
@@ -691,10 +696,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
         txt('ESPECIFICAÇÕES TÉCNICAS', ML, y); pdf.setTextColor(0); y += 4;
         const specs = [
-          ['Comprimento', `${resumoTecnico.comprimento} m`],
-          ['Largura', `${resumoTecnico.largura} m`],
-          ['Altura', `${resumoTecnico.altura} m`],
-          ['T. Interna', `${resumoTecnico.temperatura_interna} °C`],
+          ['Comprimento', `${fmtQtd(resumoTecnico.comprimento)} m`],
+          ['Largura', `${fmtQtd(resumoTecnico.largura)} m`],
+          ['Altura', `${fmtQtd(resumoTecnico.altura)} m`],
+          ['T. Interna', `${fmtQtd(resumoTecnico.temperatura_interna)} °C`],
           ['Isolamento', `${resumoTecnico.nucleo} ${resumoTecnico.espessura}mm`],
         ].filter(Boolean);
         const colW = CW / specs.length;
@@ -719,8 +724,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           txt(`${Number(resumoTecnico.carga_termica).toLocaleString('pt-BR')} kcal/h`, ML + 3, y + 12);
           const dets = [
             resumoTecnico.produto ? ['Produto', String(resumoTecnico.produto)] : null,
-            (resumoTecnico.movimentacao != null && resumoTecnico.movimentacao !== '' && Number(resumoTecnico.movimentacao) > 0) ? ['Movimentação', `${resumoTecnico.movimentacao} kg/dia`] : null,
-            (resumoTecnico.temp_entrada != null && resumoTecnico.temp_entrada !== '') ? ['Temp. Entrada', `${resumoTecnico.temp_entrada} °C`] : null,
+            (resumoTecnico.movimentacao != null && resumoTecnico.movimentacao !== '' && Number(resumoTecnico.movimentacao) > 0) ? ['Movimentação', `${fmtQtd(resumoTecnico.movimentacao)} kg/dia`] : null,
+            (resumoTecnico.temp_entrada != null && resumoTecnico.temp_entrada !== '') ? ['Temp. Entrada', `${fmtQtd(resumoTecnico.temp_entrada)} °C`] : null,
           ].filter(Boolean);
           const detStartX = ML + CW * 0.42;
           const detW = (CW * 0.58) / Math.max(1, dets.length);
@@ -794,7 +799,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             pdf.setFontSize(6);
             if (l.detalhe) { checar(4); pdf.text(pdf.splitTextToSize(l.detalhe, CW - 55), ML, y + nL.length * 4); }
             pdf.setFontSize(8); pdf.setTextColor(0);
-            txt(`${l.quantidade} ${l.unidade}`, MR - 25, y, { align: 'right' });
+            txt(`${fmtQtd(l.quantidade)} ${l.unidade}`, MR - 25, y, { align: 'right' });
             if (modoFaturamento === 'venda_direta') {
               if (exibicaoMateriais === 'itemizado') {
                 pdf.setFont('helvetica', 'bold');
@@ -820,7 +825,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             const pc = precoComplemento(c);
             pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
             txt(c.descricao, ML, y);
-            txt(`${c.qtde} ${c.unidade}`, MR - 25, y, { align: 'right' });
+            txt(`${fmtQtd(c.qtde)} ${c.unidade}`, MR - 25, y, { align: 'right' });
             if (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco') { /* sem valor */ }
             else if (pc > 0) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(pc * (parseFloat(c.qtde) || 1) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
             else { pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt('A cotação', MR, y, { align: 'right' }); pdf.setTextColor(0); }
@@ -1187,7 +1192,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                      ? 'Componente' : 'Material',
         ref_id:    m.id || null,
         descricao: m.comprimento ? `${m.item} ${m.comprimento}m` : m.item,
-        detalhe:   [m.detalhe || m.descricao, m.area_total ? `${m.area_total} m²` : detalheQtd].filter(Boolean).join(' — '),
+        detalhe:   [m.detalhe || m.descricao, m.area_total ? `${fmtQtd(m.area_total)} m²` : detalheQtd].filter(Boolean).join(' — '),
         qtde:      ehTuboCobre ? kgTotal : qtd,
         unidade:   ehTuboCobre ? 'kg' : (m.unidade || 'un'),
         qtde_metros: ehTuboCobre ? qtd : null,
@@ -1238,7 +1243,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     <p className={`text-sm font-bold leading-tight ${materiaisAtivos[i] ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
                       {item.item}
                       {item.comprimento && (
-                        <span className="font-normal text-slate-500 ml-1 text-xs">— {item.comprimento}m</span>
+                        <span className="font-normal text-slate-500 ml-1 text-xs">— {fmtQtd(item.comprimento)}m</span>
                       )}
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.descricao || item.detalhe}</p>
@@ -1255,7 +1260,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                                 ? 'bg-amber-600 text-white border-amber-600'
                                 : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-100'}`}
                           >
-                            {op.peso_kg}kg
+                            {fmtQtd(op.peso_kg)}kg
                           </button>
                         ))}
                       </div>
@@ -1266,7 +1271,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       {qtdeExibir(item)}
                     </span>
                     {item.area_total && (
-                      <span className="text-[10px] text-slate-400">({item.area_total} m²)</span>
+                      <span className="text-[10px] text-slate-400">({fmtQtd(item.area_total)} m²)</span>
                     )}
                   </div>
                 </label>
@@ -1450,7 +1455,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       <div className="min-w-0">
                         <span className="text-sm text-slate-700 font-medium">
                           {m.item}
-                          {m.comprimento && <span className="text-slate-400 ml-1 text-xs">— {m.comprimento}m</span>}
+                          {m.comprimento && <span className="text-slate-400 ml-1 text-xs">— {fmtQtd(m.comprimento)}m</span>}
                         </span>
                         {/* Especificação do painel: nucleo, espessura, largura, fabricante */}
                         {(m.detalhe || m.descricao) && (
@@ -1466,7 +1471,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       </div>
                       <span className="text-[10px] text-slate-400 flex-shrink-0 text-right">
                         <span className="block">{qtdeExibir(m)}</span>
-                        {m.area_total && <span className="block">({m.area_total} m²)</span>}
+                        {m.area_total && <span className="block">({fmtQtd(m.area_total)} m²)</span>}
                       </span>
                     </div>
                   </div>
@@ -1485,7 +1490,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     <div key={i} className="flex items-center justify-between px-4 py-2">
                       <span className="text-sm text-slate-700 font-medium truncate">{c.descricao}</span>
                       <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0 text-right whitespace-nowrap">
-                        {c.qtde} {c.unidade}
+                        {fmtQtd(c.qtde)} {c.unidade}
                         {precoComplemento(c) > 0
                           ? ` · R$ ${(precoComplemento(c) * (parseFloat(c.qtde) || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                           : ' · a cotação'}
@@ -1956,8 +1961,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">🔒 Resumo Financeiro Interno</h4>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-bold uppercase">
               {modoFaturamento === 'venda_direta'
-                ? `Faturamento direto · Margem serviços ${margemServicos}% · Imposto ${imposto}%`
-                : `Empreitada · Margem mat. ${margemMateriais}% · serv. ${margemServicos}% · Imposto ${imposto}%`}
+                ? `Faturamento direto · Margem serviços ${fmtQtd(margemServicos)}% · Imposto ${fmtQtd(imposto)}%`
+                : `Empreitada · Margem mat. ${fmtQtd(margemMateriais)}% · serv. ${fmtQtd(margemServicos)}% · Imposto ${fmtQtd(imposto)}%`}
             </span>
           </div>
 
@@ -1993,7 +1998,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   <span className="text-yellow-300 font-black tabular-nums">R$ {fmt(cf.custo_servicos)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">× fator markup (1 / (1 − {margemServicos}% − {imposto}%))</span>
+                  <span className="text-slate-400">× fator markup (1 / (1 − {fmtQtd(margemServicos)}% − {fmtQtd(imposto)}%))</span>
                   <span className="text-green-300 font-black tabular-nums">R$ {fmt(cf.preco_servicos_cliente)}</span>
                 </div>
               </div>
@@ -2017,7 +2022,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 <div className="bg-slate-700/50 rounded-xl p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase">Impostos s/ serviços</p>
                   <p className="text-sm font-black text-red-300">R$ {fmt(cf.impostos_valor)}</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5">{imposto}% sobre serviços</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{fmtQtd(imposto)}% sobre serviços</p>
                 </div>
                 <div className="bg-slate-700/50 rounded-xl p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro líquido</p>
@@ -2040,7 +2045,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 <div className="bg-slate-700/50 rounded-xl p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase">Impostos estimados</p>
                   <p className="text-sm font-black text-red-300">R$ {fmt(cf.impostos_valor)}</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5">{imposto}% sobre faturamento</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{fmtQtd(imposto)}% sobre faturamento</p>
                 </div>
                 <div className="bg-slate-700/50 rounded-xl p-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase">Lucro líquido</p>
@@ -2134,10 +2139,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                           <div><p className="text-[9px] font-black text-slate-400 uppercase">Produto</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.produto}</p></div>
                         )}
                         {resumoTecnico.movimentacao != null && resumoTecnico.movimentacao !== '' && Number(resumoTecnico.movimentacao) > 0 && (
-                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Movimentação</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.movimentacao} kg/dia</p></div>
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Movimentação</p><p className="text-sm font-bold text-slate-800">{fmtQtd(resumoTecnico.movimentacao)} kg/dia</p></div>
                         )}
                         {resumoTecnico.temp_entrada != null && resumoTecnico.temp_entrada !== '' && (
-                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Temp. Entrada</p><p className="text-sm font-bold text-slate-800">{resumoTecnico.temp_entrada} °C</p></div>
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Temp. Entrada</p><p className="text-sm font-bold text-slate-800">{fmtQtd(resumoTecnico.temp_entrada)} °C</p></div>
                         )}
                       </div>
                     </div>
@@ -2193,7 +2198,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                               <div className="font-bold text-slate-800 text-sm leading-tight">{l.item}</div>
                               {l.detalhe && <div className="text-xs text-slate-400 mt-0.5">{l.detalhe}</div>}
                             </div>
-                            <div className="w-24 text-center text-sm text-slate-600 font-medium">{l.quantidade} {l.unidade}</div>
+                            <div className="w-24 text-center text-sm text-slate-600 font-medium">{fmtQtd(l.quantidade)} {l.unidade}</div>
                             <div className="w-32 text-right font-black text-slate-900 text-sm">
                               {modoFaturamento === 'venda_direta'
                                 ? (exibicaoMateriais === 'sem_preco' ? null : `R$ ${fmt(l.custo_total_rs ?? 0)}`)
@@ -2212,7 +2217,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       {complementosPreenchidos.map((c, i) => (
                         <div key={i} className="flex justify-between items-start">
                           <div className="flex-1 font-bold text-slate-800 text-sm">{c.descricao}</div>
-                          <div className="w-24 text-center text-sm text-slate-600 font-medium">{c.qtde} {c.unidade}</div>
+                          <div className="w-24 text-center text-sm text-slate-600 font-medium">{fmtQtd(c.qtde)} {c.unidade}</div>
                           <div className="w-32 text-right font-black text-slate-900 text-sm">
                             {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco'
                               ? null

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const TIPOS = [
   { id: 'Unidade Condensadora', label: 'U. Condensadora', icone: '🧊' },
   { id: 'Evaporadora',          label: 'Evaporadora',     icone: '❄️' },
@@ -154,7 +157,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       nome:              `${item.modelo} (${item.fabricante})`,
       preco:             item.preco,
       qtde:              qtd,
-      detalhe:           `${item.capacidade_real} kcal/h`,
+      detalhe:           `${fmtQtd(item.capacidade_real)} kcal/h`,
       capacidade_real:   item.capacidade_real,
       vazao_ar:          item.vazao_ar,
       fluido,
@@ -232,9 +235,9 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase">T. Condensação estimada</label>
             <div className="w-full px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 font-black text-amber-700 text-sm">
-              {cond}°C
+              {fmtQtd(cond)}°C
               <div className="text-[9px] font-normal text-amber-600 leading-tight mt-0.5">
-                T.Amb {tempAmb}°C + 10°C (padrão de mercado)
+                T.Amb {fmtQtd(tempAmb)}°C + 10°C (padrão de mercado)
               </div>
             </div>
           </div>
@@ -306,8 +309,8 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
                 {cargaEvapRef
-                  ? `❄️ Evaporadores dimensionados pela capacidade da UC selecionada: ${cargaEvapRef} kcal/h`
-                  : `⚠️ Dimensionados pela carga térmica (${cargaReferencia} kcal/h). Selecione uma Unidade Condensadora para casar os evaporadores com a capacidade dela.`}
+                  ? `❄️ Evaporadores dimensionados pela capacidade da UC selecionada: ${fmtQtd(cargaEvapRef)} kcal/h`
+                  : `⚠️ Dimensionados pela carga térmica (${fmtQtd(cargaReferencia)} kcal/h). Selecione uma Unidade Condensadora para casar os evaporadores com a capacidade dela.`}
               </div>
             )}
 
@@ -351,7 +354,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
 
                     <div className="flex-1 space-y-3">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-slate-900">{item.capacidade_real}</span>
+                        <span className="text-2xl font-black text-slate-900">{fmtQtd(item.capacidade_real)}</span>
                         <span className="text-xs font-bold text-slate-400 uppercase">kcal/h</span>
                       </div>
                       {/* Corrente (A) só aparece quando o cadastro tiver o campo — hoje
@@ -360,10 +363,10 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                       {(item.consumo_kw != null || item.corrente_a != null) && (
                         <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
                           {item.consumo_kw != null && (
-                            <span className="flex items-center gap-1">⚡ {item.consumo_kw} kW</span>
+                            <span className="flex items-center gap-1">⚡ {fmtQtd(item.consumo_kw)} kW</span>
                           )}
                           {item.corrente_a != null && (
-                            <span className="flex items-center gap-1">🔌 {item.corrente_a} A</span>
+                            <span className="flex items-center gap-1">🔌 {fmtQtd(item.corrente_a)} A</span>
                           )}
                         </div>
                       )}

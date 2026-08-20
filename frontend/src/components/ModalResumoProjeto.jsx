@@ -69,8 +69,8 @@ export default function ModalResumoProjeto({ projeto, dados, onIrParaOrcamento, 
               <div>
                 <span className="font-medium text-foreground">Gabinete: </span>
                 <span className="text-muted-foreground">
-                  {gabinete.comprimento}m × {gabinete.largura}m × {gabinete.altura}m
-                  {gabinete.temperatura_interna != null && ` · T.Int ${gabinete.temperatura_interna}°C`}
+                  {Number(gabinete.comprimento).toLocaleString('pt-BR')}m × {Number(gabinete.largura).toLocaleString('pt-BR')}m × {Number(gabinete.altura).toLocaleString('pt-BR')}m
+                  {gabinete.temperatura_interna != null && ` · T.Int ${Number(gabinete.temperatura_interna).toLocaleString('pt-BR')}°C`}
                   {gabinete.nucleo && ` · Painel ${gabinete.nucleo}`}
                 </span>
               </div>

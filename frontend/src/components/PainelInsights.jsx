@@ -1,5 +1,8 @@
 import React from 'react';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS/toFixed.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const PainelInsights = ({ dimensoes, temps, isolamento, cargaCalculada, produto, compacto = false }) => {
   const gerarInsights = () => {
     const insights = [];
@@ -28,7 +31,7 @@ const PainelInsights = ({ dimensoes, temps, isolamento, cargaCalculada, produto,
       insights.push({
         tipo: 'alerta',
         titulo: 'Espessura de Painel Baixa',
-        texto: `CUIDADO: Para ${tInt}°C, usar painel de ${esp}mm causará alto consumo. Recomendamos 150mm.`,
+        texto: `CUIDADO: Para ${fmtQtd(tInt)}°C, usar painel de ${esp}mm causará alto consumo. Recomendamos 150mm.`,
         cor: '#e74c3c'
       });
     } else if (tInt > 0 && esp > 100) {
@@ -52,35 +55,35 @@ const PainelInsights = ({ dimensoes, temps, isolamento, cargaCalculada, produto,
     } else if (deltaT >= 4 && deltaT <= 5) {
       insights.push({
         tipo: 'info',
-        titulo: `Delta T ${deltaT.toFixed(1)}°C — Umidade 85 a 90%`,
+        titulo: `Delta T ${fmtQtd(deltaT, 1)}°C — Umidade 85 a 90%`,
         texto: 'Adequado para: vegetais, produtos agrícolas, flores, gelo sem embalagem e câmaras de resfriamento.',
         cor: '#2ecc71'
       });
     } else if (deltaT > 5 && deltaT <= 7) {
       insights.push({
         tipo: 'info',
-        titulo: `Delta T ${deltaT.toFixed(1)}°C — Umidade 80 a 85%`,
+        titulo: `Delta T ${fmtQtd(deltaT, 1)}°C — Umidade 80 a 85%`,
         texto: 'Adequado para: armazenamento frigorificado geral, refrigeração, alimentos e vegetais embalados, frutas e produtos similares e produtos que requerem menores níveis de umidade relativa.',
         cor: '#3498db'
       });
     } else if (deltaT > 7 && deltaT <= 9) {
       insights.push({
         tipo: 'aviso',
-        titulo: `Delta T ${deltaT.toFixed(1)}°C — Umidade 65 a 80%`,
+        titulo: `Delta T ${fmtQtd(deltaT, 1)}°C — Umidade 65 a 80%`,
         texto: 'Adequado para: cerveja, vinho, produtos farmacêuticos, batatas, cebolas, frutas de casca dura (melão) e produtos embalados com umidade relativa moderada.',
         cor: '#f39c12'
       });
     } else if (deltaT > 9 && deltaT <= 12) {
       insights.push({
         tipo: 'aviso',
-        titulo: `Delta T ${deltaT.toFixed(1)}°C — Umidade 50 a 65%`,
+        titulo: `Delta T ${fmtQtd(deltaT, 1)}°C — Umidade 50 a 65%`,
         texto: 'Adequado para: sala de preparo e processos, corte, armazém de cerveja, doces e armazenagem de filmes.',
         cor: '#e67e22'
       });
     } else if (deltaT > 12) {
       insights.push({
         tipo: 'alerta',
-        titulo: `Delta T ${deltaT.toFixed(1)}°C — Umidade muito baixa`,
+        titulo: `Delta T ${fmtQtd(deltaT, 1)}°C — Umidade muito baixa`,
         texto: 'CUIDADO: Delta T elevado causa umidade relativa muito baixa, inadequada para a maioria dos produtos. Reduza a diferença entre temperatura interna e evaporação.',
         cor: '#e74c3c'
       });

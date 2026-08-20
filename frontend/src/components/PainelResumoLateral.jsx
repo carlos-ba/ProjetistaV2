@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS/toFixed — painel é só
+// informativo (nunca usado em cálculo), mas o número precisa ser legível igual.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 // ── Status da cotação (Card 6) ────────────────────────────────────────────
 const ESTADOS_COTACAO = {
   sem_projeto: { bg: 'bg-slate-50 border-slate-100',     dot: 'bg-slate-400',   txt: 'Salve o projeto para cotar' },
@@ -52,17 +56,17 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
   if (passoExpandido === 1) {
     const g = dadosGabinete;
     if (!g) return <p className="text-xs text-slate-400 italic">Preencha os dados do gabinete.</p>;
-    const volume = (g.comprimento * g.largura * g.altura).toFixed(1);
+    const volume = fmtQtd(g.comprimento * g.largura * g.altura, 1);
     const capKg  = (g.comprimento * g.largura * g.altura * 0.7 * 250).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
     return (
       <div className="space-y-3">
-        <Chip label="Dimensões" valor={`${g.comprimento} × ${g.largura} × ${g.altura} m`} />
+        <Chip label="Dimensões" valor={`${fmtQtd(g.comprimento)} × ${fmtQtd(g.largura)} × ${fmtQtd(g.altura)} m`} />
         <Chip label="Volume" valor={`${volume} m³`} />
-        <Chip label="Temperatura interna" valor={`${g.temperatura_interna}°C`} destaque />
+        <Chip label="Temperatura interna" valor={`${fmtQtd(g.temperatura_interna)}°C`} destaque />
         <Chip label="Isolamento" valor={`${g.nucleo} — ${g.espessura} mm`} />
         <Chip label="Tipo de piso" valor={g.tipo_piso === 'painel' ? 'Painel frigorífico' : g.tipo_piso === 'convencional' ? 'Isolado (concreto)' : 'Sem isolamento'} />
         <Chip label="Cap. estocagem estimada" valor={`${capKg} kg`} />
-        {g.u_global && <Chip label="U Global do painel" valor={`${g.u_global} W/(m²·K)`} destaque />}
+        {g.u_global && <Chip label="U Global do painel" valor={`${fmtQtd(g.u_global, 4)} W/(m²·K)`} destaque />}
       </div>
     );
   }
@@ -71,15 +75,15 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
   if (passoExpandido === 2) {
     if (!cargaCalculada) return <p className="text-xs text-slate-400 italic">Execute o cálculo de carga térmica.</p>;
     const carga = Number(cargaCalculada);
-    const tr = (carga / 3024).toFixed(2);
-    const kw = (carga / 860).toFixed(2);
+    const tr = fmtQtd(carga / 3024);
+    const kw = fmtQtd(carga / 860);
     // Estimativa antes da seleção de equipamento (Card 3) — mesma conta usada
     // no Painel Técnico da sidebar esquerda: T.Evap = T.Interna − Delta T.
     // T.Cond segue a regra do projeto: T.Amb + 10°C.
     const tEvapEstimado = (deltaT != null && dadosGabinete?.temperatura_interna != null)
-      ? (Number(dadosGabinete.temperatura_interna) - Number(deltaT)).toFixed(1)
+      ? fmtQtd(Number(dadosGabinete.temperatura_interna) - Number(deltaT), 1)
       : null;
-    const tCondEstimado = tempExterna != null ? (Number(tempExterna) + 10).toFixed(1) : null;
+    const tCondEstimado = tempExterna != null ? fmtQtd(Number(tempExterna) + 10, 1) : null;
     return (
       <div className="space-y-3">
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
@@ -105,7 +109,7 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
         )}
         <Chip label="Equivalente em TR" valor={`${tr} TR`} />
         <Chip label="Equivalente em kW" valor={`${kw} kW`} />
-        {deltaT && <Chip label="Delta T selecionado" valor={`${deltaT}°C`} destaque />}
+        {deltaT && <Chip label="Delta T selecionado" valor={`${fmtQtd(deltaT)}°C`} destaque />}
       </div>
     );
   }
@@ -147,10 +151,10 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
         {/* Parâmetros de seleção */}
         <div className="pt-1 space-y-1.5">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Parâmetros de Seleção</p>
-          <Chip label="T. Evaporação" valor={tEvap !== '—' ? `${tEvap}°C` : '—'} />
-          <Chip label="T. Condensação" valor={tCond !== '—' ? `${tCond}°C` : '—'} />
+          <Chip label="T. Evaporação" valor={tEvap !== '—' ? `${fmtQtd(tEvap)}°C` : '—'} />
+          <Chip label="T. Condensação" valor={tCond !== '—' ? `${fmtQtd(tCond)}°C` : '—'} />
           {deltaTEq != null && (
-            <Chip label="Delta T evaporador" valor={`${deltaTEq}°C`} />
+            <Chip label="Delta T evaporador" valor={`${fmtQtd(deltaTEq)}°C`} />
           )}
         </div>
       </div>
@@ -191,9 +195,9 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
               <span className="text-xs font-bold text-slate-700 block">{t.item || t.descricao}</span>
               {(t.quantidade || t.comprimento) && (
                 <span className="text-[10px] text-slate-400">
-                  {t.quantidade && `Qtd: ${t.quantidade}`}
-                  {t.comprimento && ` | ${t.comprimento}m`}
-                  {t.area_total && ` | ${t.area_total}m²`}
+                  {t.quantidade && `Qtd: ${fmtQtd(t.quantidade)}`}
+                  {t.comprimento && ` | ${fmtQtd(t.comprimento)}m`}
+                  {t.area_total && ` | ${fmtQtd(t.area_total)}m²`}
                 </span>
               )}
             </div>
@@ -339,11 +343,11 @@ const PainelResumoLateral = ({
             <div className="mt-2 grid grid-cols-3 gap-2">
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
                 <span className="text-[9px] font-black text-slate-400 uppercase block">T. Evap</span>
-                <span className="text-sm font-bold text-slate-700">{regimeEvap != null ? `${regimeEvap}°C` : '—'}</span>
+                <span className="text-sm font-bold text-slate-700">{regimeEvap != null ? `${fmtQtd(regimeEvap)}°C` : '—'}</span>
               </div>
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
                 <span className="text-[9px] font-black text-slate-400 uppercase block">T. Cond</span>
-                <span className="text-sm font-bold text-slate-700">{regimeCond != null ? `${regimeCond}°C` : '—'}</span>
+                <span className="text-sm font-bold text-slate-700">{regimeCond != null ? `${fmtQtd(regimeCond)}°C` : '—'}</span>
               </div>
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
                 <span className="text-[9px] font-black text-slate-400 uppercase block">Fluido</span>
@@ -363,7 +367,7 @@ const PainelResumoLateral = ({
               <div className="flex justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div>
                   <span className="text-[10px] font-black text-slate-400 uppercase block">Volume</span>
-                  <span className="text-xl font-black text-slate-800">{volumeBruto.toFixed(1)}</span>
+                  <span className="text-xl font-black text-slate-800">{fmtQtd(volumeBruto, 1)}</span>
                   <span className="text-[10px] text-slate-400 ml-1">m³</span>
                 </div>
                 <div className="text-right">

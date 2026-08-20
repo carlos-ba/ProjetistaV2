@@ -25,7 +25,7 @@ const InsightCapacidadeEstimada = ({ volumeM3 }) => {
       >
         <option value="">Produto de referência...</option>
         {DENSIDADE_PRODUTOS.map(p => (
-          <option key={p.nome} value={p.nome}>{p.nome} — {p.densidade} kg/m³</option>
+          <option key={p.nome} value={p.nome}>{p.nome} — {p.densidade.toLocaleString('pt-BR')} kg/m³</option>
         ))}
       </select>
       {produto && (

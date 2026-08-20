@@ -272,7 +272,7 @@ function AppContent({ catalogo }) {
   // Summaries exibidos nos cards colapsados
   const resumoEtapa = (n) => {
     if (n === 1 && dadosDoGabinete)
-      return `${dadosDoGabinete.comprimento}×${dadosDoGabinete.largura}×${dadosDoGabinete.altura}m | ${dadosDoGabinete.nucleo} ${dadosDoGabinete.espessura}mm | ${dadosDoGabinete.temperatura_interna}°C`;
+      return `${Number(dadosDoGabinete.comprimento).toLocaleString('pt-BR')}×${Number(dadosDoGabinete.largura).toLocaleString('pt-BR')}×${Number(dadosDoGabinete.altura).toLocaleString('pt-BR')}m | ${dadosDoGabinete.nucleo} ${dadosDoGabinete.espessura}mm | ${Number(dadosDoGabinete.temperatura_interna).toLocaleString('pt-BR')}°C`;
     if (n === 2 && cargaCalculada)
       return `${Number(cargaCalculada).toLocaleString('pt-BR')} kcal/h requeridos`;
     if (n === 3 && itensOrcamento.equipamentos.length > 0)

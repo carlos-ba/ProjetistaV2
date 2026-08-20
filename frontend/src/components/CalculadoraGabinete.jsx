@@ -9,6 +9,10 @@ import VisualizadorProjeto from './VisualizadorProjeto';
 // para true quando for retomado.
 const DITAR_HABILITADO = false;
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS — interpolação direta
+// de número em template string confunde o técnico em campo.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange, jaFinalizado = false }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
@@ -219,7 +223,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         sobra: b.restante,
       })),
       aviso: grandes.length
-        ? `${grandes.length} peça(s) de ${grandes[0].comprimento}m excedem a barra de ${barraM}m — não podem ser cortadas de uma única barra.`
+        ? `${grandes.length} peça(s) de ${fmtQtd(grandes[0].comprimento)}m excedem a barra de ${fmtQtd(barraM)}m — não podem ser cortadas de uma única barra.`
         : null,
     };
   }, [resultado, comprimentoBarra, painelSelecionado]);
@@ -258,8 +262,8 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           area_total: Number(planoCorte.areaBarrasM2.toFixed(2)),
           detalhe: [
             especBase,
-            `${planoCorte.numBarras} barras × ${planoCorte.barraM}m (corte na obra)`,
-            `sobra total ${planoCorte.sobraTotalM.toFixed(2)}m`,
+            `${planoCorte.numBarras} barras × ${fmtQtd(planoCorte.barraM)}m (corte na obra)`,
+            `sobra total ${fmtQtd(planoCorte.sobraTotalM)}m`,
           ].filter(Boolean).join(' | '),
         }]
       : resultado.lista_corte.map(i => ({
@@ -474,10 +478,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                 ['Núcleo', painelSelecionado.nucleo],
                 ['Espessura', `${painelSelecionado.espessura_mm} mm`],
                 ['Largura', `${painelSelecionado.largura_mm} mm`],
-                ['Comp. Máx.', `${painelSelecionado.comprimento_max_m} m`],
+                ['Comp. Máx.', `${fmtQtd(painelSelecionado.comprimento_max_m)} m`],
                 ['Auto-portância', `${painelSelecionado.auto_portancia_mm} mm`],
-                ['Peso', `${painelSelecionado.peso_kg_m2} kg/m²`],
-                ['U Global', <span className="text-emerald-700 font-black">{painelSelecionado.u_global} W/(m²·K)</span>],
+                ['Peso', `${fmtQtd(painelSelecionado.peso_kg_m2, 3)} kg/m²`],
+                ['U Global', <span className="text-emerald-700 font-black">{fmtQtd(painelSelecionado.u_global, 4)} W/(m²·K)</span>],
                 ['Fabricante', painelSelecionado.fabricante?.nome ?? ''],
               ].map(([k, v]) => (
                 <div key={k} className="bg-white rounded-lg px-3 py-2 border border-violet-100">
@@ -684,7 +688,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                 </div>
                 {modoCompra === 'revenda' && planoCorte && (
                   <p className="text-[11px] text-indigo-600 mt-2 font-medium">
-                    {planoCorte.numBarras} barras de {planoCorte.barraM}m ({planoCorte.areaBarrasM2.toFixed(1)} m²) · sobra total {planoCorte.sobraTotalM.toFixed(2)}m entregue ao cliente
+                    {planoCorte.numBarras} barras de {fmtQtd(planoCorte.barraM)}m ({fmtQtd(planoCorte.areaBarrasM2, 1)} m²) · sobra total {fmtQtd(planoCorte.sobraTotalM)}m entregue ao cliente
                   </p>
                 )}
                 {planoCorte?.aviso && (
@@ -706,17 +710,17 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                   {modoCompra === 'revenda' && planoCorte ? (
                     <tr className="hover:bg-slate-50 bg-indigo-50/40">
                       <td className="px-4 py-3 text-slate-700">
-                        <div className="font-medium">Painel {resultado?.nucleo_selecionado || ''} — Barra {planoCorte.barraM}m</div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Corte na obra · sobra {planoCorte.sobraTotalM.toFixed(2)}m</div>
+                        <div className="font-medium">Painel {resultado?.nucleo_selecionado || ''} — Barra {fmtQtd(planoCorte.barraM)}m</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Corte na obra · sobra {fmtQtd(planoCorte.sobraTotalM)}m</div>
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{planoCorte.numBarras}</td>
-                      <td className="px-4 py-3 text-right text-indigo-500 text-xs italic">{planoCorte.areaBarrasM2.toFixed(1)} m² (barras)</td>
+                      <td className="px-4 py-3 text-right text-indigo-500 text-xs italic">{fmtQtd(planoCorte.areaBarrasM2, 1)} m² (barras)</td>
                     </tr>
                   ) : (resultado?.lista_corte || []).map((item, idx) => (
                     <tr key={`c-${idx}`} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-700 font-medium">{item.item}</td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.quantidade}</td>
-                      <td className="px-4 py-3 text-right text-slate-500">{item.comprimento}m | {item.area_total}m²</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{fmtQtd(item.comprimento)}m | {fmtQtd(item.area_total)}m²</td>
                     </tr>
                   ))}
                   {(resultado?.materiais_extras || []).map((item, idx) => (
@@ -725,7 +729,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                         <div className="font-medium">{item.item}</div>
                         <div className="text-[10px] text-slate-400 uppercase font-bold">{item.detalhe}</div>
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-900">{item.qtd}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{fmtQtd(item.quantidade)}</td>
                       <td className="px-4 py-3 text-right text-slate-400 text-xs italic">Material Extra</td>
                     </tr>
                   ))}
@@ -746,8 +750,8 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             {modoCompra === 'revenda' && planoCorte && (
               <div className="mt-4 border border-indigo-100 rounded-xl overflow-hidden">
                 <div className="bg-indigo-50 px-4 py-2 flex items-center justify-between">
-                  <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">Mapa de corte — {planoCorte.numBarras} barras de {planoCorte.barraM}m</span>
-                  <span className="text-[11px] text-indigo-500">sobra total {planoCorte.sobraTotalM.toFixed(2)}m</span>
+                  <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">Mapa de corte — {planoCorte.numBarras} barras de {fmtQtd(planoCorte.barraM)}m</span>
+                  <span className="text-[11px] text-indigo-500">sobra total {fmtQtd(planoCorte.sobraTotalM)}m</span>
                 </div>
                 <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
                   {planoCorte.barras.map(b => (
@@ -756,11 +760,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                       <div className="flex-1 flex flex-wrap gap-1">
                         {b.pecas.map((p, i) => (
                           <span key={i} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                            {p.comprimento}m <span className="text-slate-400">({p.origem})</span>
+                            {fmtQtd(p.comprimento)}m <span className="text-slate-400">({p.origem})</span>
                           </span>
                         ))}
                         {b.sobra > 0.01 && (
-                          <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-500 italic">sobra {b.sobra.toFixed(2)}m</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-500 italic">sobra {fmtQtd(b.sobra)}m</span>
                         )}
                       </div>
                     </div>

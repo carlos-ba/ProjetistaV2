@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 import PainelInsights from './PainelInsights';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
   // --- VALIDAÇÃO: Verificar se gabinete foi configurado ---
   if (!dadosIniciais) {
@@ -337,19 +340,19 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
             <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4">
                <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">T. Conservação</span>
-                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.temperatura_conservacao !== null ? `${produtoDetalhe.temperatura_conservacao}°C` : 'N/A'}</span>
+                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.temperatura_conservacao !== null ? `${fmtQtd(produtoDetalhe.temperatura_conservacao)}°C` : 'N/A'}</span>
                </div>
                <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Umidade Relativa</span>
-                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.umidade_relativa !== null ? `${produtoDetalhe.umidade_relativa}%` : 'N/A'}</span>
+                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.umidade_relativa !== null ? `${fmtQtd(produtoDetalhe.umidade_relativa)}%` : 'N/A'}</span>
                </div>
                <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Teor de Água</span>
-                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.teor_agua !== null ? `${produtoDetalhe.teor_agua}%` : 'N/A'}</span>
+                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.teor_agua !== null ? `${fmtQtd(produtoDetalhe.teor_agua)}%` : 'N/A'}</span>
                </div>
                <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Pto. Congelamento</span>
-                  <span className="text-sm font-bold text-slate-700">{produtoDetalhe.ponto_congelamento}°C</span>
+                  <span className="text-sm font-bold text-slate-700">{fmtQtd(produtoDetalhe.ponto_congelamento)}°C</span>
                </div>
             </div>
           )}
@@ -436,7 +439,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center items-center text-center">
               <span className="text-emerald-600 text-xs font-black uppercase tracking-widest mb-1">Capacidade Requerida</span>
-              <div className="text-3xl font-black text-emerald-800">{resultado.capacidade_requerida_equipamento_kcalh} <small className="text-lg font-normal">kcal/h</small></div>
+              <div className="text-3xl font-black text-emerald-800">{fmtQtd(resultado.capacidade_requerida_equipamento_kcalh)} <small className="text-lg font-normal">kcal/h</small></div>
               <p className="text-emerald-600 text-xs mt-2 font-medium">✅ Valor enviado para seleção de equipamentos</p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200">
@@ -444,13 +447,13 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
               <ul className="space-y-2 text-sm">
                 <li className="flex justify-between items-center text-slate-600">
                   <span>Condução Térmica:</span>
-                  <span className="font-bold text-slate-900">{resultado.carga_conducao_kcalh} kcal/h</span>
+                  <span className="font-bold text-slate-900">{fmtQtd(resultado.carga_conducao_kcalh)} kcal/h</span>
                 </li>
                 {resultado.carga_infiltracao_kcalh > 0 && (
                   <li className="flex flex-col gap-0.5">
                     <div className="flex justify-between items-center text-slate-600">
                       <span>Infiltração por Portas:</span>
-                      <span className="font-bold text-slate-900">{resultado.carga_infiltracao_kcalh} kcal/h</span>
+                      <span className="font-bold text-slate-900">{fmtQtd(resultado.carga_infiltracao_kcalh)} kcal/h</span>
                     </div>
                     {resultado.info_infiltracao && (
                       <p className="text-[10px] text-slate-400 italic pl-1">{resultado.info_infiltracao}</p>
@@ -459,45 +462,45 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
                 )}
                 <li className="flex justify-between items-center text-slate-600">
                   <span>Produto/Movimentação:</span>
-                  <span className="font-bold text-slate-900">{resultado.carga_produto_kcalh} kcal/h</span>
+                  <span className="font-bold text-slate-900">{fmtQtd(resultado.carga_produto_kcalh)} kcal/h</span>
                 </li>
                 {resultado.carga_respiracao_kcalh > 0 && (
                   <li className="flex justify-between items-center text-slate-600">
                     <span>Respiração do Produto:</span>
-                    <span className="font-bold text-slate-900">{resultado.carga_respiracao_kcalh} kcal/h</span>
+                    <span className="font-bold text-slate-900">{fmtQtd(resultado.carga_respiracao_kcalh)} kcal/h</span>
                   </li>
                 )}
-                
+
                 {/* Detalhamento Interno */}
                 <li className="flex justify-between items-center text-slate-400 pt-1 text-[11px] uppercase font-bold">
                   <span>Subtotal Cargas Internas:</span>
-                  <span>{resultado.carga_internas_total_kcalh} kcal/h</span>
+                  <span>{fmtQtd(resultado.carga_internas_total_kcalh)} kcal/h</span>
                 </li>
                 <li className="flex justify-between items-center text-slate-500 pl-4 border-l-2 border-slate-100">
                   <span>Iluminação:</span>
-                  <span>{resultado.carga_iluminacao_kcalh} kcal/h</span>
+                  <span>{fmtQtd(resultado.carga_iluminacao_kcalh)} kcal/h</span>
                 </li>
                 <li className="flex justify-between items-center text-slate-500 pl-4 border-l-2 border-slate-100">
                   <span>Pessoas:</span>
-                  <span>{resultado.carga_pessoas_kcalh} kcal/h</span>
+                  <span>{fmtQtd(resultado.carga_pessoas_kcalh)} kcal/h</span>
                 </li>
                 <li className="flex justify-between items-center text-slate-500 pl-4 border-l-2 border-slate-100">
                   <span>Motores/Outros:</span>
-                  <span>{resultado.carga_motores_kcalh} kcal/h</span>
+                  <span>{fmtQtd(resultado.carga_motores_kcalh)} kcal/h</span>
                 </li>
 
                 <li className="flex justify-between items-center pt-2 mt-2 border-t border-slate-200 text-slate-800 font-bold">
                   <span>CARGA LÍQUIDA (24h):</span>
-                  <span>{resultado.carga_total_24h_kcalh} kcal/h</span>
+                  <span>{fmtQtd(resultado.carga_total_24h_kcalh)} kcal/h</span>
                 </li>
                 <li className="flex justify-between items-center text-emerald-600 text-xs italic">
-                  <span>Fator de Segurança ({resultado.fator_seguranca_aplicado}):</span>
-                  <span>+ {Math.round(resultado.carga_total_com_seguranca_kcalh - resultado.carga_total_24h_kcalh)} kcal/h</span>
+                  <span>Fator de Segurança ({fmtQtd(resultado.fator_seguranca_aplicado)}):</span>
+                  <span>+ {fmtQtd(Math.round(resultado.carga_total_com_seguranca_kcalh - resultado.carga_total_24h_kcalh))} kcal/h</span>
                 </li>
 
                 <li className="flex justify-between items-center pt-2 mt-2 border-t border-slate-100 text-blue-600 font-bold">
                   <span>Tempo Compressor:</span>
-                  <span>{resultado.baseado_em_horas_funcionamento}h/dia</span>
+                  <span>{fmtQtd(resultado.baseado_em_horas_funcionamento)}h/dia</span>
                 </li>
               </ul>
             </div>

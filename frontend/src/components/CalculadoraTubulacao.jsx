@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
+// Vírgula decimal (padrão BR) em vez do "." padrão de JS/toFixed.
+const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
 const PADROES = [
   { id: 'D', faixa: '6–7,5 mm',   desc: '≥ 0°C'         },
   { id: 'F', faixa: '9–12 mm',    desc: '-5°C a 0°C'    },
@@ -118,7 +121,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                 <>
                   <div className="font-bold text-slate-700 mt-0.5">{evaporador.modelo}</div>
                   <div className="text-sm text-teal-700 font-medium">
-                    {evaporador.capacidade_real} kcal/h | {evaporador.fluido} | T.Evap: {evaporador.temp_evap}°C
+                    {fmtQtd(evaporador.capacidade_real)} kcal/h | {evaporador.fluido} | T.Evap: {fmtQtd(evaporador.temp_evap)}°C
                   </div>
                 </>
               ) : (
@@ -133,7 +136,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                 <>
                   <div className="font-bold text-slate-700 mt-0.5">{condensadora.modelo}</div>
                   <div className="text-sm text-blue-700 font-medium">
-                    {condensadora.capacidade_real} kcal/h | {condensadora.fluido}
+                    {fmtQtd(condensadora.capacidade_real)} kcal/h | {condensadora.fluido}
                   </div>
                 </>
               ) : (
@@ -148,7 +151,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
               <span className="text-base leading-none">⚠️</span>
               <span>
                 <strong>Desbalanço de {Math.round(desbalanco * 100)}%</strong> entre evaporador e condensadora.
-                O cálculo usa a capacidade do evaporador ({evaporador?.capacidade_real} kcal/h).
+                O cálculo usa a capacidade do evaporador ({fmtQtd(evaporador?.capacidade_real)} kcal/h).
                 Verifique se os equipamentos são compatíveis.
               </span>
             </div>
@@ -373,8 +376,8 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                           </div>
                           {m.quantidade_kg != null && (
                             <div className="bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-center">
-                              <div className="text-xs font-black text-amber-800">{m.quantidade_kg.toFixed(2)} kg</div>
-                              <div className="text-[9px] text-amber-500 font-medium">{m.peso_por_metro?.toFixed(4)} kg/m</div>
+                              <div className="text-xs font-black text-amber-800">{fmtQtd(m.quantidade_kg)} kg</div>
+                              <div className="text-[9px] text-amber-500 font-medium">{fmtQtd(m.peso_por_metro, 4)} kg/m</div>
                             </div>
                           )}
                         </div>
