@@ -941,8 +941,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       linhas.push({
         codigo: m.id ?? '',
         item: m.item, detalhe: m.detalhe || m.descricao || '',
-        qtde: kg != null ? kg : (m.quantidade || m.qtd || 1),
-        unidade: kg != null ? 'kg' : (m.comprimento ? 'm' : 'un'),
+        qtde: kg != null ? kg : (m.quantidade ?? m.qtd ?? 1),
+        unidade: kg != null ? 'kg' : (m.unidade || (m.comprimento ? 'm' : 'un')),
         tipo: 'Material',
       });
     });

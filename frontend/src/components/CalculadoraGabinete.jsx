@@ -287,7 +287,8 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             item: m.item,
             tipo_item: m.tipo_item ?? null,
             qtd: m.qtd,
-            unidade: 'un',
+            quantidade: m.quantidade,
+            unidade: m.unidade,
             detalhe: [m.detalhe, especPainel].filter(Boolean).join(' | '),
           };
         }),
