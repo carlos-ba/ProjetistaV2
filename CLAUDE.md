@@ -47,7 +47,7 @@ antigo por serem registro histórico — não foram reemitidos.
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
-| Migrations | Alembic (0001→0025), roda no `startCommand` do Render |
+| Migrations | Alembic (0001→0026), roda no `startCommand` do Render |
 
 ---
 
@@ -191,7 +191,8 @@ assinatura). Papéis: `superadmin_icenexus` (equipe IceNexus) | `admin_empresa` 
 - Dependência `get_empresa_atual` (`backend/app/services/auth.py`) retorna 403
   se o usuário não tiver empresa vinculada.
 - Catálogo técnico (equipamento/material/componente) continua **global**, sem
-  dono — preço e código interno por empresa é a **Fase B**, ainda não feita.
+  dono, só especificação — preço e código interno por empresa é a **Fase B**
+  (ver seção própria abaixo), em produção desde 2026-08-20.
 - Painel admin: `frontend/src/components/AdminEmpresas.jsx` + rotas
   `/api/v1/admin/*` (só `superadmin_icenexus`).
 - Scripts operacionais em `backend/scripts/`: `promover_superadmin.py`,
@@ -224,7 +225,45 @@ Detalhe completo, decisões e testes: ver `project-design-limite-sessoes` na mem
 
 ---
 
-## Banco de Dados — Migrations (0001→0025)
+## Fase B — Catálogo e Lista de Preços por Empresa (em produção desde 2026-08-20)
+
+Cada empresa pode ter sua própria lista de preços (tabela `produto_empresa`,
+migration 0026), usada no orçamento **em vez** do catálogo técnico global — que
+agora é só especificação, sem preço (`Material.custo`/`Equipamento.custo` saíram
+da cascata de `gerar_orcamento`).
+
+- **Casamento por descrição normalizada** (`app/core/matching.py`, `norm()` —
+  extraído de `casar_itens()` em `cotacao_import.py`), não por id. Nem todo item
+  do orçamento carrega um id estável de catálogo (painéis, portas, materiais
+  extras do gabinete não têm `ref_id`).
+- **Cascata de preço** (`obter_mapa_precos()` em
+  `backend/app/services/produto_empresa.py`): lista da própria empresa → senão o
+  último preço de cotação confirmado daquele item, qualquer projeto (consulta ao
+  vivo em `cotacao_item`, sem tabela nem job de sincronização) → sem preço.
+  Resolvida no **frontend** (`GeradorOrcamento.jsx` busca
+  `GET /api/v1/produto-empresa/mapa-precos` e mescla no `precoMap` que já existe
+  pra cotação — nunca sobrescreve o preço de uma cotação escolhida pra este
+  projeto). `POST /api/v1/orcamento` continua sem autenticação, de propósito.
+- **Dois perfis de cliente, mesma tabela, população diferente** (decisão de
+  produto): loja/revenda cadastra via **implantação paga** (superadmin, painel
+  "📦 Catálogo" em `AdminEmpresas.jsx`, por empresa); montadora não cadastra nada
+  — a cascata de cotação histórica resolve sozinha.
+- **Autoadministração:** `admin_empresa`/`superadmin_icenexus` editam a própria
+  lista sem precisar acionar o superadmin — item "Catálogo de Preços" no menu
+  lateral (`CatalogoPrecosPage.jsx`), rotas `/api/v1/produto-empresa/*`
+  (`get_empresa_atual`). Implantação cross-tenant fica em
+  `/api/v1/admin/empresas/{id}/produtos/*` (só `superadmin_icenexus`).
+- Componente de lista/CRUD (`CatalogoPrecosEmpresa.jsx`) é compartilhado entre os
+  dois contextos — só muda o `apiBase` recebido.
+- Fora de escopo por decisão: produtos de parceiro (fora do catálogo global, sem
+  `ref_global`) e busca assistida no catálogo pela UI — ficam pra depois.
+
+Detalhe completo do design e do refinamento: ver `project-multitenancy-assinatura`
+na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
+
+---
+
+## Banco de Dados — Migrations (0001→0026)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -253,10 +292,11 @@ Detalhe completo, decisões e testes: ver `project-design-limite-sessoes` na mem
 | 0023 | Classificação "Válvulas de Bloqueio (GBC)" (`valvula_bloqueio_gbc`) |
 | 0024 | Tabela `embalagem_fluido` (embalagem descartável por fluido, seed de teste só R404A) |
 | 0025 | Tabela `sessao_usuario` (limite de sessões simultâneas + logout real + métrica de IP) |
+| 0026 | Tabela `produto_empresa` (Fase B — lista de preços/catálogo privado por empresa) |
 
 ---
 
-## Endpoints Backend (24 arquivos de rota em `backend/app/api/`)
+## Endpoints Backend (25 arquivos de rota em `backend/app/api/`)
 
 | Endpoint | Método | Função |
 |----------|--------|--------|
@@ -277,7 +317,8 @@ Detalhe completo, decisões e testes: ver `project-design-limite-sessoes` na mem
 | `/api/v1/tanque-liquido/selecionar` | POST | Tanque vertical NBR 16.069 (Card 5) |
 | `/api/v1/cavalete/analisar` | POST | Luvas, porcas, reduções + válvulas de bloqueio GBC (Card 5) |
 | `/api/v1/embalagem-fluido` | GET | Catálogo de embalagens de fluido por fluido (Card 6) |
-| `/api/v1/orcamento` | POST | Consolidação orçamento (Card 6) |
+| `/api/v1/orcamento` | POST | Consolidação orçamento (Card 6) — sem auth, de propósito |
+| `/api/v1/produto-empresa/*` | GET/POST/PATCH/DELETE | Lista de preços — autoadministração (Fase B) |
 | `/api/v1/classificacoes` | GET/POST | Árvore de classificação (blocos/tipos) |
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
@@ -358,7 +399,7 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 1. **Fluidos suportados no motor de solenoide:** R404A e R22. Para outros, redirecionar ao CoolSelector
 2. **T.Condensação calculada como:** T.Amb + 10°C (padrão de mercado brasileiro)
 3. **Catálogo de componentes no banco:** separadores de líquido e óleo vêm do banco via `/api/v1/componentes`. VET, filtro secador, solenoide e visor são calculados/selecionados pelo próprio sistema
-4. **Catálogo global × catálogo da empresa:** o catálogo técnico (equipamentos, componentes) é global e gerenciado pelo admin SaaS. Preços e códigos internos por empresa ficam em tabelas separadas — **Fase B**, ainda não implementada (ver seção Multi-tenancy acima)
+4. **Catálogo global × catálogo da empresa:** o catálogo técnico (equipamentos, componentes) é global e gerenciado pelo admin SaaS, só especificação, sem preço. Preços e códigos internos por empresa ficam em `produto_empresa` — **Fase B** (ver seção própria acima)
 5. **Campo `temp_condensacao` no banco** armazena T.Amb conforme publicado nos catálogos dos fabricantes brasileiros. T.Cond real = T.Amb + ΔT (nunca assumir fixo)
 
 ---
@@ -418,7 +459,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
-| Catálogo/lista de preços por empresa (Fase B) | ❌ design refinado 2026-08-19, implementação começando 2026-08-20 |
+| Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
 | Multiusuário/convites + painel admin ampliado (Fase C) | ❌ |
 | Billing real / gateway (Fase D) | ❌ |
 | IA com Tool Use | ❌ |
@@ -439,9 +480,10 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 - O frontend busca `GET /api/v1/cotacoes/{id}` para cada cotação selecionada
 - Constrói um `precoMap: Map<norm(descricao), preco>` (casamento por descrição normalizada, igual ao `casar_itens()` do backend)
+- Mescla o mapa de preços da empresa (`GET /api/v1/produto-empresa/mapa-precos`, Fase B) por cima — só preenche o que a cotação deste projeto não cobriu, nunca sobrescreve
 - Injeta `preco_unitario` em cada item do payload do orçamento
 - O backend (`backend/app/schemas/orcamento.py`) aceita `preco_unitario: float | None` em `ItemOrcamento`
-- O serviço (`backend/app/services/orcamento.py`) usa esse valor se presente; fallback para `Material.custo`/`Equipamento.custo`
+- O serviço (`backend/app/services/orcamento.py`) usa esse valor se presente; sem fallback pro catálogo global (Fase B — ver seção própria)
 
 ### Itens sem preço
 
