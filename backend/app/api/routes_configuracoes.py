@@ -15,8 +15,8 @@ DEFAULTS = dict(
     tipo_filtro="solda", tipo_visor="solda",
     trecho_vet_evap=0.5, trecho_evap_sifao=0.5,
     trecho_subida=1.0, trecho_sifao_gbc=0.5,
-    incluir_filtro=True, incluir_visor=True,
-    incluir_gbc_entrada=True, incluir_gbc_saida=True,
+    incluir_filtro=False, incluir_visor=False,
+    incluir_gbc_entrada=False, incluir_gbc_saida=False,
 )
 
 
