@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 const plans = {
   free: { name: "Free", price: "R$ 0", detail: "1 projeto • 15 dias • suporte básico", action: "Ativar teste" },
   mensal: { name: "Profissional Mensal", price: "R$ 159/mês", detail: "Projetos ilimitados* • lives técnicas • 1 validação/mês • WhatsApp", action: "Continuar para pagamento" },
-  semestral: { name: "Profissional Semestral", price: "6 × R$ 99", detail: "6 meses • projetos ilimitados* • lives técnicas • 1 validação/mês", action: "Continuar para pagamento" },
+  semestral: { name: "Profissional Semestral", price: "6 × R$ 99", detail: "6 meses • projetos ilimitados* • 1 validação/mês • 1 mês por indicação válida", action: "Continuar para pagamento" },
   premium: { name: "Premium", price: "6 × R$ 497", detail: "3 validações/mês • cursos EAD IceNexus • 70% OFF em cursos presenciais", action: "Continuar para pagamento" },
 } as const;
 
