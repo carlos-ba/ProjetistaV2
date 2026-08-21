@@ -11,8 +11,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("host") ?? "localhost:3000";
   const protocol = host.includes("localhost") ? "http" : "https";
   const origin = `${protocol}://${host}`;
-  const title = "IceNexus — Tecnologia para refrigeração";
-  const description = "Ferramentas técnicas, engenharia e conhecimento conectados para o setor de refrigeração.";
+  const title = "IceNexus — A inteligência por trás da refrigeração";
+  const description = "Um ecossistema que conecta ferramentas técnicas, engenharia, capacitação e conhecimento para transformar a refrigeração.";
   return {
     metadataBase: new URL(origin),
     title,

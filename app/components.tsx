@@ -3,8 +3,7 @@ import type { ReactNode } from "react";
 export function Brand() {
   return (
     <a className="brand" href="/" aria-label="IceNexus — página inicial">
-      <span className="brand-symbol" aria-hidden="true">✦</span>
-      <span><b>ICE</b>NEXUS</span>
+      <img className="brand-logo" src="/logo-icenexus.png" alt="IceNexus" />
     </a>
   );
 }
@@ -16,7 +15,7 @@ export function Header() {
       <nav className="desktop-nav" aria-label="Navegação principal">
         <a href="/">Ecossistema</a>
         <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-        <a href="/treinamentos">Treinamentos</a>
+        <a href="/treinamentos">Academia IceNexus</a>
         <a className="access-link" href="/acessar">Acessar</a>
       </nav>
       <details className="mobile-menu">
@@ -24,7 +23,7 @@ export function Header() {
         <nav aria-label="Navegação para celular">
           <a href="/">Ecossistema</a>
           <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-          <a href="/treinamentos">Treinamentos</a>
+          <a href="/treinamentos">Academia IceNexus</a>
           <a href="/acessar">Acessar</a>
         </nav>
       </details>
@@ -58,7 +57,7 @@ export function Footer() {
       <div><Brand /><p>Tecnologia, engenharia e conhecimento para refrigeração.</p></div>
       <div className="footer-links">
         <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-        <a href="/treinamentos">Treinamentos</a>
+        <a href="/treinamentos">Academia IceNexus</a>
         <a href="/acessar">Acessar</a>
       </div>
       <div className="footer-pending">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PageFrame, Placeholder } from "../components";
 
-const pageTitle = "Treinamentos — IceNexus";
+const pageTitle = "Academia IceNexus";
 const pageDescription = "Capacitação técnica para profissionais e empresas do setor de refrigeração.";
 export const metadata: Metadata = {
   title: pageTitle,
@@ -15,8 +15,8 @@ export default function Trainings() {
     <PageFrame>
       <main>
         <section className="hero training-hero">
-          <div className="hero-copy"><p className="eyebrow">TREINAMENTOS ICENEXUS</p><h1>Conhecimento técnico que acompanha a prática.</h1><p className="hero-lead">Uma área ativa de capacitação para profissionais e empresas do setor de refrigeração. Os cursos, datas e modalidades serão incluídos assim que as informações forem fornecidas.</p><div className="hero-actions"><a className="button primary" href="#programacao">Ver programação</a><button className="button ghost" type="button">[Canal de inscrição]</button></div></div>
-          <Placeholder label="Foto principal de treinamento IceNexus" className="hero-placeholder" />
+          <div className="hero-copy"><p className="eyebrow">ACADEMIA ICENEXUS</p><h1>Conhecimento técnico que acompanha a prática.</h1><p className="hero-lead">A divisão de educação da IceNexus para profissionais e empresas do setor de refrigeração. Os cursos, datas e modalidades serão incluídos assim que as informações forem fornecidas.</p><div className="hero-actions"><a className="button primary" href="#programacao">Ver programação</a><button className="button ghost" type="button">[Canal de inscrição]</button></div></div>
+          <Placeholder label="Foto principal da Academia IceNexus" className="hero-placeholder" />
         </section>
 
         <section className="section training-value"><div className="section-heading"><p className="eyebrow">DIVISÃO ATIVA</p><h2>Da atualização técnica ao desenvolvimento de equipes.</h2><p>A página poderá reunir modalidades presenciais, online, ao vivo e EAD, mas exibirá somente ofertas realmente disponíveis.</p></div><div className="training-points"><article><span>01</span><h3>Aplicação prática</h3><p>[Resultados e metodologia a confirmar]</p></article><article><span>02</span><h3>Experiência profissional</h3><p>[Qualificações públicas dos instrutores a confirmar]</p></article><article><span>03</span><h3>Formatos flexíveis</h3><p>[Modalidades atualmente disponíveis a confirmar]</p></article></div></section>

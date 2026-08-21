@@ -8,6 +8,7 @@ export default function Home() {
           <div className="hero-copy">
             <p className="eyebrow">TECNOLOGIA • ENGENHARIA • CONHECIMENTO</p>
             <h1>Um ecossistema para transformar a refrigeração.</h1>
+            <p className="brand-signature">IceNexus. A inteligência por trás da refrigeração.</p>
             <p className="hero-lead">Ferramentas técnicas e capacitação conectadas para tornar decisões complexas mais simples, rápidas e acessíveis.</p>
             <div className="hero-actions">
               <a className="button primary" href="/projeto-camara-fria">Conhecer o primeiro produto</a>
@@ -15,11 +16,14 @@ export default function Home() {
             </div>
           </div>
           <div className="nexus-visual" aria-label="Áreas conectadas do ecossistema IceNexus">
-            <div className="core"><span>ICE</span><strong>NEXUS</strong></div>
-            <div className="orbit orbit-one">Projetos</div>
-            <div className="orbit orbit-two">Treinamentos</div>
-            <div className="orbit orbit-three">Engenharia</div>
-            <div className="orbit orbit-four">Conhecimento</div>
+            <div className="core"><img src="/logo-icenexus.png" alt="IceNexus" /></div>
+            <div className="orbit orbit-one"><span>Ferramentas técnicas</span><small>Disponível</small></div>
+            <div className="orbit orbit-two"><span>Academia IceNexus</span><small>Área ativa</small></div>
+            <div className="orbit orbit-three future"><span>IceNexus Mastergroup</span><small>Em desenvolvimento</small></div>
+            <div className="orbit orbit-four future"><span>Engenharia especializada</span><small>Em desenvolvimento</small></div>
+            <div className="orbit orbit-five future"><span>Gestão de manutenção</span><small>Em desenvolvimento</small></div>
+            <div className="orbit orbit-six future"><span>Conteúdo e inovação</span><small>Em desenvolvimento</small></div>
+            <p className="nexus-caption">Áreas ativas e novas frentes conectadas em um ecossistema em evolução.</p>
           </div>
         </section>
 
@@ -38,10 +42,10 @@ export default function Home() {
             </article>
             <article className="solution-card">
               <div className="card-top"><span className="live-badge green">Área ativa</span><span>Capacitação</span></div>
-              <Placeholder label="Treinamentos IceNexus" className="card-placeholder" />
-              <h3>Treinamentos</h3>
+              <Placeholder label="Academia IceNexus" className="card-placeholder" />
+              <h3>Academia IceNexus</h3>
               <p>Capacitação técnica para profissionais e empresas acompanharem a evolução da refrigeração.</p>
-              <a className="text-link" href="/treinamentos">Conhecer treinamentos <span>→</span></a>
+              <a className="text-link" href="/treinamentos">Conhecer a Academia <span>→</span></a>
             </article>
           </div>
         </section>
@@ -51,9 +55,9 @@ export default function Home() {
           <div className="vision-grid">
             {[
               ["Engenharia especializada", "Projetos, validação e acompanhamento de execução."],
-              ["Manutenção e ativos", "Diagnóstico, estruturação e modalidades de apoio à operação."],
-              ["Biblioteca técnica", "Conteúdos organizados e atualizados para o setor."],
-              ["Inovação", "Tendências e aprendizados de mercados e eventos."],
+              ["Gestão de manutenção", "Diagnóstico, planejamento, capacitação e apoio à operação de ativos de refrigeração."],
+              ["IceNexus Mastergroup", "Programa anual avançado de desenvolvimento técnico e gerencial para profissionais da refrigeração."],
+              ["Conteúdo e inovação", "Webinars, podcasts, biblioteca técnica e tendências para o aprimoramento do setor."],
             ].map(([title, text]) => <article key={title}><span>Em estruturação</span><h3>{title}</h3><p>{text}</p></article>)}
           </div>
         </section>
