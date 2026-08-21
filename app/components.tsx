@@ -15,7 +15,7 @@ export function Header() {
       <nav className="desktop-nav" aria-label="Navegação principal">
         <a href="/">Ecossistema</a>
         <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-        <a href="/treinamentos">Academia IceNexus</a>
+        <a href="/academia">Academia IceNexus</a>
         <a className="access-link" href="/acessar">Acessar</a>
       </nav>
       <details className="mobile-menu">
@@ -23,7 +23,7 @@ export function Header() {
         <nav aria-label="Navegação para celular">
           <a href="/">Ecossistema</a>
           <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-          <a href="/treinamentos">Academia IceNexus</a>
+          <a href="/academia">Academia IceNexus</a>
           <a href="/acessar">Acessar</a>
         </nav>
       </details>
@@ -31,19 +31,9 @@ export function Header() {
   );
 }
 
-export function PrototypeNote() {
-  return (
-    <div className="prototype-note" role="note">
-      <span>Protótipo V2</span>
-      <p>Navegação para validação. Nenhum cadastro, pagamento ou login é realizado.</p>
-    </div>
-  );
-}
-
 export function PageFrame({ children }: { children: ReactNode }) {
   return (
     <div className="site-shell">
-      <PrototypeNote />
       <Header />
       {children}
       <Footer />
@@ -57,13 +47,12 @@ export function Footer() {
       <div><Brand /><p>Tecnologia, engenharia e conhecimento para refrigeração.</p></div>
       <div className="footer-links">
         <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
-        <a href="/treinamentos">Academia IceNexus</a>
+        <a href="/academia">Academia IceNexus</a>
         <a href="/acessar">Acessar</a>
       </div>
       <div className="footer-pending">
         <strong>Contato</strong>
-        <span>[WhatsApp a fornecer]</span>
-        <span>[E-mail a fornecer]</span>
+        <a href="mailto:financeiro@icenexus.com.br">financeiro@icenexus.com.br</a>
       </div>
     </footer>
   );

@@ -1,4 +1,4 @@
-import { PageFrame, Placeholder } from "./components";
+import { PageFrame } from "./components";
 
 export default function Home() {
   return (
@@ -42,10 +42,10 @@ export default function Home() {
             </article>
             <article className="solution-card">
               <div className="card-top"><span className="live-badge green">Área ativa</span><span>Capacitação</span></div>
-              <Placeholder label="Academia IceNexus" className="card-placeholder" />
+              <div className="mini-product-ui" aria-hidden="true"><div className="mini-rail"><i /><i /><i /><i /></div><div className="mini-stage"><b>Formação conectada</b><span /><span /><span /></div></div>
               <h3>Academia IceNexus</h3>
               <p>Capacitação técnica para profissionais e empresas acompanharem a evolução da refrigeração.</p>
-              <a className="text-link" href="/treinamentos">Conhecer a Academia <span>→</span></a>
+              <a className="text-link" href="/academia">Conhecer a Academia <span>→</span></a>
             </article>
           </div>
         </section>
