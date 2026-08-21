@@ -197,7 +197,9 @@ assinatura). Papéis: `superadmin_icenexus` (equipe IceNexus) | `admin_empresa` 
   `/api/v1/admin/*` (só `superadmin_icenexus`).
 - Scripts operacionais em `backend/scripts/`: `promover_superadmin.py`,
   `copiar_projetos.py`, `remover_contas.py`, `backfill_empresa.py` — todos
-  simulam por padrão, só gravam com `--aplicar`.
+  simulam por padrão, só gravam com `--aplicar`. `buscar_usuario.py` (só
+  leitura, sem `--aplicar`) consulta usuário por username/e-mail parcial —
+  status da conta, empresa, sessões ativas.
 
 Detalhes de implantação, armadilhas técnicas (MissingGreenlet, `--reload`
 travando) e o passo manual obrigatório pós-deploy (`promover_superadmin.py`)
