@@ -34,7 +34,7 @@ export function Header() {
 export function PrototypeNote() {
   return (
     <div className="prototype-note" role="note">
-      <span>Protótipo V1</span>
+      <span>Protótipo V2</span>
       <p>Navegação para validação. Nenhum cadastro, pagamento ou login é realizado.</p>
     </div>
   );
