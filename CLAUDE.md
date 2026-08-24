@@ -88,10 +88,11 @@ SECRET_KEY=...
 
 | Serviço | URL |
 |---------|-----|
-| Frontend | https://projetista-v2.vercel.app |
+| Frontend (app) | https://camara-fria.icenexus.com.br (domínio real; `https://projetista-v2.vercel.app` é o deploy Vercel por trás, ainda no ar) |
 | Backend API | https://projetista-v2-api-alt.onrender.com |
 | API Docs | https://projetista-v2-api-alt.onrender.com/docs |
 | GitHub | https://github.com/carlos-ba/ProjetistaV2 |
+| Site institucional | https://icenexus.com.br (hub do ecossistema + `/projeto-camara-fria` com planos/preços — **código-fonte fora deste repo, local não mapeado**) |
 
 ---
 
