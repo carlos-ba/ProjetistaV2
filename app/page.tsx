@@ -35,7 +35,7 @@ export default function Home() {
           <div className="solution-grid">
             <article className="solution-card featured-solution">
               <div className="card-top"><span className="live-badge">Disponível</span><span>Ferramenta técnica</span></div>
-              <div className="mini-product-ui" aria-hidden="true"><div className="mini-rail"><i /><i /><i /><i /></div><div className="mini-stage"><b>Projeto guiado</b><span /><span /><span /></div></div>
+              <img className="solution-preview" src="/media/projeto-calculo.webp" alt="Resultado do cálculo de carga térmica dentro do Projeto de Câmara Fria" loading="lazy" />
               <h3>Projeto de Câmara Fria</h3>
               <p>Uma jornada guiada para calcular, selecionar componentes e gerar os documentos técnicos do projeto.</p>
               <a className="text-link" href="/projeto-camara-fria">Explorar a ferramenta <span>→</span></a>

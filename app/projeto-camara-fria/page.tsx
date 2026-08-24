@@ -30,10 +30,14 @@ export default function ColdRoomProject() {
             <div className="hero-actions"><a className="button primary" href="#planos">Ver planos</a><a className="button ghost" href="/acessar">Já sou assinante</a></div>
             <p className="micro-proof">Jornada simples demonstrada em condições controladas. O tempo varia conforme dados, projeto e perfil de uso.</p>
           </div>
-          <div className="product-window" aria-label="Representação da jornada guiada do programa">
-            <div className="window-bar"><i /><i /><i /><span>Projeto de Câmara Fria</span></div>
-            <div className="window-body"><aside>{[1,2,3,4,5,6].map(n => <span className={n < 4 ? "done" : ""} key={n}>{n}</span>)}</aside><div className="window-content"><small>ETAPA 03 DE 06</small><h3>Seleção de equipamentos</h3><div className="choice-row"><b>Opção recomendada</b><span>Selecionada ✓</span></div><div className="choice-row"><b>Alternativa técnica</b><span>Comparar</span></div><div className="insight">Informações técnicas acompanham cada decisão.</div></div></div>
-          </div>
+          <figure className="product-demo-hero">
+            <div className="demo-media-label"><span>DEMONSTRAÇÃO REAL</span><small>25 segundos • sem áudio</small></div>
+            <video controls muted playsInline preload="metadata" poster="/media/projeto-demo-poster.webp" aria-label="Demonstração da jornada do Projeto de Câmara Fria">
+              <source src="/media/projeto-demo-25s.mp4" type="video/mp4" />
+              Seu navegador não oferece suporte à reprodução deste vídeo.
+            </video>
+            <figcaption>Da configuração inicial ao cálculo, à lista de componentes e ao diagrama técnico.</figcaption>
+          </figure>
         </section>
 
         <section className="proof-band"><div><strong>Jornada guiada</strong><span>Etapas validadas em sequência</span></div><div><strong>Projeto completo</strong><span>Do cálculo à lista de materiais</span></div><div><strong>Para diferentes operações</strong><span>Técnicos, montadoras e revendas</span></div></section>
@@ -46,6 +50,15 @@ export default function ColdRoomProject() {
             <li><span>3</span><div><h3>Compare e selecione</h3><p>Escolha equipamentos, tubulações, isolamento e componentes necessários.</p></div></li>
             <li><span>4</span><div><h3>Gere os documentos</h3><p>Receba os materiais técnicos que apoiam cotação e preparação do orçamento.</p></div></li>
           </ol>
+        </section>
+
+        <section className="section product-evidence-section">
+          <div className="section-heading"><p className="eyebrow">A FERRAMENTA EM USO</p><h2>Veja o que acontece ao longo do projeto.</h2><p>Imagens extraídas de uma jornada real demonstram como o sistema organiza cálculo, materiais e representação técnica.</p></div>
+          <div className="product-evidence-grid">
+            <figure className="evidence-card evidence-wide"><img src="/media/projeto-calculo.webp" alt="Tela com resultado do cálculo de carga térmica e composição detalhada da carga" loading="lazy" /><figcaption><strong>Cálculo organizado</strong><span>Capacidade requerida e composição técnica apresentadas antes da seleção dos equipamentos.</span></figcaption></figure>
+            <figure className="evidence-card"><img src="/media/projeto-materiais.webp" alt="Tela com materiais e componentes selecionados para o projeto" loading="lazy" /><figcaption><strong>Materiais conduzidos pela jornada</strong><span>Componentes, quantidades e complementos reunidos antes da cotação.</span></figcaption></figure>
+            <figure className="evidence-card"><img src="/media/projeto-diagrama.webp" alt="Diagrama técnico de tubulação com componentes da linha de líquido e sucção" loading="lazy" /><figcaption><strong>Representação técnica</strong><span>Diagrama de tubulação para visualizar o conjunto selecionado.</span></figcaption></figure>
+          </div>
         </section>
 
         <section className="section deliverables-section">
