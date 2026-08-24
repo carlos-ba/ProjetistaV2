@@ -47,6 +47,7 @@ antigo por serem registro histórico — não foram reemitidos.
 | Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
+| Site institucional | Next.js em `site-ecosistema/`, Vercel próprio (Root Directory `site-ecosistema`, auto-deploy no push para `main`) |
 | Migrations | Alembic (0001→0026), roda no `startCommand` do Render |
 
 ---
@@ -92,7 +93,7 @@ SECRET_KEY=...
 | Backend API | https://projetista-v2-api-alt.onrender.com |
 | API Docs | https://projetista-v2-api-alt.onrender.com/docs |
 | GitHub | https://github.com/carlos-ba/ProjetistaV2 |
-| Site institucional | https://icenexus.com.br (hub do ecossistema + `/projeto-camara-fria` com planos/preços — **código-fonte fora deste repo, local não mapeado**) |
+| Site institucional | https://icenexus.com.br (hub do ecossistema + `/projeto-camara-fria` com planos/preços) — código em `site-ecosistema/` neste repo desde 2026-08-24, Next.js, deploy Vercel próprio (`icenexus-site`) |
 
 ---
 
