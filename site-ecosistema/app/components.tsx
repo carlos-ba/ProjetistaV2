@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export function Brand() {
   return (
-    <a className="brand" href="/" aria-label="IceNexus — página inicial">
+    <Link className="brand" href="/" aria-label="IceNexus — página inicial">
       <img className="brand-logo" src="/logo-icenexus.png" alt="IceNexus" />
-    </a>
+    </Link>
   );
 }
 
@@ -13,7 +14,7 @@ export function Header() {
     <header className="topbar">
       <Brand />
       <nav className="desktop-nav" aria-label="Navegação principal">
-        <a href="/">Ecossistema</a>
+        <Link href="/">Ecossistema</Link>
         <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
         <a href="/academia">Academia IceNexus</a>
         <a className="access-link" href="/acessar">Acessar</a>
@@ -21,7 +22,7 @@ export function Header() {
       <details className="mobile-menu">
         <summary aria-label="Abrir navegação">Menu</summary>
         <nav aria-label="Navegação para celular">
-          <a href="/">Ecossistema</a>
+          <Link href="/">Ecossistema</Link>
           <a href="/projeto-camara-fria">Projeto de Câmara Fria</a>
           <a href="/academia">Academia IceNexus</a>
           <a href="/acessar">Acessar</a>
