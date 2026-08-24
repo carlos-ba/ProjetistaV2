@@ -13,11 +13,11 @@ services:
           name: projetista-v2-db
           property: connectionString
       - key: CORS_ORIGINS
-        value: '["https://projetista-v2.vercel.app","https://camarafria.icenexus.com.br","https://www.icenexus.com.br","https://icenexus.com.br"]'
+        value: '["https://projetista-v2.vercel.app","https://camara-fria.icenexus.com.br","https://www.icenexus.com.br","https://icenexus.com.br"]'
       - key: SECRET_KEY
         generateValue: true
       - key: FRONTEND_URL
-        value: https://projetista-v2.vercel.app
+        value: https://camara-fria.icenexus.com.br
       # Email — configurar manualmente no painel Render após deploy
       # MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM, MAIL_SERVER, MAIL_PORT
 

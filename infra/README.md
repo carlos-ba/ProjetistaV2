@@ -28,8 +28,16 @@ Configurações de infraestrutura e deploy.
 Configuradas no dashboard do Render:
 - `DATABASE_URL`
 - `SECRET_KEY`
-- `ALLOWED_ORIGINS`
+- `CORS_ORIGINS`
+- `FRONTEND_URL`
 
 ## CORS
 
-Origens permitidas em produção: `https://projetista-v2.vercel.app`
+Origens permitidas durante a migração:
+
+- `https://camara-fria.icenexus.com.br`
+- `https://www.icenexus.com.br`
+- `https://icenexus.com.br`
+- `https://projetista-v2.vercel.app`
+
+O `FRONTEND_URL` de produção aponta para `https://camara-fria.icenexus.com.br`.
