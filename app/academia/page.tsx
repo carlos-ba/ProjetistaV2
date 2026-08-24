@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { PageFrame } from "../components";
 
 const pageTitle = "Academia IceNexus";
-const pageDescription = "Capacitação técnica para profissionais e empresas do setor de refrigeração.";
+const pageDescription = "Capacitação técnica com aulas e atividades práticas para profissionais e empresas do setor de refrigeração.";
 
 export const metadata: Metadata = {
   title: pageTitle,
   description: pageDescription,
-  openGraph: { title: pageTitle, description: pageDescription, images: [] },
-  twitter: { card: "summary", title: pageTitle, description: pageDescription, images: [] },
+  openGraph: { title: pageTitle, description: pageDescription, images: ["/media/academia-demo-poster.webp"] },
+  twitter: { card: "summary_large_image", title: pageTitle, description: pageDescription, images: ["/media/academia-demo-poster.webp"] },
 };
 
 export default function Academy() {
@@ -19,12 +19,57 @@ export default function Academy() {
           <div className="hero-copy">
             <p className="eyebrow">ACADEMIA ICENEXUS</p>
             <h1>Conhecimento técnico conectado à prática da refrigeração.</h1>
-            <p className="hero-lead">A divisão de educação da IceNexus para capacitação e atualização de profissionais e empresas do setor.</p>
-            <div className="hero-actions"><a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Informações%20sobre%20a%20Academia%20IceNexus">Solicitar informações</a><a className="button ghost" href="/">Conhecer o ecossistema</a></div>
+            <p className="hero-lead">A divisão de educação da IceNexus aproxima fundamentos técnicos, aplicação em laboratório e troca entre profissionais do setor.</p>
+            <div className="hero-actions">
+              <a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Informações%20sobre%20a%20Academia%20IceNexus">Solicitar informações</a>
+              <a className="button ghost" href="#academia-em-acao">Ver a Academia em ação</a>
+            </div>
           </div>
-          <div className="product-window" aria-label="Áreas de capacitação da Academia IceNexus">
-            <div className="window-bar"><i /><i /><i /><span>Academia IceNexus</span></div>
-            <div className="window-body"><aside><span className="done">1</span><span className="done">2</span><span>3</span></aside><div className="window-content"><small>CAPACITAÇÃO CONTÍNUA</small><h3>Técnica, aplicação e desenvolvimento</h3><div className="choice-row"><b>Formação profissional</b><span>IceNexus</span></div><div className="choice-row"><b>Treinamentos para empresas</b><span>Sob consulta</span></div><div className="insight">A programação será publicada conforme cada oferta for confirmada.</div></div></div>
+          <figure className="academy-hero-image">
+            <img src="/media/academia-aula-teorica.webp" alt="Instrutor conduzindo uma aula técnica de refrigeração para uma turma" />
+            <figcaption><strong>Teoria que prepara para a prática</strong><span>Registro real de uma atividade de capacitação.</span></figcaption>
+          </figure>
+        </section>
+
+        <section className="section academy-showcase" id="academia-em-acao">
+          <div className="academy-showcase-copy">
+            <p className="eyebrow">ACADEMIA EM AÇÃO</p>
+            <h2>Um ambiente preparado para aprender, testar e aplicar.</h2>
+            <p>As imagens apresentam atividades já realizadas no centro técnico: aulas orientadas, exercícios em grupo e contato direto com componentes e sistemas de refrigeração.</p>
+            <ul className="academy-proof-list">
+              <li>Aulas técnicas com apoio visual e demonstrações</li>
+              <li>Atividades práticas acompanhadas por instrutores</li>
+              <li>Laboratório com equipamentos e componentes reais</li>
+            </ul>
+          </div>
+          <figure className="academy-video">
+            <video controls muted playsInline preload="metadata" poster="/media/academia-demo-poster.webp" aria-label="Clipe com registros de aulas e atividades práticas da Academia IceNexus">
+              <source src="/media/academia-em-acao-21s.mp4" type="video/mp4" />
+              Seu navegador não oferece suporte à reprodução deste vídeo.
+            </video>
+            <figcaption>21 segundos · sem áudio · registros de atividades reais</figcaption>
+          </figure>
+        </section>
+
+        <section className="section academy-gallery-section">
+          <div className="section-heading">
+            <p className="eyebrow">APRENDIZAGEM APLICADA</p>
+            <h2>Do entendimento técnico à execução acompanhada.</h2>
+            <p>Diferentes momentos da formação mostram como conteúdo, experimentação e orientação profissional se complementam.</p>
+          </div>
+          <div className="academy-gallery">
+            <figure className="academy-gallery-card academy-gallery-wide">
+              <img src="/media/academia-pratica-eletrica.webp" alt="Instrutor orientando um grupo durante uma atividade prática com componentes elétricos" />
+              <figcaption><strong>Orientação próxima</strong><span>Discussão técnica e resolução de dúvidas durante a atividade.</span></figcaption>
+            </figure>
+            <figure className="academy-gallery-card">
+              <img src="/media/academia-pratica-refrigeracao.webp" alt="Turma acompanhando uma demonstração prática com componentes de refrigeração" />
+              <figcaption><strong>Contato com componentes reais</strong><span>Aprendizado apoiado por demonstrações e exercícios práticos.</span></figcaption>
+            </figure>
+            <figure className="academy-gallery-card">
+              <img src="/media/academia-montagem-painel.webp" alt="Profissionais acompanhando a montagem prática de um painel para câmara fria" />
+              <figcaption><strong>Prática acompanhada</strong><span>Execução orientada dentro de um ambiente técnico preparado.</span></figcaption>
+            </figure>
           </div>
         </section>
 

@@ -42,7 +42,7 @@ export default function Home() {
             </article>
             <article className="solution-card">
               <div className="card-top"><span className="live-badge green">Área ativa</span><span>Capacitação</span></div>
-              <div className="mini-product-ui" aria-hidden="true"><div className="mini-rail"><i /><i /><i /><i /></div><div className="mini-stage"><b>Formação conectada</b><span /><span /><span /></div></div>
+              <img className="solution-preview" src="/media/academia-capacitacao.webp" alt="Turma participando de uma capacitação técnica da Academia IceNexus" loading="lazy" />
               <h3>Academia IceNexus</h3>
               <p>Capacitação técnica para profissionais e empresas acompanharem a evolução da refrigeração.</p>
               <a className="text-link" href="/academia">Conhecer a Academia <span>→</span></a>
