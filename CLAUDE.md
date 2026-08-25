@@ -25,6 +25,19 @@ git log -1 --format="%ad %s" --date=short
 
 ---
 
+## Gestão Compartilhada Multi-Agente (Codex + Claude)
+
+Desde 2026-08-25, o ecossistema IceNexus é desenvolvido em gestão compartilhada
+entre dois agentes de IA: Codex (`site-ecosistema/` — comercial, conteúdo,
+UI/UX institucional) e Claude (`backend/`, `frontend/` — núcleo do SaaS). O
+GitHub é a fonte única de verdade. `AGENTS.md` orienta o Codex; ambos apontam
+para a mesma documentação central em `docs/`. Regra central: uma tarefa → uma
+branch → um responsável principal — nunca editar os mesmos arquivos em
+paralelo pelos dois agentes. Modelo completo, divisão de responsabilidade e
+fluxo de revisão cruzada: ver `docs/decisoes/2026-08-25-gestao-compartilhada-multiagente.md`.
+
+---
+
 ## Identidade do Produto
 
 **IceNexus** — SaaS de dimensionamento frigorífico para técnicos e engenheiros de refrigeração.
