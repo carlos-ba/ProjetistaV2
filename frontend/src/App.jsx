@@ -8,6 +8,14 @@ const BUILD_DATE_LABEL = new Date(__BUILD_DATE__).toLocaleDateString('pt-BR', {
   day: '2-digit', month: 'short', year: 'numeric',
 });
 
+// dataFimISO no formato "YYYY-MM-DD" (assinatura_fim do backend)
+function diasRestantesTrial(dataFimISO) {
+  if (!dataFimISO) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const fim = new Date(`${dataFimISO}T00:00:00`);
+  return Math.max(0, Math.ceil((fim - hoje) / 86400000));
+}
+
 // --- IMPORTAÇÕES ---
 import CalculadoraGabinete from './components/CalculadoraGabinete.jsx';
 import CalculadoraCargaTermica from './components/CalculadoraCargaTermica.jsx';
@@ -540,7 +548,7 @@ function AppContent({ catalogo }) {
               )}
 
               {/* Aviso de assinatura — só aparece quando exige atenção */}
-              {user.empresa_status && user.empresa_status !== 'ativa' && (
+              {(user.empresa_status === 'suspensa' || user.empresa_status === 'cancelada') && (
                 <div className={`mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 ${
                   user.empresa_status === 'suspensa'
                     ? 'bg-amber-100 text-amber-800'
@@ -553,11 +561,16 @@ function AppContent({ catalogo }) {
                   </span>
                 </div>
               )}
-              {user.empresa_plano === 'trial' && user.empresa_status === 'ativa' && (
-                <div className="mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 bg-blue-50 text-blue-700">
+              {user.empresa_status === 'trial' && (
+                <div className={`mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 ${
+                  user.empresa_trial_expirado ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
                   <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
                   <span className="text-[9px] font-bold leading-tight">
-                    Período de avaliação em andamento.
+                    {user.empresa_trial_expirado
+                      ? 'Avaliação encerrada — dá pra ver e exportar, mas não editar. Assine um plano para continuar.'
+                      : diasRestantesTrial(user.empresa_assinatura_fim) != null
+                        ? `Avaliação: ${diasRestantesTrial(user.empresa_assinatura_fim)} dia(s) restante(s).`
+                        : 'Período de avaliação em andamento.'}
                   </span>
                 </div>
               )}
@@ -585,10 +598,11 @@ function AppContent({ catalogo }) {
               <Button variant="ghost" size="sm" onClick={novoProjeto} className="gap-1">
                 <Plus className="w-4 h-4" /> Novo
               </Button>
-              <Button variant="outline" size="sm" onClick={salvarComo} disabled={salvando} className="gap-1">
+              <Button variant="outline" size="sm" onClick={salvarComo} disabled={salvando || user?.empresa_trial_expirado} className="gap-1">
                 <CopyPlus className="w-4 h-4" /> Salvar Como
               </Button>
-              <Button size="sm" onClick={salvarProjeto} disabled={salvando} className="gap-1">
+              <Button size="sm" onClick={salvarProjeto} disabled={salvando || user?.empresa_trial_expirado} className="gap-1"
+                title={user?.empresa_trial_expirado ? 'Avaliação encerrada — assine um plano para voltar a editar.' : undefined}>
                 <Save className="w-4 h-4" /> {salvando ? 'Salvando...' : 'Salvar'}
               </Button>
               <Separator orientation="vertical" className="h-6 mx-1" />

@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID, uuid4
 from typing import List, Optional
 
@@ -48,6 +49,14 @@ class Usuario(Base, TimestampMixin):
     @property
     def empresa_status(self) -> str | None:
         return self.empresa.status_assinatura if self.empresa else None
+
+    @property
+    def empresa_assinatura_fim(self) -> date | None:
+        return self.empresa.assinatura_fim if self.empresa else None
+
+    @property
+    def empresa_trial_expirado(self) -> bool:
+        return bool(self.empresa and self.empresa.trial_expirado)
 
     projetos: Mapped[List["Projeto"]] = relationship(back_populates="owner")
     clientes: Mapped[List["Cliente"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

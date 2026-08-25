@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -15,7 +15,7 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.core.user_agent import descrever_dispositivo
 from app.database.session import get_db
 from app.models.usuario import Usuario
-from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEMBRO
+from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEMBRO, DURACAO_TRIAL_DIAS
 from app.models.sessao_usuario import SessaoUsuario
 from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
 from app.services.email import enviar_verificacao_email, enviar_reset_senha
@@ -41,7 +41,14 @@ async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
 
     # Todo usuário nasce dono da própria empresa (tenant). Usuários adicionais de
     # uma empresa existente são criados pelo endpoint de admin, não por aqui.
-    empresa = Empresa(nome=payload.username, plano="trial", status_assinatura="ativa")
+    hoje = date.today()
+    empresa = Empresa(
+        nome=payload.username,
+        plano="trial",
+        status_assinatura="trial",
+        assinatura_inicio=hoje,
+        assinatura_fim=hoje + timedelta(days=DURACAO_TRIAL_DIAS),
+    )
     db.add(empresa)
     await db.flush()
 

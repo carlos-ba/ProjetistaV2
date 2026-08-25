@@ -8,6 +8,7 @@ from app.schemas.auth import UserOut
 from app.schemas.projeto import Projeto, ProjetoCreate, ProjetoUpdate, ProjetoComCalculos
 from app.services import projetos as service_projetos
 from app.services.auth import get_current_user, get_empresa_atual
+from app.services.assinatura import exigir_pode_editar, exigir_limite_projetos_trial
 
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
 
@@ -17,8 +18,9 @@ async def criar_projeto(
     payload: ProjetoCreate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
-    empresa_id: UUID = Depends(get_empresa_atual),
+    empresa_id: UUID = Depends(exigir_pode_editar),
 ):
+    await exigir_limite_projetos_trial(db, empresa_id)
     return await service_projetos.create_projeto(db, payload, owner_id=usuario.id, empresa_id=empresa_id)
 
 
@@ -52,7 +54,7 @@ async def atualizar_projeto(
     payload: ProjetoUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: UserOut = Depends(get_current_user),
-    empresa_id: UUID = Depends(get_empresa_atual),
+    empresa_id: UUID = Depends(exigir_pode_editar),
 ):
     db_projeto = await service_projetos.get_projeto(db, projeto_id, empresa_id=empresa_id)
     if not db_projeto:

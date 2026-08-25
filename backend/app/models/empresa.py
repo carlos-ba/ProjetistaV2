@@ -15,6 +15,12 @@ PAPEL_MEMBRO = "membro"                    # usa o app dentro da empresa
 # Status de assinatura que liberam o uso
 STATUS_ATIVOS = ("ativa", "trial")
 
+# Trial gratuito: DESIGN_TRIAL_15_DIAS — decisão de 2026-08-25. 15 dias, 1
+# projeto; vencido o prazo, o projeto continua visível/exportável, só não
+# edita mais (ver Empresa.trial_expirado).
+DURACAO_TRIAL_DIAS = 15
+LIMITE_PROJETOS_TRIAL = 1
+
 
 class Empresa(Base, TimestampMixin):
     """Tenant. Todo dado de projeto/cliente/cotação é escopado por empresa."""
@@ -35,3 +41,17 @@ class Empresa(Base, TimestampMixin):
     @property
     def ativa(self) -> bool:
         return self.status_assinatura in STATUS_ATIVOS
+
+    @property
+    def trial_expirado(self) -> bool:
+        """True só quando o trial venceu — bloqueia edição, não leitura/exportação.
+
+        `assinatura_fim is None` nunca expira (cobre empresas criadas antes desta
+        checagem existir, que não têm data gravada — não são retroativamente
+        trancadas por uma mudança de código).
+        """
+        return (
+            self.status_assinatura == "trial"
+            and self.assinatura_fim is not None
+            and self.assinatura_fim < date.today()
+        )

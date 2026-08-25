@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator, EmailStr
@@ -62,6 +63,8 @@ class UserOut(BaseModel):
     empresa_nome: str | None = None
     empresa_plano: str | None = None
     empresa_status: str | None = None
+    empresa_assinatura_fim: date | None = None
+    empresa_trial_expirado: bool = False
 
     model_config = {"from_attributes": True}
 
