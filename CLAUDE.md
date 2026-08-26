@@ -286,6 +286,46 @@ na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
 
 ---
 
+## Trial de 15 Dias — Trava Real (em produção desde 2026-08-25)
+
+Cadastro novo (`registrar_usuario`) grava `status_assinatura="trial"` +
+`assinatura_inicio`/`assinatura_fim` (hoje + 15 dias) — antes gravava
+`"ativa"` sem prazo, e o trial nunca expirava.
+
+- `Empresa.trial_expirado` (`backend/app/models/empresa.py`) — true só
+  quando `status_assinatura=='trial'` E `assinatura_fim` já passou.
+  `assinatura_fim IS NULL` nunca expira (protege empresas criadas antes
+  desta mudança, todas sem essa data preenchida).
+- `backend/app/services/assinatura.py`: `exigir_pode_editar` (dependency
+  usada em `POST`/`PATCH /api/v1/projetos` — bloqueia com 403 quando o
+  trial venceu; `GET` continua liberado, então visualizar e exportar
+  PDF/Excel nunca trava) + `exigir_limite_projetos_trial` (bloqueia criar o
+  2º projeto quando `plano=='trial'`, independente do status).
+- `UserOut`/`Usuario` expõem `empresa_assinatura_fim` (date) e
+  `empresa_trial_expirado` (bool) — o frontend lê o boolean pronto, não
+  recalcula data.
+- Frontend (`App.jsx`): aviso de assinatura com três ramos explícitos
+  (suspensa / cancelada / trial — antes um `!== 'ativa'` genérico conflava
+  os três, o que quebraria a UI de todo trial novo). Trial mostra contagem
+  regressiva real; vencido, mostra aviso vermelho e desabilita
+  "Salvar"/"Salvar Como".
+- **Fora do escopo desta trava:** `suspensa`/`cancelada` continuam sem
+  enforcement real no backend (a property `Empresa.ativa` existe mas nunca
+  é chamada); endpoints de cotação/proposta não são bloqueados pelo trial
+  vencido, só a edição do projeto (`routes_projetos.py`).
+- **Pendente:** a função de ativação de assinatura
+  (`ativar_assinatura(empresa_id, plano, dias)`) que o admin e o futuro
+  webhook do checkout de terceiro vão chamar — ainda não construída,
+  `assinatura.py` é o lugar já preparado pra receber.
+- Rotina de smoke test: `backend/scripts/validar_producao.py` (HTTP puro,
+  só leitura) — roda antes de qualquer deploy/decisão que dependa do estado
+  de produção.
+
+Detalhe completo da decisão e da implementação: ver `project-jornada-assinatura-saas`
+na memória, seção "IMPLEMENTADO 2026-08-25".
+
+---
+
 ## Banco de Dados — Migrations (0001→0026)
 
 | Migration | Conteúdo |
@@ -483,6 +523,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
+| Trial 15 dias/1 projeto — trava real de edição | ✅ em produção desde 2026-08-25 |
 | Multiusuário/convites + painel admin ampliado (Fase C) | ❌ |
 | Billing real / gateway (Fase D) | ❌ |
 | IA com Tool Use | ❌ |
