@@ -11,7 +11,6 @@ import CatalogoPrecosEmpresa from './CatalogoPrecosEmpresa';
  */
 
 const PLANOS = [
-  { id: 'trial',    label: 'Trial' },
   { id: 'tecnico',  label: 'Técnico (individual)' },
   { id: 'empresa',  label: 'Empresa (multiusuário)' },
 ];
@@ -246,11 +245,10 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-400 leading-snug">
-                    <b>Plano</b> e <b>status</b> são independentes: "Trial" nos dois é o normal de todo
-                    cadastro novo (produto trial + dentro do período). Se promover o plano pra
-                    Técnico/Empresa, troque também o status pra "Ativa" — status "Trial" só trava a
-                    edição quando o plano também é "Trial" e a validade venceu, então não bloqueia um
-                    cliente pagante por engano, mas fica inconsistente deixar assim.
+                    <b>Plano</b> é só o produto contratado (nunca é "trial" — todo cadastro já nasce
+                    Técnico ou Empresa). <b>Status "Trial"</b> é a fase temporária de avaliação, com
+                    validade: vencido o prazo, edição trava (leitura e exportação continuam liberadas).
+                    Confirmou o pagamento? Troque o status pra "Ativa" — não mexe no plano.
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditando(null)}

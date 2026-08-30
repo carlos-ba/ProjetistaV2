@@ -31,7 +31,7 @@ class Empresa(Base, TimestampMixin):
     nome: Mapped[str] = mapped_column(String(200), nullable=False)
     cnpj: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
-    plano: Mapped[str] = mapped_column(String(30), default="trial", server_default="trial")
+    plano: Mapped[str] = mapped_column(String(30), default="tecnico", server_default="tecnico")
     status_assinatura: Mapped[str] = mapped_column(String(20), default="ativa", server_default="ativa")
     assinatura_inicio: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     assinatura_fim: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -46,21 +46,16 @@ class Empresa(Base, TimestampMixin):
     def trial_expirado(self) -> bool:
         """True só quando o trial venceu — bloqueia edição, não leitura/exportação.
 
-        Exige `plano=='trial'` E `status_assinatura=='trial'` — não só o
-        status. `plano` e `status_assinatura` são eixos independentes no
-        admin (produto contratado × estado atual da assinatura), e um admin
-        pode legitimamente deixar uma combinação incomum (ex: promoveu o
-        plano pra 'tecnico' mas esqueceu de tirar o status de 'trial').
-        Amarrar aos dois evita que essa combinação trave por engano a edição
-        de um cliente pagante quando a data antiga do trial vencer.
+        `plano` (técnico/empresa) é só o produto contratado — nunca vale
+        "trial". "Trial" é exclusivamente um `status_assinatura`, a fase
+        temporária de qualquer produto antes da assinatura ser confirmada.
 
         `assinatura_fim is None` nunca expira (cobre empresas criadas antes
         desta checagem existir, que não têm data gravada — não são
         retroativamente trancadas por uma mudança de código).
         """
         return (
-            self.plano == "trial"
-            and self.status_assinatura == "trial"
+            self.status_assinatura == "trial"
             and self.assinatura_fim is not None
             and self.assinatura_fim < date.today()
         )

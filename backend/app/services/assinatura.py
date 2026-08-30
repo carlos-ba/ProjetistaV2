@@ -1,9 +1,12 @@
-"""Trava de escrita para trial vencido + limite de projetos do plano trial.
+"""Trava de escrita para trial vencido + limite de projetos durante o trial.
 
-DESIGN_TRIAL_15_DIAS — decisão de 2026-08-25 (docs/decisoes/). Ponto de
-extensão futuro: quando o checkout de terceiro for plugado, a ativação de
-assinatura (webhook -> troca de plano/status/prazo) entra aqui também, como
-função que o admin manual e o webhook chamam por igual.
+DESIGN_TRIAL_15_DIAS — decisão de 2026-08-25 (docs/decisoes/). `plano`
+(técnico/empresa) é só o produto contratado; "trial" é exclusivamente um
+`status_assinatura` — fase temporária de qualquer produto antes da
+assinatura ser confirmada (ver docs/decisoes/2026-08-30-plano-x-status.md).
+Ponto de extensão futuro: quando o checkout de terceiro for plugado, a
+ativação de assinatura (webhook -> troca de status/prazo) entra aqui
+também, como função que o admin manual e o webhook chamam por igual.
 """
 from __future__ import annotations
 from uuid import UUID
@@ -46,9 +49,10 @@ async def exigir_pode_editar(
 
 
 async def exigir_limite_projetos_trial(db: AsyncSession, empresa_id: UUID) -> None:
-    """No plano trial, só LIMITE_PROJETOS_TRIAL projeto(s) por empresa."""
+    """Durante o trial (status_assinatura=='trial'), só LIMITE_PROJETOS_TRIAL
+    projeto(s) por empresa — vale pra qualquer plano, não só técnico."""
     empresa = await _obter_empresa(db, empresa_id)
-    if empresa.plano != "trial":
+    if empresa.status_assinatura != "trial":
         return
     total = await db.scalar(
         select(func.count(Projeto.id)).where(Projeto.empresa_id == empresa_id)

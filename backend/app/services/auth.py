@@ -41,10 +41,12 @@ async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
 
     # Todo usuário nasce dono da própria empresa (tenant). Usuários adicionais de
     # uma empresa existente são criados pelo endpoint de admin, não por aqui.
+    # Cadastro público é só a jornada técnico (self-serve) — empresa (revenda/
+    # montadora) nasce via implantação assistida no admin, nunca por aqui.
     hoje = date.today()
     empresa = Empresa(
         nome=payload.username,
-        plano="trial",
+        plano="tecnico",
         status_assinatura="trial",
         assinatura_inicio=hoje,
         assinatura_fim=hoje + timedelta(days=DURACAO_TRIAL_DIAS),

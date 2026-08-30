@@ -288,9 +288,16 @@ na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
 
 ## Trial de 15 Dias — Trava Real (em produção desde 2026-08-25)
 
-Cadastro novo (`registrar_usuario`) grava `status_assinatura="trial"` +
-`assinatura_inicio`/`assinatura_fim` (hoje + 15 dias) — antes gravava
-`"ativa"` sem prazo, e o trial nunca expirava.
+Cadastro novo (`registrar_usuario`) grava `plano="tecnico"` +
+`status_assinatura="trial"` + `assinatura_inicio`/`assinatura_fim` (hoje +
+15 dias) — antes gravava `plano="trial"` + `status_assinatura="ativa"` sem
+prazo, e o trial nunca expirava.
+
+**`plano` (técnico/empresa) e `status_assinatura` (trial/ativa/suspensa/
+cancelada) são eixos independentes — `plano` nunca vale "trial"** (decisão
+2026-08-30, ver `docs/decisoes/2026-08-30-plano-x-status.md`). "Trial" é
+só uma fase temporária de qualquer produto, não um produto em si; confirmar
+pagamento troca `status_assinatura` pra `"ativa"`, nunca o `plano`.
 
 - `Empresa.trial_expirado` (`backend/app/models/empresa.py`) — true só
   quando `status_assinatura=='trial'` E `assinatura_fim` já passou.
@@ -300,7 +307,7 @@ Cadastro novo (`registrar_usuario`) grava `status_assinatura="trial"` +
   usada em `POST`/`PATCH /api/v1/projetos` — bloqueia com 403 quando o
   trial venceu; `GET` continua liberado, então visualizar e exportar
   PDF/Excel nunca trava) + `exigir_limite_projetos_trial` (bloqueia criar o
-  2º projeto quando `plano=='trial'`, independente do status).
+  2º projeto quando `status_assinatura=='trial'`, para qualquer plano).
 - `UserOut`/`Usuario` expõem `empresa_assinatura_fim` (date) e
   `empresa_trial_expirado` (bool) — o frontend lê o boolean pronto, não
   recalcula data.
