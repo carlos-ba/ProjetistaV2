@@ -62,7 +62,13 @@ muda nesse momento — já estava certo desde o cadastro.
   Rodado local (6 empresas) — **produção pendente**, rodar depois do
   deploy do código.
 
-## Pendência
+## Backfill de produção — CONCLUÍDO 2026-08-30
 
-Rodar `backfill_plano_tecnico.py --aplicar` contra produção
-(`DATABASE_URL` do Render na env local, nunca colar credencial no chat).
+`backfill_plano_tecnico.py --aplicar` rodado contra produção pelo usuário
+(env local com `DATABASE_URL` do Render). 13 empresas com `plano='trial'`
+atualizadas para `'tecnico'` — inclui `WEM Refrigeração` (conta master
+operacional da IceNexus, não uma cliente — ver
+[[project-isolamento-conta-master-icenexus]]; confirmado antes de rodar que
+`plano` não tem nenhuma relação com o papel `superadmin_icenexus`, que
+depende só de `Usuario.papel`). Confirmado: 0 empresas restantes com
+`plano='trial'`.
