@@ -17,6 +17,7 @@ const PLANOS = [
 ];
 
 const STATUS = [
+  { id: 'trial',     label: 'Trial',     cor: 'bg-blue-100 text-blue-700' },
   { id: 'ativa',     label: 'Ativa',     cor: 'bg-emerald-100 text-emerald-700' },
   { id: 'suspensa',  label: 'Suspensa',  cor: 'bg-amber-100 text-amber-700' },
   { id: 'cancelada', label: 'Cancelada', cor: 'bg-red-100 text-red-600' },
@@ -81,8 +82,8 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
   const salvarEmpresa = async () => {
     setSalvando(true); setErro('');
     try {
-      const { id, nome, cnpj, plano, status_assinatura } = editando;
-      await api.patch(`/api/v1/admin/empresas/${id}`, { nome, cnpj, plano, status_assinatura });
+      const { id, nome, cnpj, plano, status_assinatura, assinatura_fim } = editando;
+      await api.patch(`/api/v1/admin/empresas/${id}`, { nome, cnpj, plano, status_assinatura, assinatura_fim: assinatura_fim || null });
       setEditando(null); await carregar(); aviso('Empresa atualizada.');
     } catch (e) { setErro(msgErro(e, 'Erro ao salvar.')); }
     finally { setSalvando(false); }
@@ -226,6 +227,13 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                       onChange={ev => setEditando(v => ({ ...v, status_assinatura: ev.target.value }))}>
                       {STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </select>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                        Validade (trial/assinatura) — vazio nunca expira
+                      </label>
+                      <input type="date" className={campo} value={editando.assinatura_fim || ''}
+                        onChange={ev => setEditando(v => ({ ...v, assinatura_fim: ev.target.value || null }))} />
+                    </div>
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditando(null)}
