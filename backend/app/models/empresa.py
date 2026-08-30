@@ -46,12 +46,21 @@ class Empresa(Base, TimestampMixin):
     def trial_expirado(self) -> bool:
         """True só quando o trial venceu — bloqueia edição, não leitura/exportação.
 
-        `assinatura_fim is None` nunca expira (cobre empresas criadas antes desta
-        checagem existir, que não têm data gravada — não são retroativamente
-        trancadas por uma mudança de código).
+        Exige `plano=='trial'` E `status_assinatura=='trial'` — não só o
+        status. `plano` e `status_assinatura` são eixos independentes no
+        admin (produto contratado × estado atual da assinatura), e um admin
+        pode legitimamente deixar uma combinação incomum (ex: promoveu o
+        plano pra 'tecnico' mas esqueceu de tirar o status de 'trial').
+        Amarrar aos dois evita que essa combinação trave por engano a edição
+        de um cliente pagante quando a data antiga do trial vencer.
+
+        `assinatura_fim is None` nunca expira (cobre empresas criadas antes
+        desta checagem existir, que não têm data gravada — não são
+        retroativamente trancadas por uma mudança de código).
         """
         return (
-            self.status_assinatura == "trial"
+            self.plano == "trial"
+            and self.status_assinatura == "trial"
             and self.assinatura_fim is not None
             and self.assinatura_fim < date.today()
         )

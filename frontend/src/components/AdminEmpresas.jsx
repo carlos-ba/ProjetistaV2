@@ -219,14 +219,24 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                       onChange={ev => setEditando(v => ({ ...v, nome: ev.target.value }))} />
                     <input className={campo} placeholder="CNPJ" value={editando.cnpj || ''}
                       onChange={ev => setEditando(v => ({ ...v, cnpj: ev.target.value }))} />
-                    <select className={campo} value={editando.plano}
-                      onChange={ev => setEditando(v => ({ ...v, plano: ev.target.value }))}>
-                      {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                    <select className={campo} value={editando.status_assinatura}
-                      onChange={ev => setEditando(v => ({ ...v, status_assinatura: ev.target.value }))}>
-                      {STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                        Plano — produto contratado
+                      </label>
+                      <select className={campo} value={editando.plano}
+                        onChange={ev => setEditando(v => ({ ...v, plano: ev.target.value }))}>
+                        {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                        Status — estado da assinatura agora
+                      </label>
+                      <select className={campo} value={editando.status_assinatura}
+                        onChange={ev => setEditando(v => ({ ...v, status_assinatura: ev.target.value }))}>
+                        {STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      </select>
+                    </div>
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
                         Validade (trial/assinatura) — vazio nunca expira
@@ -235,6 +245,13 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                         onChange={ev => setEditando(v => ({ ...v, assinatura_fim: ev.target.value || null }))} />
                     </div>
                   </div>
+                  <p className="text-[10px] text-slate-400 leading-snug">
+                    <b>Plano</b> e <b>status</b> são independentes: "Trial" nos dois é o normal de todo
+                    cadastro novo (produto trial + dentro do período). Se promover o plano pra
+                    Técnico/Empresa, troque também o status pra "Ativa" — status "Trial" só trava a
+                    edição quando o plano também é "Trial" e a validade venceu, então não bloqueia um
+                    cliente pagante por engano, mas fica inconsistente deixar assim.
+                  </p>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditando(null)}
                       className="text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
