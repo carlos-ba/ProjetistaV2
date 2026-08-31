@@ -127,6 +127,34 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 
 ---
 
+## Card 3 — Seleção de Equipamentos (interpolação bilinear)
+
+Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
+
+- **T.Ambiente é variável mandatária** — vem do Card 1 (`temperatura_ambiente`),
+  propagada por toda a jornada (Card 1 → 2 → 3 → 5). T.Condensação é sempre
+  derivada (`T.Amb + 10°C`), nunca um input independente.
+- Seleção de UC/Evaporadora interpola em **dois eixos**: agrupa
+  `PerformanceEquipamento` por T.Ambiente cadastrada, bracketa a T.Ambiente do
+  projeto entre dois grupos, interpola em T.Evaporação dentro de cada grupo
+  (lógica 1D que já existia), depois interpola os dois resultados entre si no
+  eixo T.Ambiente.
+- **Clamp no piso, sem extrapolar no teto:** T.Ambiente do projeto abaixo do
+  menor ponto cadastrado usa esse piso direto (seguro — capacidade real a
+  T.Ambiente menor tende a ser maior, nunca superdimensiona). Acima do maior
+  ponto cadastrado continua sem resultado — extrapolar pra cima seria otimista.
+- **Categoria/fluido com um único ponto de T.Ambiente cadastrado** (toda a
+  Evaporadora hoje — capacidade real não depende de T.Ambiente, só de
+  T.Evaporação, e o cadastro tem um valor-placeholder fixo em 32°C) pula o
+  bracket de T.Ambiente inteiramente, interpola só em T.Evaporação. Sem essa
+  regra, qualquer projeto com T.Ambiente ≠ 32° exatos zerava a busca de
+  Evaporadora.
+- Piso do catálogo hoje: **32°C** pra todo fluido/categoria de Unidade
+  Condensadora — dado real dos fabricantes (Danfoss/Elgin não publicam tabela
+  abaixo disso), não lacuna de cadastro.
+
+---
+
 ## Card 5 — ComponentesFluxo — Estado Atual (completo)
 
 ### Dois modos de seleção
@@ -137,6 +165,7 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 |-----------|----------|-----------|
 | Separador de Líquido | `POST /api/v1/componentes` | banco de dados |
 | Separador de Óleo | `POST /api/v1/componentes` | banco de dados |
+| Válvula de Expansão Termostática (VET) | `POST /api/v1/componentes` | banco de dados; corpo Danfoss T2 fixo, modelo cadastrado como `"T2 - N"` (N = 0 a 6, ou X = menor orifício da linha) |
 | Válvula Solenoide | `POST /api/v1/solenoide/selecionar` | motor Kv interno (R404A/R22) |
 | Filtro Secador (DML/DMC) | `POST /api/v1/acessorios/selecionar` | DML com tanque / DMC sem tanque |
 | Visor de Líquido (SGN) | `POST /api/v1/acessorios/selecionar` | pelo diâmetro da linha de líquido |
@@ -145,6 +174,18 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 | Cavalete (luvas/porcas/reduções) | `POST /api/v1/cavalete/analisar` | análise automática de conexões |
 
 As buscas rodam em paralelo via `Promise.allSettled`. O tanque de líquido e o cavalete são encadeados após a estimativa de carga de fluido.
+
+**Desmembramento em 2 itens na lista (em produção desde 2026-08-31):** VET e
+Válvula Solenoide são compradas como peças separadas na prática, mesmo o
+Card 5 selecionando/mostrando um conjunto só. O desmembramento acontece só na
+hora de montar a lista (orçamento automático e lista de engenharia manual),
+via helper compartilhado `desmembrarItem()` em `ComponentesFluxo.jsx`:
+- VET: `modelo.split(' - ')` → **"Corpo Válvula de Expansão {corpo}"** +
+  **"Orifício de Expansão {orifício}"** (split direto da string já cadastrada,
+  sem dado novo).
+- Solenoide: **"Válvula Solenoide {modelo}"** + **"Bobina Válvula Solenoide"**
+  (genérica, sem tensão — modelagem de tensão por bobina fica pra uma revisão
+  futura, decisão consciente pra não atrasar o lançamento).
 
 **Modo Engenharia**:
 - Abre CoolSelector®2 Online (Danfoss) para seleção manual
@@ -178,6 +219,24 @@ As buscas rodam em paralelo via `Promise.allSettled`. O tanque de líquido e o c
 - Arquivo: `backend/app/services/acessorios.py`
 - Seleção exclusivamente pelo diâmetro da linha de líquido
 - Tamanhos: SGN 6 (1/4"), SGN 10 (3/8"), SGN 12 (1/2"), SGN 16 (5/8"), SGN 19 (3/4"), SGN 22s (7/8")
+
+---
+
+## Card 2 — Cálculo de Carga Térmica
+
+Em produção desde 2026-08-31. Arquivo: `frontend/src/components/CalculadoraCargaTermica.jsx`.
+
+Todos os parâmetros de `CargaTermicaRequest` que o backend já aceitava como
+opcionais viraram campos editáveis na UI (antes vinham hardcoded no payload,
+apesar do schema já suportar qualquer valor): horas de iluminação/dia, horas
+de ocupação/dia, horas de outros motores/dia e margem de segurança (%).
+
+- **Detecção de "dados modificados"** (badge + botão âmbar quando o cálculo
+  fica desatualizado) usa uma lista de dependências **separada** do snapshot
+  de persistência (`onValoresChange`) — são dois `useEffect` distintos. Ao
+  adicionar um campo editável novo neste card, atualizar as **duas** listas,
+  não só a de persistência (foi o bug corrigido em 2026-08-31: mudar a margem
+  de segurança não acendia o aviso).
 
 ---
 
@@ -380,7 +439,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/carga-termica` | POST | Cálculo kcal/h (Card 2) |
 | `/api/v1/selecao` | POST | Busca UC + Evaporadora (Card 3) |
 | `/api/v1/tubulacao` | POST | Dimensionamento ASHRAE (Card 4) |
-| `/api/v1/componentes` | POST | Separadores do banco (Card 5) |
+| `/api/v1/componentes` | POST | Separadores + Válvula de Expansão (VET) do banco (Card 5) |
 | `/api/v1/solenoide/selecionar` | POST | Seleção EVR v2 por Kv (Card 5) |
 | `/api/v1/acessorios/selecionar` | POST | Filtro DML/DMC + Visor SGN (Card 5) |
 | `/api/v1/carga-fluido/estimar` | POST | Estimativa carga fluido em kg (Card 5) |
@@ -468,9 +527,10 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 
 1. **Fluidos suportados no motor de solenoide:** R404A e R22. Para outros, redirecionar ao CoolSelector
 2. **T.Condensação calculada como:** T.Amb + 10°C (padrão de mercado brasileiro)
-3. **Catálogo de componentes no banco:** separadores de líquido e óleo vêm do banco via `/api/v1/componentes`. VET, filtro secador, solenoide e visor são calculados/selecionados pelo próprio sistema
+3. **Catálogo de componentes no banco:** separadores de líquido/óleo e VET vêm do banco via `/api/v1/componentes` (busca direta por fluido/T.Evap/capacidade). Filtro secador, solenoide e visor são calculados/selecionados por algoritmo próprio (não busca direta no banco)
 4. **Catálogo global × catálogo da empresa:** o catálogo técnico (equipamentos, componentes) é global e gerenciado pelo admin SaaS, só especificação, sem preço. Preços e códigos internos por empresa ficam em `produto_empresa` — **Fase B** (ver seção própria acima)
 5. **Campo `temp_condensacao` no banco** armazena T.Amb conforme publicado nos catálogos dos fabricantes brasileiros. T.Cond real = T.Amb + ΔT (nunca assumir fixo)
+6. **Alinhamento de grades de campos** (Cards 1-3, padrão fixado em 2026-08-31): rótulo `min-h-[40px]`, campo principal `h-11`, campo secundário (ex: linha de "horas") `h-9` — evita desalinhamento quando um rótulo quebra em 2 linhas e o vizinho não, ou quando nem todo campo da grade tem uma segunda linha (ex: stepper vs input simples)
 
 ---
 
@@ -504,11 +564,12 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Wizard 6 cards | ✅ funcional |
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
-| Carga térmica | ✅ |
-| Seleção UC + Evaporadora | ✅ |
+| Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
+| Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31 |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
-| Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv |
+| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31 |
+| Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |
 | Card 5 — Filtro secador automático (DML/DMC) | ✅ |
 | Card 5 — Visor de líquido automático (SGN) | ✅ |
 | Card 5 — Tanque de Líquido (NBR 16.069) | ✅ |
