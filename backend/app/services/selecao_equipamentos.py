@@ -101,8 +101,15 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
             if a <= req.temp_ambiente:
                 amb_abaixo = a
                 break
+        if amb_abaixo is None and amb_acima is not None:
+            # T.Ambiente do projeto abaixo do menor ponto cadastrado — clampa no piso
+            # em vez de descartar. Seguro: capacidade real a uma T.Ambiente menor
+            # tende a ser MAIOR que no piso cadastrado (menos pressão de condensação),
+            # nunca menor — não superdimensiona. Extrapolar pra CIMA do maior ponto
+            # cadastrado continua proibido (capacidade cairia, seria otimista).
+            amb_abaixo = amb_acima
         if amb_acima is None or amb_abaixo is None:
-            continue  # T.Ambiente do projeto fora do intervalo cadastrado — não extrapola
+            continue  # T.Ambiente do projeto acima do maior ponto cadastrado — não extrapola
 
         resultado_acima = _capacidade_em_ambiente(por_ambiente[amb_acima], req.temp_evaporacao)
         if resultado_acima is None:
