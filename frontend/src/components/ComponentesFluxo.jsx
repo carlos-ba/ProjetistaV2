@@ -25,6 +25,31 @@ const slugPorCategoria = (cat = '') => {
   return null;
 };
 
+// Válvula de Expansão e Válvula Solenoide são vendidas/compradas como peças
+// separadas na prática, mesmo o Card 5 selecionando/mostrando um conjunto só —
+// desmembra em 2 itens na hora de montar a lista (orçamento/lista de engenharia).
+const desmembrarItem = (categoria = '', modelo = '', detalhe = '', custo = 0) => {
+  const cat = categoria.toLowerCase();
+
+  if ((cat.includes('expansão') || cat.includes('expansao')) && modelo.includes(' - ')) {
+    const [corpo, orificio] = modelo.split(' - ').map(s => s.trim());
+    return [
+      { item: `Corpo Válvula de Expansão ${corpo}`, tipo_item: 'valvula_expansao', quantidade: 1, unidade: 'un', detalhe, custo_unitario: custo, preco: custo },
+      { item: `Orifício de Expansão ${orificio}`, tipo_item: 'valvula_expansao', quantidade: 1, unidade: 'un', detalhe, custo_unitario: 0, preco: 0 },
+    ];
+  }
+
+  if (cat.includes('solenoide')) {
+    return [
+      { item: `Válvula Solenoide ${modelo}`, tipo_item: 'valvula_solenoide', quantidade: 1, unidade: 'un', detalhe, custo_unitario: custo, preco: custo },
+      // Genérica de propósito — tensão fica pra uma revisão futura (jornada própria).
+      { item: 'Bobina Válvula Solenoide', tipo_item: 'valvula_solenoide', quantidade: 1, unidade: 'un', detalhe: 'Genérica — tensão a definir na cotação', custo_unitario: 0, preco: 0 },
+    ];
+  }
+
+  return [{ item: `${categoria} ${modelo}`, tipo_item: slugPorCategoria(categoria), quantidade: 1, unidade: 'un', detalhe, custo_unitario: custo, preco: custo }];
+};
+
 const FLUIDOS_SUPORTADOS = ['R404A', 'R22'];
 
 const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 35, evaporador, condensadora, dadosTubulacao, configuracoesMontagem, aoFinalizar, onCavaleteChange, initialValues, onValoresChange, jaFinalizado = false, invalidado = false, numCircuitos = 1 }) => {
@@ -271,22 +296,15 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const finalizar = () => {
     const itens = componentes
       .filter(c => selecionados[c.categoria])
-      .map(c => ({
-        item: `${c.categoria} ${c.modelo}`,
-        tipo_item: slugPorCategoria(c.categoria),
-        quantidade: 1, unidade: 'un',
-        detalhe: `${c.fabricante} | ${c.conexao_entrada} | ${c.faixa_operacao}`,
-        custo_unitario: c.custo, preco: c.custo,
-      }));
+      .flatMap(c => desmembrarItem(c.categoria, c.modelo, `${c.fabricante} | ${c.conexao_entrada} | ${c.faixa_operacao}`, c.custo));
 
     if (solenoidResult && solenoidSelecionado) {
-      itens.push({
-        item: `Válvula Solenoide ${solenoidResult.modelo}`,
-        tipo_item: 'valvula_solenoide',
-        quantidade: 1, unidade: 'un',
-        detalhe: `Danfoss | Kv ${fmtQtd(solenoidResult.kv)} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
-        custo_unitario: 0, preco: 0,
-      });
+      itens.push(...desmembrarItem(
+        'Válvula Solenoide',
+        solenoidResult.modelo,
+        `Danfoss | Kv ${fmtQtd(solenoidResult.kv)} m³/h | ${Math.round(solenoidResult.capacidade_valvula_kw * 860).toLocaleString('pt-BR')} kcal/h`,
+        0,
+      ));
     }
 
     if (acessorioResult && filtroSelecionado) {
@@ -366,14 +384,12 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     });
     linhasManuais
       .filter(l => l.modelo.trim() && l.categoria)
-      .forEach(l => itens.push({
-        item: `${l.categoria} ${l.modelo}`,
-        tipo_item: slugPorCategoria(l.categoria),
-        quantidade: 1, unidade: 'un',
-        detalhe: [l.fabricante, l.conexao, l.capacidade ? `${fmtQtd(l.capacidade)} kcal/h` : ''].filter(Boolean).join(' | '),
-        custo_unitario: parseFloat(l.custo) || 0,
-        preco: parseFloat(l.custo) || 0,
-      }));
+      .forEach(l => itens.push(...desmembrarItem(
+        l.categoria,
+        l.modelo,
+        [l.fabricante, l.conexao, l.capacidade ? `${fmtQtd(l.capacidade)} kcal/h` : ''].filter(Boolean).join(' | '),
+        parseFloat(l.custo) || 0,
+      )));
     if (aoFinalizar) aoFinalizar(escalarPorCircuitos(itens));
   };
 
