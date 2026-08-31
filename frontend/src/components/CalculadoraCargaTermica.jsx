@@ -129,7 +129,9 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   }, [
     comprimento, largura, altura, tempExterna, tempInterna, espessura, nucleo, tipoPiso,
     categoriaSelecionada, produtoSelecionado, movimentacao, tempEntrada, tempoResfriamento,
-    iluminacao, pessoas, motor, horasFuncionamento
+    metodoInfiltracao, urExterna, urInterna,
+    iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores,
+    horasFuncionamento, fatorSeguranca
   ]);
 
   const calcular = async () => {
