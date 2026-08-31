@@ -94,40 +94,54 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
         for grupo in por_ambiente.values():
             grupo.sort(key=lambda p: p.temp_evaporacao, reverse=True)
 
-        amb_acima = amb_abaixo = None
-        for a in sorted(por_ambiente.keys(), reverse=True):
-            if a >= req.temp_ambiente:
-                amb_acima = a
-            if a <= req.temp_ambiente:
-                amb_abaixo = a
-                break
-        if amb_abaixo is None and amb_acima is not None:
-            # T.Ambiente do projeto abaixo do menor ponto cadastrado — clampa no piso
-            # em vez de descartar. Seguro: capacidade real a uma T.Ambiente menor
-            # tende a ser MAIOR que no piso cadastrado (menos pressão de condensação),
-            # nunca menor — não superdimensiona. Extrapolar pra CIMA do maior ponto
-            # cadastrado continua proibido (capacidade cairia, seria otimista).
-            amb_abaixo = amb_acima
-        if amb_acima is None or amb_abaixo is None:
-            continue  # T.Ambiente do projeto acima do maior ponto cadastrado — não extrapola
-
-        resultado_acima = _capacidade_em_ambiente(por_ambiente[amb_acima], req.temp_evaporacao)
-        if resultado_acima is None:
-            continue
-
-        if amb_acima == amb_abaixo:
+        if len(por_ambiente) == 1:
+            # Só existe UM ponto de T.Ambiente cadastrado pra esse fluido/equipamento
+            # — não há eixo real pra bracketar. Caso normal da Evaporadora: capacidade
+            # não depende de T.Ambiente (só de T.Evaporação), então o cadastro só tem
+            # um valor-placeholder (hoje sempre 32°C) em vez de uma curva de verdade.
+            # Usa esse único ponto direto, sem exigir que a T.Ambiente do projeto caia
+            # dentro de nenhum intervalo — do contrário qualquer T.Ambiente ≠ placeholder
+            # zerava a busca de evaporador.
+            unico_amb = next(iter(por_ambiente))
+            resultado_acima = _capacidade_em_ambiente(por_ambiente[unico_amb], req.temp_evaporacao)
+            if resultado_acima is None:
+                continue
             capacidade, consumo_kw = resultado_acima
         else:
-            resultado_abaixo = _capacidade_em_ambiente(por_ambiente[amb_abaixo], req.temp_evaporacao)
-            if resultado_abaixo is None:
+            amb_acima = amb_abaixo = None
+            for a in sorted(por_ambiente.keys(), reverse=True):
+                if a >= req.temp_ambiente:
+                    amb_acima = a
+                if a <= req.temp_ambiente:
+                    amb_abaixo = a
+                    break
+            if amb_abaixo is None and amb_acima is not None:
+                # T.Ambiente do projeto abaixo do menor ponto cadastrado — clampa no piso
+                # em vez de descartar. Seguro: capacidade real a uma T.Ambiente menor
+                # tende a ser MAIOR que no piso cadastrado (menos pressão de condensação),
+                # nunca menor — não superdimensiona. Extrapolar pra CIMA do maior ponto
+                # cadastrado continua proibido (capacidade cairia, seria otimista).
+                amb_abaixo = amb_acima
+            if amb_acima is None or amb_abaixo is None:
+                continue  # T.Ambiente do projeto acima do maior ponto cadastrado — não extrapola
+
+            resultado_acima = _capacidade_em_ambiente(por_ambiente[amb_acima], req.temp_evaporacao)
+            if resultado_acima is None:
                 continue
-            cap_acima, cons_acima = resultado_acima
-            cap_abaixo, cons_abaixo = resultado_abaixo
-            capacidade = _interpolar(req.temp_ambiente, amb_abaixo, cap_abaixo, amb_acima, cap_acima)
-            if cons_acima is not None and cons_abaixo is not None:
-                consumo_kw = _interpolar(req.temp_ambiente, amb_abaixo, cons_abaixo, amb_acima, cons_acima)
+
+            if amb_acima == amb_abaixo:
+                capacidade, consumo_kw = resultado_acima
             else:
-                consumo_kw = cons_acima if cons_acima is not None else cons_abaixo
+                resultado_abaixo = _capacidade_em_ambiente(por_ambiente[amb_abaixo], req.temp_evaporacao)
+                if resultado_abaixo is None:
+                    continue
+                cap_acima, cons_acima = resultado_acima
+                cap_abaixo, cons_abaixo = resultado_abaixo
+                capacidade = _interpolar(req.temp_ambiente, amb_abaixo, cap_abaixo, amb_acima, cap_acima)
+                if cons_acima is not None and cons_abaixo is not None:
+                    consumo_kw = _interpolar(req.temp_ambiente, amb_abaixo, cons_abaixo, amb_acima, cons_acima)
+                else:
+                    consumo_kw = cons_acima if cons_acima is not None else cons_abaixo
 
         if req.carga_termica_total <= 0:
             continue
