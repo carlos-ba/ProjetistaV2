@@ -48,7 +48,9 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [urInterna, setUrInterna] = useState(initialValues?.urInterna ?? 90);
 
   const [iluminacao, setIluminacao] = useState(initialValues?.iluminacao ?? 0);
+  const [horasIluminacao, setHorasIluminacao] = useState(initialValues?.horasIluminacao ?? 8);
   const [pessoas, setPessoas] = useState(initialValues?.pessoas ?? 0);
+  const [horasPessoas, setHorasPessoas] = useState(initialValues?.horasPessoas ?? 4);
   const [motor, setMotor] = useState(initialValues?.motor ?? 0);
   const [horasFuncionamento, setHorasFuncionamento] = useState(initialValues?.horasFuncionamento ?? 18);
 
@@ -60,8 +62,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
-  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, pessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
 
   // Produtos filtrados com base na categoria
   const produtosFiltrados = categoriaSelecionada
@@ -144,9 +146,9 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       temp_entrada_produto: parseFloat(tempEntrada) || 0,
       tempo_resfriamento_h: parseFloat(tempoResfriamento) || 24,
       potencia_iluminacao_w: parseFloat(iluminacao) || 0,
-      horas_iluminacao_dia: 8,
+      horas_iluminacao_dia: parseFloat(horasIluminacao) || 0,
       numero_pessoas: parseFloat(pessoas) || 0,
-      horas_pessoas_dia: 4,
+      horas_pessoas_dia: parseFloat(horasPessoas) || 0,
       potencia_outros_motores_w: parseFloat(motor) || 0,
       horas_outros_motores_dia: 18,
       tipo_piso: tipoPiso,
@@ -369,10 +371,26 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
                <span className="font-bold text-lg w-8 text-center">{pessoas}</span>
                <button onClick={() => setPessoas(pessoas + 1)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">+</button>
             </div>
+            <input
+              type="number"
+              value={horasPessoas}
+              onChange={e=>setHorasPessoas(e.target.value)}
+              min="0" max="24"
+              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
+            />
+            <p className="text-[10px] text-slate-500 text-center">Horas de permanência/dia</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 block">Iluminação (W)</label>
             <input type="number" value={iluminacao} onChange={e=>setIluminacao(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900" />
+            <input
+              type="number"
+              value={horasIluminacao}
+              onChange={e=>setHorasIluminacao(e.target.value)}
+              min="0" max="24"
+              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
+            />
+            <p className="text-[10px] text-slate-500 text-center">Horas de uso/dia</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 block">Outros Motores (W)</label>
