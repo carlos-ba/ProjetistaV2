@@ -370,7 +370,6 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                           )}
                         </div>
                       )}
-                      <div className="text-xl font-bold text-blue-600">R$ {item.preco.toLocaleString('pt-BR')}</div>
 
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Quantidade de Unidades</label>
