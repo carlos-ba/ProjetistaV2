@@ -206,34 +206,34 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
         {/* Parâmetros */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Carga Total (kcal/h)</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">Carga Total (kcal/h)</label>
             <input type="number" value={cargaTotal} onChange={e => setCargaTotal(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+              className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Nº Equipamentos</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">Nº Equipamentos</label>
             <input type="number" min="1" value={numMaquinas}
               onChange={e => setNumMaquinas(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+              className="w-full h-11 px-4 rounded-lg border border-blue-200 bg-blue-50 font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Ref. p/ Máquina</label>
-            <div className="w-full px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 font-black text-slate-700">
-              {cargaReferencia} <small className="font-normal text-[9px]">kcal/h</small>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">Ref. p/ Máquina</label>
+            <div className="w-full h-11 px-4 rounded-lg border border-slate-200 bg-slate-50 font-black text-slate-700 flex items-center">
+              {cargaReferencia} <small className="font-normal text-[9px] ml-1">kcal/h</small>
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Delta T (°C)</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">Delta T (°C)</label>
             <input type="number" value={deltaT} onChange={e => setDeltaT(e.target.value)} placeholder="Ex: 6"
-              className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+              className="w-full h-11 px-4 rounded-lg border border-blue-200 bg-blue-50 font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">T. Evap (°C)</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">T. Evap (°C)</label>
             <input type="number" value={evap} onChange={e => setEvap(e.target.value)} placeholder="Calculada automaticamente"
-              className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+              className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">T. Condensação estimada</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">T. Condensação estimada</label>
             <div className="w-full px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 font-black text-amber-700 text-sm">
               {fmtQtd(cond)}°C
               <div className="text-[9px] font-normal text-amber-600 leading-tight mt-0.5">
@@ -242,9 +242,9 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Fluido</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase min-h-[38px] flex items-end">Fluido</label>
             <select value={fluido} onChange={e => setFluido(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+              className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
               <option value="R22">R22</option>
               <option value="R404A">R404A</option>
             </select>
