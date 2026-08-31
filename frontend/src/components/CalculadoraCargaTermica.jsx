@@ -52,6 +52,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [pessoas, setPessoas] = useState(initialValues?.pessoas ?? 0);
   const [horasPessoas, setHorasPessoas] = useState(initialValues?.horasPessoas ?? 4);
   const [motor, setMotor] = useState(initialValues?.motor ?? 0);
+  const [horasOutrosMotores, setHorasOutrosMotores] = useState(initialValues?.horasOutrosMotores ?? 18);
   const [horasFuncionamento, setHorasFuncionamento] = useState(initialValues?.horasFuncionamento ?? 18);
 
   const [produtoDetalhe, setProdutoDetalhe] = useState(null);
@@ -62,8 +63,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
-  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
 
   // Produtos filtrados com base na categoria
   const produtosFiltrados = categoriaSelecionada
@@ -150,7 +151,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       numero_pessoas: parseFloat(pessoas) || 0,
       horas_pessoas_dia: parseFloat(horasPessoas) || 0,
       potencia_outros_motores_w: parseFloat(motor) || 0,
-      horas_outros_motores_dia: 18,
+      horas_outros_motores_dia: parseFloat(horasOutrosMotores) || 0,
       tipo_piso: tipoPiso,
       calcular_infiltracao: true,
       metodo_infiltracao: metodoInfiltracao,
@@ -365,8 +366,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
         {/* Cargas Internas e Configurações de Tempo */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 block text-center">Pessoas</label>
-            <div className="flex items-center justify-center gap-3 bg-white border border-slate-200 rounded-xl p-2">
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center justify-center text-center">Pessoas</label>
+            <div className="h-11 flex items-center justify-center gap-3 bg-white border border-slate-200 rounded-xl px-2">
                <button onClick={() => setPessoas(Math.max(0, pessoas - 1))} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">-</button>
                <span className="font-bold text-lg w-8 text-center">{pessoas}</span>
                <button onClick={() => setPessoas(pessoas + 1)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">+</button>
@@ -376,38 +377,45 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
               value={horasPessoas}
               onChange={e=>setHorasPessoas(e.target.value)}
               min="0" max="24"
-              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
             />
             <p className="text-[10px] text-slate-500 text-center">Horas de permanência/dia</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 block">Iluminação (W)</label>
-            <input type="number" value={iluminacao} onChange={e=>setIluminacao(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900" />
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center">Iluminação (W)</label>
+            <input type="number" value={iluminacao} onChange={e=>setIluminacao(e.target.value)} className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900" />
             <input
               type="number"
               value={horasIluminacao}
               onChange={e=>setHorasIluminacao(e.target.value)}
               min="0" max="24"
-              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
             />
             <p className="text-[10px] text-slate-500 text-center">Horas de uso/dia</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 block">Outros Motores (W)</label>
-            <input type="number" value={motor} onChange={e=>setMotor(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900" />
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center">Outros Motores (W)</label>
+            <input type="number" value={motor} onChange={e=>setMotor(e.target.value)} className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900" />
+            <input
+              type="number"
+              value={horasOutrosMotores}
+              onChange={e=>setHorasOutrosMotores(e.target.value)}
+              min="0" max="24"
+              className="w-full h-9 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 text-sm"
+            />
+            <p className="text-[10px] text-slate-500 text-center">Horas de uso/dia</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 block">Funcionamento (h/dia)</label>
-            <div className="relative">
-              <input 
-                type="number" 
-                value={horasFuncionamento} 
-                onChange={e=>setHorasFuncionamento(e.target.value)} 
-                min="1" max="24"
-                className="w-full px-4 py-2 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none" 
-              />
-              <p className="text-[9px] text-blue-600 mt-1 font-bold italic">💡 Recomendado: 16h a 20h</p>
-            </div>
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center">Funcionamento (h/dia)</label>
+            <input
+              type="number"
+              value={horasFuncionamento}
+              onChange={e=>setHorasFuncionamento(e.target.value)}
+              min="1" max="24"
+              className="w-full h-11 px-4 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+            <div className="h-9" />
+            <p className="text-[9px] text-blue-600 font-bold italic text-center">💡 Recomendado: 16h a 20h</p>
           </div>
         </div>
 
