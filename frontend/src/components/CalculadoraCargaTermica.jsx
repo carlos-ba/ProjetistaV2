@@ -54,6 +54,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [motor, setMotor] = useState(initialValues?.motor ?? 0);
   const [horasOutrosMotores, setHorasOutrosMotores] = useState(initialValues?.horasOutrosMotores ?? 18);
   const [horasFuncionamento, setHorasFuncionamento] = useState(initialValues?.horasFuncionamento ?? 18);
+  const [fatorSeguranca, setFatorSeguranca] = useState(initialValues?.fatorSeguranca ?? 10);
 
   const [produtoDetalhe, setProdutoDetalhe] = useState(null);
 
@@ -63,8 +64,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
-  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
+    if (onValoresChange) onValoresChange({ movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, fatorSeguranca, categoriaSelecionada, produtoSelecionado, produtoNome: produtoDetalhe?.nome ?? null, resultado });
+  }, [movimentacao, tempEntrada, tempoResfriamento, metodoInfiltracao, urExterna, urInterna, iluminacao, horasIluminacao, pessoas, horasPessoas, motor, horasOutrosMotores, horasFuncionamento, fatorSeguranca, categoriaSelecionada, produtoSelecionado, produtoDetalhe, resultado]);
 
   // Produtos filtrados com base na categoria
   const produtosFiltrados = categoriaSelecionada
@@ -157,7 +158,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       metodo_infiltracao: metodoInfiltracao,
       ur_externa: parseFloat(urExterna) || 60,
       ur_interna: parseFloat(urInterna) || 90,
-      fator_seguranca_perc: 10,
+      fator_seguranca_perc: parseFloat(fatorSeguranca) || 0,
       horas_funcionamento_motor: parseFloat(horasFuncionamento) || 18
     };
 
@@ -364,7 +365,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
         </div>
 
         {/* Cargas Internas e Configurações de Tempo */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center justify-center text-center">Pessoas</label>
             <div className="h-11 flex items-center justify-center gap-3 bg-white border border-slate-200 rounded-xl px-2">
@@ -416,6 +417,18 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
             />
             <div className="h-9" />
             <p className="text-[9px] text-blue-600 font-bold italic text-center">💡 Recomendado: 16h a 20h</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-center">Margem de Segurança (%)</label>
+            <input
+              type="number"
+              value={fatorSeguranca}
+              onChange={e=>setFatorSeguranca(e.target.value)}
+              min="0" max="100"
+              className="w-full h-11 px-4 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+            <div className="h-9" />
+            <p className="text-[9px] text-blue-600 font-bold italic text-center">Aplicada sobre a carga líquida total</p>
           </div>
         </div>
 
@@ -522,7 +535,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
                   <span>{fmtQtd(resultado.carga_total_24h_kcalh)} kcal/h</span>
                 </li>
                 <li className="flex justify-between items-center text-emerald-600 text-xs italic">
-                  <span>Fator de Segurança ({fmtQtd(resultado.fator_seguranca_aplicado)}):</span>
+                  <span>Fator de Segurança ({resultado.fator_seguranca_aplicado}):</span>
                   <span>+ {fmtQtd(Math.round(resultado.carga_total_com_seguranca_kcalh - resultado.carga_total_24h_kcalh))} kcal/h</span>
                 </li>
 
