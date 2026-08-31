@@ -413,22 +413,22 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             ['Largura (m)',     largura,     setLargura,     'Ex: 4.00'],
             ['Altura (m)',      altura,      setAltura,      'Ex: 3.00']].map(([label, val, set, ph]) => (
             <div key={label} className="space-y-1">
-              <label className="text-sm font-semibold text-slate-700 block">{label}</label>
+              <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-end">{label}</label>
               <input type="number" value={val} onChange={handleInputChange(set)} placeholder={ph}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" />
+                className="w-full h-11 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
           ))}
           <div className="space-y-1">
-            <label className="text-sm font-semibold text-slate-700 block">Temperatura Interna (°C)</label>
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-end">Temperatura Interna (°C)</label>
             <input type="number" value={temperaturaInterna} onChange={handleInputChange(setTemperaturaInterna)} placeholder="Ex: -18"
-              className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+              className="w-full h-11 px-4 rounded-lg border border-blue-200 bg-blue-50 text-blue-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-semibold text-slate-700 block" title="Usada em toda a jornada — carga térmica, T.Condensação (T.Ambiente + 10°C) e seleção de equipamentos.">
+            <label className="text-sm font-semibold text-slate-700 min-h-[40px] flex items-end" title="Usada em toda a jornada — carga térmica, T.Condensação (T.Ambiente + 10°C) e seleção de equipamentos.">
               Temperatura Ambiente (°C)
             </label>
             <input type="number" value={temperaturaAmbiente} onChange={handleInputChange(setTemperaturaAmbiente)} placeholder="Ex: 35"
-              className="w-full px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 font-medium focus:ring-2 focus:ring-amber-500 outline-none" />
+              className="w-full h-11 px-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 font-medium focus:ring-2 focus:ring-amber-500 outline-none" />
           </div>
         </div>
 
