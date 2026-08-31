@@ -80,7 +80,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // ── Modo Engenharia ───────────────────────────────────────────────────
   const [linhasManuais, setLinhasManuais] = useState(initialValues?.linhasManuais ?? [novaLinhaManual()]);
-  const [tempAmb, setTempAmb] = useState(tempAmbProp);
+  // T.Ambiente é mandatária a partir do Card 1 — este card só consome, nunca reedita.
+  const tempAmb = tempAmbProp;
 
   // Captura se havia dados salvos NO MOMENTO DO MOUNT (não após auto-sync via onValoresChange)
   const projetoSalvoNoMount = React.useRef(!!initialValues);
@@ -89,8 +90,6 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais });
   }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
   const tempCond = tempAmb + 10;
-
-  React.useEffect(() => { setTempAmb(tempAmbProp); }, [tempAmbProp]);
 
   // Notifica App.jsx sempre que o resultado do cavalete ou tanque muda
   React.useEffect(() => {
@@ -863,12 +862,9 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </div>
                 <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
                   <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">T. Ambiente:</span>
-                  <input
-                    type="number" value={tempAmb}
-                    onChange={e => setTempAmb(parseInt(e.target.value) || 32)}
-                    className="w-16 px-2 py-1 rounded border border-slate-300 text-center text-sm font-bold outline-none"
-                  />
-                  <span className="text-[10px] text-slate-400">°C → T.Cond = {fmtQtd(tempAmb)} + 10 = <strong>{fmtQtd(tempCond)}°C</strong></span>
+                  <span className="text-sm font-black text-slate-800">{fmtQtd(tempAmb)}°C</span>
+                  <span className="text-[10px] text-slate-400">→ T.Cond = {fmtQtd(tempAmb)} + 10 = <strong>{fmtQtd(tempCond)}°C</strong></span>
+                  <span className="text-[9px] text-slate-400 italic ml-auto">definida no Card 1</span>
                 </div>
               </div>
 

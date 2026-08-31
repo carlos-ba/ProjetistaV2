@@ -30,6 +30,42 @@ def _consumo_kw(ponto_acima, ponto_abaixo, temp_evaporacao: float) -> float | No
     return ca if ca is not None else cb
 
 
+def _bracket(pontos_desc: list, valor: float, attr: str):
+    """Acha o ponto imediatamente acima e abaixo de `valor` no atributo `attr`,
+    dado `pontos_desc` já ordenado descendente por esse atributo e sem empates
+    nesse atributo (garantido pela chave única do cadastro dentro de um mesmo
+    grupo de T.Ambiente). None em algum lado => `valor` está fora do intervalo
+    cadastrado — não extrapola."""
+    acima = None
+    abaixo = None
+    for p in pontos_desc:
+        v = getattr(p, attr)
+        if v >= valor:
+            acima = p
+        if v <= valor:
+            abaixo = p
+            break
+    return acima, abaixo
+
+
+def _capacidade_em_ambiente(pontos_evap_desc: list, temp_evaporacao: float) -> tuple[float, float | None] | None:
+    """Capacidade e consumo_kw interpolados em T.Evaporação, dentro de UM grupo
+    de T.Ambiente fixo (mesma regra de interpolação de sempre). None se
+    T.Evaporação sai do intervalo cadastrado pra esse grupo."""
+    acima, abaixo = _bracket(pontos_evap_desc, temp_evaporacao, "temp_evaporacao")
+    if not (acima and abaixo):
+        return None
+    if acima.temp_evaporacao == temp_evaporacao:
+        capacidade = float(acima.capacidade)
+    else:
+        capacidade = _interpolar(
+            temp_evaporacao,
+            float(abaixo.temp_evaporacao), float(abaixo.capacidade),
+            float(acima.temp_evaporacao), float(acima.capacidade),
+        )
+    return capacidade, _consumo_kw(acima, abaixo, temp_evaporacao)
+
+
 async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> list[EquipamentoSelecionado]:
     result = await db.execute(
         select(Equipamento)
@@ -46,35 +82,45 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
     candidatos: list[EquipamentoSelecionado] = []
 
     for eq in equipamentos:
-        pontos = sorted(
-            [p for p in eq.performance if p.fluido == req.fluido],
-            key=lambda p: p.temp_evaporacao,
-            reverse=True,
-        )
-        if not pontos:
+        pontos_fluido = [p for p in eq.performance if p.fluido == req.fluido]
+        if not pontos_fluido:
             continue
 
-        ponto_acima = None
-        ponto_abaixo = None
-        for p in pontos:
-            if p.temp_evaporacao >= req.temp_evaporacao:
-                ponto_acima = p
-            if p.temp_evaporacao <= req.temp_evaporacao:
-                ponto_abaixo = p
+        # Agrupa por T.Ambiente cadastrada — cada grupo é uma curva em T.Evaporação,
+        # exatamente como antes; a novidade é interpolar TAMBÉM entre grupos.
+        por_ambiente: dict[int, list] = {}
+        for p in pontos_fluido:
+            por_ambiente.setdefault(p.temp_ambiente, []).append(p)
+        for grupo in por_ambiente.values():
+            grupo.sort(key=lambda p: p.temp_evaporacao, reverse=True)
+
+        amb_acima = amb_abaixo = None
+        for a in sorted(por_ambiente.keys(), reverse=True):
+            if a >= req.temp_ambiente:
+                amb_acima = a
+            if a <= req.temp_ambiente:
+                amb_abaixo = a
                 break
+        if amb_acima is None or amb_abaixo is None:
+            continue  # T.Ambiente do projeto fora do intervalo cadastrado — não extrapola
 
-        if ponto_acima and ponto_acima.temp_evaporacao == req.temp_evaporacao:
-            capacidade = float(ponto_acima.capacidade)
-        elif ponto_acima and ponto_abaixo:
-            capacidade = _interpolar(
-                req.temp_evaporacao,
-                float(ponto_abaixo.temp_evaporacao), float(ponto_abaixo.capacidade),
-                float(ponto_acima.temp_evaporacao), float(ponto_acima.capacidade),
-            )
-        else:
+        resultado_acima = _capacidade_em_ambiente(por_ambiente[amb_acima], req.temp_evaporacao)
+        if resultado_acima is None:
             continue
 
-        consumo_kw = _consumo_kw(ponto_acima, ponto_abaixo, req.temp_evaporacao)
+        if amb_acima == amb_abaixo:
+            capacidade, consumo_kw = resultado_acima
+        else:
+            resultado_abaixo = _capacidade_em_ambiente(por_ambiente[amb_abaixo], req.temp_evaporacao)
+            if resultado_abaixo is None:
+                continue
+            cap_acima, cons_acima = resultado_acima
+            cap_abaixo, cons_abaixo = resultado_abaixo
+            capacidade = _interpolar(req.temp_ambiente, amb_abaixo, cap_abaixo, amb_acima, cap_acima)
+            if cons_acima is not None and cons_abaixo is not None:
+                consumo_kw = _interpolar(req.temp_ambiente, amb_abaixo, cons_abaixo, amb_acima, cons_acima)
+            else:
+                consumo_kw = cons_acima if cons_acima is not None else cons_abaixo
 
         if req.carga_termica_total <= 0:
             continue

@@ -108,6 +108,8 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       if (dadosIniciais.largura) setLargura(dadosIniciais.largura);
       if (dadosIniciais.altura) setAltura(dadosIniciais.altura);
       if (dadosIniciais.temperatura_interna !== undefined) setTempInterna(dadosIniciais.temperatura_interna);
+      // T.Ambiente é mandatária a partir do Card 1 — antes ficava sempre em 35 fixo aqui.
+      if (dadosIniciais.temperatura_ambiente !== undefined) setTempExterna(dadosIniciais.temperatura_ambiente);
       if (dadosIniciais.espessura) setEspessura(dadosIniciais.espessura);
       if (dadosIniciais.nucleo) setNucleo(dadosIniciais.nucleo);
       if (dadosIniciais.tipo_piso) setTipoPiso(dadosIniciais.tipo_piso);
@@ -160,7 +162,7 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
       const response = await api.post('/api/v1/carga-termica', payload);
       setResultado(response.data);
       setStatusCalculo('pronto');
-      if (aoFinalizar) aoFinalizar(response.data.capacidade_requerida_equipamento_kcalh, parseFloat(tempExterna));
+      if (aoFinalizar) aoFinalizar(response.data.capacidade_requerida_equipamento_kcalh);
     } catch (error) {
       console.error("Erro no cálculo:", error);
       setErro(error.response?.data?.erro || 'Erro ao calcular carga térmica.');

@@ -49,7 +49,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     const params = {
       carga_termica_total: Math.round((initialValues.cargaTotal ?? 2000) / (initialValues.numMaquinas ?? 1)),
       temp_evaporacao:     evapVal,
-      temp_condensacao:    initialValues.cond ?? 45,
+      temp_ambiente:       tempAmb,
       fluido:              initialValues.fluido ?? 'R22',
     };
     // Se o projeto salvo já tinha uma UC como base, restaura os evaporadores pela capacidade dela
@@ -94,7 +94,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     const params = {
       carga_termica_total: cargaReferencia,
       temp_evaporacao:     evapVal,
-      temp_condensacao:    cond,
+      temp_ambiente:       tempAmb,
       fluido,
     };
 
@@ -135,7 +135,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       const res = await api.post('/api/v1/selecao', {
         carga_termica_total: cap,
         temp_evaporacao:     evapVal,
-        temp_condensacao:    cond,
+        temp_ambiente:       tempAmb,
         fluido,
         tipo:                'Evaporadora',
       });

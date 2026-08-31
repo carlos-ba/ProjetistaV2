@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class SelecaoRequest(BaseModel):
     carga_termica_total: float
     temp_evaporacao: float = -10.0
-    temp_ambiente: float = 32.0    # T.Amb do projeto — usado para filtrar o catálogo
+    temp_ambiente: float = 35.0    # T.Amb do projeto — variável mandatária; T.Cond = T.Amb+10 é derivada, nunca enviada
     fluido: str = "R22"
     tipo: str = "Unidade Condensadora"
 

@@ -19,6 +19,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   const [largura, setLargura] = useState(initialValues?.largura ?? '');
   const [altura, setAltura] = useState(initialValues?.altura ?? '');
   const [temperaturaInterna, setTemperaturaInterna] = useState(initialValues?.temperaturaInterna ?? '');
+  // T.Ambiente é a variável mandatária em todo motor de cálculo/seleção — os
+  // outros cards (Carga Térmica, Seleção de UC, Componentes) só a exibem,
+  // nunca reeditam. 35°C é sugestão de padrão de mercado, não valor fixo.
+  const [temperaturaAmbiente, setTemperaturaAmbiente] = useState(initialValues?.temperaturaAmbiente ?? 35);
   const [tipoPiso, setTipoPiso] = useState(initialValues?.tipoPiso ?? 'painel');
   const [espessuraConcreto, setEspessuraConcreto] = useState(initialValues?.espessuraConcreto ?? '');
   const [pisoRebaixado, setPisoRebaixado] = useState(initialValues?.pisoRebaixado ?? false);
@@ -73,11 +77,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // Snapshot — salva apenas os 4 valores selecionados (as listas são derivadas)
   useEffect(() => {
     if (onValoresChange) onValoresChange({
-      comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, pisoRebaixado,
+      comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
     });
-  }, [comprimento, largura, altura, temperaturaInterna, tipoPiso, espessuraConcreto, pisoRebaixado,
+  }, [comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra]);
   const [erro, setErro] = useState('');
@@ -234,6 +238,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       largura: parseFloat(largura),
       altura: parseFloat(altura),
       temperatura_interna: parseFloat(temperaturaInterna),
+      temperatura_ambiente: parseFloat(temperaturaAmbiente) || 35,
       // Usa espessuraSelecionada diretamente para que o PainelInsights reaja
       // imediatamente à troca, mesmo quando painelSelecionado ainda é null
       // (ex: usuário mudou espessura mas ainda não escolheu largura)
@@ -300,7 +305,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         ...portasMateriais,
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -309,9 +314,9 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (!validos) { aoFinalizar(null); return; }
     // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
     const portasKey = portasSelecionadas.map(p => `${p.porta.id}x${p.qtde}`).join(',');
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey, modoCompra, barra: comprimentoBarra });
+    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey, modoCompra, barra: comprimentoBarra });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -403,7 +408,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       <div className="p-6" onFocus={() => { carregandoDoArquivo.current = false; }} onInput={() => { carregandoDoArquivo.current = false; }}>
 
         {/* Dimensões */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           {[['Comprimento (m)', comprimento, setComprimento, 'Ex: 5.00'],
             ['Largura (m)',     largura,     setLargura,     'Ex: 4.00'],
             ['Altura (m)',      altura,      setAltura,      'Ex: 3.00']].map(([label, val, set, ph]) => (
@@ -417,6 +422,13 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             <label className="text-sm font-semibold text-slate-700 block">Temperatura Interna (°C)</label>
             <input type="number" value={temperaturaInterna} onChange={handleInputChange(setTemperaturaInterna)} placeholder="Ex: -18"
               className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-semibold text-slate-700 block" title="Usada em toda a jornada — carga térmica, T.Condensação (T.Ambiente + 10°C) e seleção de equipamentos.">
+              Temperatura Ambiente (°C)
+            </label>
+            <input type="number" value={temperaturaAmbiente} onChange={handleInputChange(setTemperaturaAmbiente)} placeholder="Ex: 35"
+              className="w-full px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 font-medium focus:ring-2 focus:ring-amber-500 outline-none" />
           </div>
         </div>
 

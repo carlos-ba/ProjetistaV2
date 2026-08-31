@@ -55,7 +55,9 @@ function AppContent({ catalogo }) {
   const [deltaTCalculado, setDeltaTCalculado] = useState(null);
   const [cargaCalculada, setCargaCalculada] = useState(null);
   const [itensOrcamento, setItensOrcamento] = useState({ materiais: [], equipamentos: [] });
-  const [tempExternaCalculo, setTempExternaCalculo] = useState(35); // T.Amb do Card 2
+  // T.Ambiente é mandatária a partir do Card 1 — os outros cards só a consomem.
+  // 35°C é o padrão de mercado quando o gabinete ainda não foi confirmado.
+  const tempExternaCalculo = dadosDoGabinete?.temperatura_ambiente ?? 35;
   const [itensGabinete,   setItensGabinete]   = useState([]);   // step 1 — lista de corte de painéis
   const [itensAcessorios, setItensAcessorios] = useState([]);   // step 5 — componentes de fluxo
   const [itensTubulacao,  setItensTubulacao]  = useState([]);   // step 4 — tubulação
@@ -140,6 +142,7 @@ function AppContent({ catalogo }) {
       largura: dadosCompletos.largura,
       altura: dadosCompletos.altura,
       temperatura_interna: dadosCompletos.temperatura_interna,
+      temperatura_ambiente: dadosCompletos.temperatura_ambiente,
       espessura: dadosCompletos.espessura,
       nucleo: dadosCompletos.nucleo,
       tipo_piso: dadosCompletos.tipo_piso,
@@ -178,9 +181,8 @@ function AppContent({ catalogo }) {
   }, []);
 
   // 2. Recebe da Carga Térmica (Módulo 2)
-  const receberResultadoCarga = useCallback((valorKcal, tempExt) => {
+  const receberResultadoCarga = useCallback((valorKcal) => {
     setCargaCalculada(valorKcal);
-    if (tempExt) setTempExternaCalculo(tempExt);
     if (!carregandoProjetoRef.current) {
       setInvalidados(p => ({ ...p, 2: false, 3: true, 4: true, 5: true, 6: true }));
     }
@@ -342,7 +344,6 @@ function AppContent({ catalogo }) {
     setProjetoAtual(null);
     setGabineteCalculado(false);
     setDeltaTCalculado(null);
-    setTempExternaCalculo(35);   // reset T.Amb
     setProximaEtapa(null);       // reset confirmação pendente
     gabineteCalculadoRef.current = false;
     // projetoKey incrementado remonta TODOS os cards (key propagada)
@@ -728,7 +729,7 @@ function AppContent({ catalogo }) {
             <Separator className="mb-3" />
             <PainelInsights
               dimensoes={{ comp: dadosDoGabinete.comprimento, larg: dadosDoGabinete.largura, alt: dadosDoGabinete.altura }}
-              temps={{ interna: dadosDoGabinete.temperatura_interna, externa: 35,
+              temps={{ interna: dadosDoGabinete.temperatura_interna, externa: tempExternaCalculo,
                 evap: deltaTCalculado != null ? parseFloat(dadosDoGabinete.temperatura_interna) - parseFloat(deltaTCalculado) : NaN }}
               isolamento={{ esp: dadosDoGabinete.espessura, nuc: dadosDoGabinete.nucleo }}
               cargaCalculada={cargaCalculada}
