@@ -182,6 +182,21 @@ async def analisar_pdf_cotacao(
         except json.JSONDecodeError:
             logger.warning("cotacao_pdf: campo 'itens' veio como string e não é JSON válido")
             itens_ia = []
+    if isinstance(itens_ia, dict):
+        # Mesma inconsistência do caso acima, formato diferente: a IA às vezes reembrulha
+        # a resposta inteira dentro do campo ("itens": {"itens": [...]}), nativo ou
+        # serializado como string (pega no ramo acima e cai aqui já como dict) — achado
+        # em produção, 2026-09-01, testando o próprio fix do caso string. Desembrulha a
+        # chave "itens" primeiro; só cai pro fallback genérico se a forma for outra.
+        if isinstance(itens_ia.get("itens"), list):
+            logger.warning("cotacao_pdf: campo 'itens' veio reembrulhado ({'itens': [...]}) — desembrulhando")
+            itens_ia = itens_ia["itens"]
+        else:
+            logger.warning("cotacao_pdf: campo 'itens' veio como dict — convertendo pra lista")
+            itens_ia = list(itens_ia.values())
+    if not isinstance(itens_ia, list):
+        logger.warning("cotacao_pdf: campo 'itens' veio em formato inesperado (%s)", type(itens_ia).__name__)
+        itens_ia = []
     logger.warning(
         "cotacao_pdf: %d itens brutos recebidos, tipos=%s, %d itens no nosso lado",
         len(itens_ia), [type(x).__name__ for x in itens_ia[:10]], len(itens_banco),
