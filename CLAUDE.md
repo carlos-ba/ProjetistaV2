@@ -61,7 +61,7 @@ antigo por serem registro histórico — não foram reemitidos.
 | Deploy backend | Render (auto-deploy no push para `main`) |
 | Deploy frontend | Vercel (auto-deploy no push para `main`) |
 | Site institucional | Next.js em `site-ecosistema/`, Vercel próprio (Root Directory `site-ecosistema`, auto-deploy no push para `main`) |
-| Migrations | Alembic (0001→0026), roda no `startCommand` do Render |
+| Migrations | Alembic (0001→0029), roda no `startCommand` do Render |
 
 ---
 
@@ -116,7 +116,7 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 
 | Card | Componente | Descrição |
 |------|-----------|-----------|
-| 1 | `CalculadoraGabinete.jsx` | Dimensões, isolamento (painel PIR Kingspan), temperatura interna, tipo de piso, portas frigoríficas |
+| 1 | `CalculadoraGabinete.jsx` | Dimensões, isolamento (painel PIR Kingspan), temperatura interna, tipo de piso, portas frigoríficas, kit de montagem (perfis/selante/rebite/parafuso) |
 | 2 | `CalculadoraCargaTermica.jsx` | Cálculo de carga térmica (kcal/h) |
 | 3 | `SelecaoEquipamentos.jsx` | Seleção de UC + Evaporadora do banco de dados |
 | 4 | `CalculadoraTubulacao.jsx` | Dimensionamento de tubulação (bitolas ASHRAE) + isolamento Armacel |
@@ -124,6 +124,61 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 | 6 | `GeradorOrcamento.jsx` | Geração de orçamento + Lista de Engenharia (Excel/PDF) + cotação Excel + proposta comercial PDF |
 
 **Atenção:** o Card 5 (ComponentesFluxo) é o mais complexo — leia a seção abaixo com atenção.
+
+---
+
+## Card 1 — Kit de Montagem (perfis, selante, rebite, parafuso+bucha)
+
+Em produção desde 2026-09-01. Arquivos: `backend/app/services/kit_montagem.py`
+(seleção + cálculo), `backend/app/services/calculos_gabinete.py` (geometria),
+`backend/app/models/kit_montagem.py`, `backend/app/models/perfil_metalico.py`.
+Design completo: `DESIGN_KIT_MONTAGEM_2026-09-01.md`.
+
+Substitui a antiga linha única "Acessórios de Montagem (Kit)" (placeholder em
+m², sem cálculo real) por uma lista de itens de verdade, resolvida dentro de
+`POST /api/v1/gabinete`.
+
+- **Fica no Card 1, não no Card 5** — mesmo dependendo do banco (como os do
+  Card 5), a geometria que usa (perímetro do teto/piso, altura da parede,
+  espessura do painel) já é calculada dentro de `calcular_gabinete()`; não tem
+  nenhuma dependência do domínio de refrigeração (fluido, T.Evap etc).
+  `calculos_gabinete.py` continua síncrono/sem DB — o kit é resolvido à parte
+  em `kit_montagem.py`, chamado pela rota, que junta os dois resultados.
+- **Seleção automática cobre 3 dos 5 tipos de perfil** (Ângulo Externo, Ângulo
+  Interno, U) — Liso, Z, e qualquer variação fora do padrão de 40mm (aba
+  configurável em `ConfiguracaoMontagem.largura_aba_padrao_mm`) só entram via
+  seleção manual no próprio Card 1 (catálogo servido por
+  `GET /api/v1/catalogo/perfis-metalicos`).
+- **Fallback de medida:** quando a espessura do painel não bate exato com
+  nenhuma medida cadastrada, pega o próximo tamanho **acima** (nunca abaixo) e
+  sinaliza no `detalhe` do item ("sem medida exata... usado Xmm").
+- **`avisos_kit_montagem`** na resposta do `/api/v1/gabinete`: quando não
+  existe nenhum perfil compatível no catálogo (ou selante/rebite/parafuso não
+  cadastrados), o item simplesmente não entra na lista — sem esse campo,
+  sumia em silêncio, sem indicar ao técnico que faltou cadastro. Renderizado
+  como banner vermelho no Card 1, acima da tabela de materiais.
+- **Selante de PU:** metros lineares de todos os perfis (auto + manual, em
+  barras já arredondadas pra cima) × 2, mais área de painéis × 0,145 — tudo
+  ÷ rendimento (`ConfiguracaoMontagem.rendimento_selante_m_por_embalagem`),
+  com fator de segurança editável no próprio Card 1 (campo independente da
+  margem de segurança do Card 2).
+- **Rebite:** metros lineares totais × 1000 ÷ 200, × 2 (duas linhas por perfil).
+- **Parafuso+Bucha:** só no Perfil U (piso) — metros lineares × 1000 ÷ 500
+  (uma linha só).
+- **Selante/Rebite/Parafuso+Bucha são catálogos pequenos de propósito**
+  (cadastro simples: fabricante + código + descrição, ~1 linha cada, sem
+  seleção por especificação) — decisão consciente de não construir
+  importador nem tela de admin pra isso (desproporcional ao volume de dado).
+  Cadastro novo/atualização = migration com `bulk_insert`, mesmo padrão já
+  usado pra `embalagem_fluido` (0024).
+- **Classificação:** os `tipo_item` novos (`perfil_angulo_externo`,
+  `perfil_angulo_interno`, `perfil_u`, `perfil_manual`, `selante_montagem`,
+  `rebite`, `parafuso_bucha`) entram na mesma classificação "Acessórios de
+  Montagem" (id=5) que a linha antiga já usava — seed direto na migration
+  0028, sem precisar cadastrar manualmente na página "Classificação de Itens".
+- **Catálogo real em produção desde 2026-09-01** (migration 0029): 91 perfis
+  MBP Isoblock + Selante/Rebite/Parafuso+Bucha com fabricante "Genérico" (sem
+  fornecedor específico definido ainda).
 
 ---
 
@@ -413,7 +468,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0026)
+## Banco de Dados — Migrations (0001→0029)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -443,6 +498,9 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0024 | Tabela `embalagem_fluido` (embalagem descartável por fluido, seed de teste só R404A) |
 | 0025 | Tabela `sessao_usuario` (limite de sessões simultâneas + logout real + métrica de IP) |
 | 0026 | Tabela `produto_empresa` (Fase B — lista de preços/catálogo privado por empresa) |
+| 0027 | Tabela `perfil_metalico` (catálogo global de perfis metálicos, multi-fabricante) |
+| 0028 | Tabelas `selante_montagem`/`rebite`/`parafuso_bucha` + campos `largura_aba_padrao_mm`/`rendimento_selante_m_por_embalagem` em `configuracao_montagem` (kit de montagem) |
+| 0029 | Seed de dados reais do kit de montagem em produção: 91 perfis MBP Isoblock + selante/rebite/parafuso+bucha (fabricante genérico) |
 
 ---
 
@@ -456,7 +514,8 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/clientes` | GET/POST | Gestão de clientes |
 | `/api/v1/catalogo/paineis/fabricantes` | GET | Painéis PIR Kingspan |
 | `/api/v1/catalogo/portas` | GET | Portas frigoríficas |
-| `/api/v1/gabinete` | POST | Cálculo câmara: lista_corte + materiais |
+| `/api/v1/catalogo/perfis-metalicos` | GET | Perfis metálicos (seleção manual do kit de montagem, Card 1) |
+| `/api/v1/gabinete` | POST | Cálculo câmara: lista_corte + materiais + kit de montagem (perfis/selante/rebite/parafuso) |
 | `/api/v1/carga-termica` | POST | Cálculo kcal/h (Card 2) |
 | `/api/v1/selecao` | POST | Busca UC + Evaporadora (Card 3) |
 | `/api/v1/tubulacao` | POST | Dimensionamento ASHRAE (Card 4) |
@@ -585,6 +644,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Wizard 6 cards | ✅ funcional |
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
+| Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31 |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
