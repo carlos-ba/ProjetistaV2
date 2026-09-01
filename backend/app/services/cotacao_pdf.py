@@ -13,12 +13,16 @@ confirmados antes são passados como contexto — reduz a IA a resolver só o qu
 from __future__ import annotations
 import base64
 import json
+import logging
 
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 MODELO = "claude-sonnet-5"
+TIMEOUT_S = 120.0  # PDF + 20-30 itens pode levar mais que o padrão em dias de API mais lenta
 
 _TOOL = {
     "name": "reportar_casamento_cotacao",
@@ -111,16 +115,16 @@ Instruções:
 Responda chamando a ferramenta `reportar_casamento_cotacao` com o relatório completo."""
 
 
-def _cliente() -> Anthropic:
+def _cliente() -> AsyncAnthropic:
     if not settings.ANTHROPIC_API_KEY:
         raise RuntimeError(
             "ANTHROPIC_API_KEY não configurada — defina no .env (local) ou nas "
             "variáveis de ambiente do Render (produção) para usar a importação de PDF."
         )
-    return Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    return AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=TIMEOUT_S)
 
 
-def analisar_pdf_cotacao(
+async def analisar_pdf_cotacao(
     pdf_bytes: bytes,
     itens_banco: list[dict],
     apelidos: list[dict],
@@ -129,11 +133,18 @@ def analisar_pdf_cotacao(
 
     `itens_banco`: [{"id", "tipo_item", "descricao", "detalhe", "qtde", "unidade"}, ...]
     `apelidos`: [{"termo_fornecedor", "nosso_descricao"}, ...]
+
+    Assíncrona de propósito — chamada de dentro de uma rota async do FastAPI.
+    A versão síncrona do cliente Anthropic, chamada direto sem `await`, trava o
+    loop de eventos inteiro até a API responder; em produção (WEB_CONCURRENCY=1,
+    um processo só) isso deixava o app inteiro sem responder durante a chamada,
+    às vezes o bastante pra o Render considerar o processo travado e reiniciar
+    no meio da requisição (achado em produção, 2026-09-01).
     """
     client = _cliente()
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
-    resposta = client.messages.create(
+    resposta = await client.messages.create(
         model=MODELO,
         max_tokens=8000,
         tools=[_TOOL],
@@ -150,11 +161,21 @@ def analisar_pdf_cotacao(
         }],
     )
 
+    logger.warning(
+        "cotacao_pdf: stop_reason=%s usage=%s blocos=%s",
+        resposta.stop_reason, resposta.usage,
+        [b.type for b in resposta.content],
+    )
+
     bloco = next((b for b in resposta.content if b.type == "tool_use"), None)
     if not bloco:
         raise RuntimeError("A IA não retornou um resultado estruturado — tente novamente.")
 
     itens_ia = bloco.input.get("itens", [])
+    logger.warning(
+        "cotacao_pdf: %d itens brutos recebidos, tipos=%s, %d itens no nosso lado",
+        len(itens_ia), [type(x).__name__ for x in itens_ia[:10]], len(itens_banco),
+    )
     banco_por_id = {i["id"]: i for i in itens_banco}
     relatorio: list[dict] = []
     vistos: set[int] = set()

@@ -361,7 +361,7 @@ async def analisar_pdf_devolvido(
     ]
 
     try:
-        relatorio = analisar_pdf_cotacao(conteudo, itens_banco, apelidos)
+        relatorio = await analisar_pdf_cotacao(conteudo, itens_banco, apelidos)
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:
