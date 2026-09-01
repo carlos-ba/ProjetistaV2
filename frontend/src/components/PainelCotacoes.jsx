@@ -7,8 +7,11 @@ import PropostaComercial from './PropostaComercial';
  * Painel de Cotações (Fase 2).
  *
  * - Lista as cotações do usuário com status
- * - Importa a planilha devolvida pelo fornecedor:
- *     upload → análise (nada gravado) → tela de conferência → confirmar
+ * - Importa a cotação devolvida pelo fornecedor, por dois caminhos:
+ *     (a) planilha Excel: upload → análise (nada gravado) → conferência → confirmar
+ *     (b) PDF no formato próprio do fornecedor: upload → IA casa com nossos itens
+ *         (mesmo relatório de conferência) → confirmar. Ver
+ *         DESIGN_IMPORTACAO_PDF_COTACAO_2026-09-01.md.
  */
 const STATUS_BADGE = {
   rascunho:   'bg-slate-100 text-slate-600',
@@ -19,11 +22,21 @@ const STATUS_BADGE = {
 };
 
 const ITEM_STATUS = {
-  ok:             { cor: 'bg-emerald-50 border-emerald-200', label: '✅ Preço lido',        txt: 'text-emerald-700' },
-  sem_preco:      { cor: 'bg-amber-50 border-amber-200',     label: '⚠️ Sem preço',         txt: 'text-amber-700' },
-  preco_invalido: { cor: 'bg-red-50 border-red-200',         label: '❌ Preço ilegível',    txt: 'text-red-600' },
-  nao_encontrado: { cor: 'bg-red-50 border-red-200',         label: '❌ Não encontrado',    txt: 'text-red-600' },
-  linha_extra:    { cor: 'bg-blue-50 border-blue-200',       label: 'ℹ️ Linha extra',       txt: 'text-blue-600' },
+  ok:                    { cor: 'bg-emerald-50 border-emerald-200', label: '✅ Preço lido',           txt: 'text-emerald-700' },
+  sem_preco:             { cor: 'bg-amber-50 border-amber-200',     label: '⚠️ Sem preço',            txt: 'text-amber-700' },
+  preco_invalido:        { cor: 'bg-red-50 border-red-200',         label: '❌ Preço ilegível',       txt: 'text-red-600' },
+  nao_encontrado:        { cor: 'bg-red-50 border-red-200',         label: '❌ Não encontrado',       txt: 'text-red-600' },
+  linha_extra:           { cor: 'bg-blue-50 border-blue-200',       label: 'ℹ️ Linha extra',          txt: 'text-blue-600' },
+  possivel_substituicao: { cor: 'bg-violet-50 border-violet-200',   label: '🔄 Possível substituição', txt: 'text-violet-700' },
+};
+
+const RESUMO_LABELS = {
+  ok: 'com preço',
+  sem_preco: 'sem preço',
+  preco_invalido: 'ilegíveis',
+  nao_encontrado: 'não encontrados',
+  possivel_substituicao: 'possível substituição',
+  linha_extra: 'linhas extras',
 };
 
 const PROPOSTA_BADGE = {
@@ -47,6 +60,8 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
   const [sucessoImport, setSucessoImport] = useState(null);
   const [propostaVer, setPropostaVer] = useState(null);   // proposta salva aberta para visualização
   const fileRef = useRef(null);
+  const fileRefPdf = useRef(null);
+  const [cotacaoPdfAlvo, setCotacaoPdfAlvo] = useState(null);   // cotação escolhida antes de abrir o seletor de PDF
 
   useEffect(() => {
     if (aberto) {
@@ -140,6 +155,41 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
     }
   };
 
+  // Cotação em PDF (formato do fornecedor) — casamento por IA. Diferente da planilha,
+  // o PDF não se autoidentifica, então a cotação-alvo já foi escolhida (cotacaoPdfAlvo)
+  // antes de abrir o seletor de arquivo.
+  const analisarPdf = async (file) => {
+    if (!file || !cotacaoPdfAlvo) return;
+    setImportando(true); setErro(''); setSucessoImport(null);
+    try {
+      const form = new FormData();
+      form.append('arquivo', file);
+      const r = await api.post(`/api/v1/cotacoes/${cotacaoPdfAlvo}/importar/analisar-pdf`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAnalise(r.data);
+      const ed = {};
+      r.data.itens.forEach(it => {
+        if (it.item_id) {
+          ed[it.item_id] = {
+            preco: it.preco_unitario ?? '',
+            marca: it.marca_modelo ?? '',
+            prazo: it.prazo_dias ?? '',
+            obs: it.obs ?? '',
+            termoFornecedor: it.termo_fornecedor ?? null,
+          };
+        }
+      });
+      setEdicao(ed);
+    } catch (e) {
+      setErro(e.response?.data?.detail || 'Erro ao analisar o PDF.');
+    } finally {
+      setImportando(false);
+      setCotacaoPdfAlvo(null);
+      if (fileRefPdf.current) fileRefPdf.current.value = '';
+    }
+  };
+
   const updateEdicao = (id, campo, valor) =>
     setEdicao(p => ({ ...p, [id]: { ...p[id], [campo]: valor } }));
 
@@ -152,6 +202,7 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
         marca_modelo_cotado: e.marca || null,
         prazo_entrega_dias: e.prazo !== '' ? parseInt(e.prazo) : null,
         obs_fornecedor: e.obs || null,
+        termo_fornecedor: e.termoFornecedor || null,
       }));
       await api.post(`/api/v1/cotacoes/${analise.cotacao_id}/importar/confirmar`, { itens });
       setSucessoImport(analise.codigo);
@@ -216,8 +267,10 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                   Conferência — {analise.codigo} · {analise.fornecedor}
                 </p>
                 <p className="text-xs text-indigo-700 mt-1">
-                  {analise.resumo.ok} com preço · {analise.resumo.sem_preco} sem preço ·{' '}
-                  {analise.resumo.preco_invalido} ilegíveis · {analise.resumo.linha_extra} linhas extras
+                  {Object.entries(analise.resumo)
+                    .filter(([, v]) => v > 0)
+                    .map(([k, v]) => `${v} ${RESUMO_LABELS[k] || k}`)
+                    .join(' · ')}
                 </p>
                 {analise.ja_processada && (
                   <p className="text-xs text-amber-700 font-bold mt-1">
@@ -243,6 +296,17 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                       {it.status === 'preco_invalido' && (
                         <p className="text-[10px] text-red-500 mb-2">
                           Texto lido: "{it.preco_bruto}" — corrija o valor abaixo
+                        </p>
+                      )}
+                      {it.status === 'possivel_substituicao' && (
+                        <p className="text-[10px] text-violet-600 mb-2">
+                          A IA achou algo relacionado, mas não exatamente o que foi pedido — confira antes de aceitar.
+                          {it.obs && <><br />{it.obs}</>}
+                        </p>
+                      )}
+                      {it.descricao_pdf && it.status !== 'linha_extra' && (
+                        <p className="text-[10px] text-slate-400 italic mb-2">
+                          Lido no PDF: "{it.descricao_pdf}"
                         </p>
                       )}
                       {it.status === 'linha_extra' && (
@@ -294,9 +358,13 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                 <p className="text-sm font-bold text-amber-800 mb-1">📥 Recebeu a planilha preenchida do fornecedor?</p>
                 <p className="text-xs text-amber-600 mb-3">
                   O sistema identifica a cotação pelo código e mostra os preços para conferência antes de gravar.
+                  Fornecedor devolveu no PDF próprio da loja, sem preencher a planilha? Use "Importar PDF" na
+                  cotação específica, na lista abaixo.
                 </p>
                 <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
                   onChange={e => analisarArquivo(e.target.files[0])} />
+                <input ref={fileRefPdf} type="file" accept=".pdf" className="hidden"
+                  onChange={e => analisarPdf(e.target.files[0])} />
                 <button onClick={() => fileRef.current?.click()} disabled={importando}
                   className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40">
                   {importando ? 'Analisando...' : 'SELECIONAR ARQUIVO EXCEL'}
@@ -415,6 +483,15 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                             className="text-xs px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-600 hover:border-amber-400 hover:text-amber-600 transition-all">
                             📥
                           </button>
+                          {c.status !== 'cancelada' && (
+                            <button
+                              onClick={() => { setCotacaoPdfAlvo(c.id); fileRefPdf.current?.click(); }}
+                              disabled={importando}
+                              title="Importar cotação em PDF (formato do fornecedor)"
+                              className="text-[10px] px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-600 hover:border-violet-400 hover:text-violet-600 transition-all disabled:opacity-40">
+                              📄 Importar PDF
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}

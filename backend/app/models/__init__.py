@@ -24,6 +24,7 @@ from app.models.classificacao import BlocoOrcamento, ClassificacaoItem, ItemClas
 from app.models.embalagem_fluido import EmbalagemFluido
 from app.models.perfil_metalico import PerfilMetalico
 from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
+from app.models.apelido_fornecedor_item import ApelidoFornecedorItem
 
 __all__ = [
     "Base",
@@ -58,4 +59,5 @@ __all__ = [
     "SelanteMontagem",
     "Rebite",
     "ParafusoBucha",
+    "ApelidoFornecedorItem",
 ]

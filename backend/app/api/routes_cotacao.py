@@ -8,7 +8,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.matching import norm
 from app.database.session import get_db
+from app.models.apelido_fornecedor_item import ApelidoFornecedorItem
 from app.models.cotacao import Fornecedor, Cotacao, CotacaoItem
 from app.schemas.auth import UserOut
 from app.schemas.cotacao import (
@@ -18,6 +20,7 @@ from app.schemas.cotacao import (
 from app.services.auth import get_current_user, get_empresa_atual
 from app.services.cotacao_excel import gerar_planilha_cotacao_v2
 from app.services.cotacao_import import extrair_codigo, ler_itens_planilha, casar_itens
+from app.services.cotacao_pdf import analisar_pdf_cotacao
 
 router = APIRouter(prefix="/api/v1/cotacoes", tags=["cotacoes"])
 
@@ -302,12 +305,94 @@ async def analisar_planilha_devolvida(
     }
 
 
+@router.post("/{cotacao_id}/importar/analisar-pdf")
+async def analisar_pdf_devolvido(
+    cotacao_id: UUID,
+    arquivo: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
+):
+    """
+    Lê uma cotação em PDF (formato próprio do fornecedor) via IA e retorna o
+    mesmo relatório de conferência do importador de planilha. NADA é gravado
+    — o usuário revisa e confirma no passo seguinte (mesmo endpoint de
+    confirmar da planilha).
+
+    Diferente da planilha (que se autoidentifica pelo código embutido), o PDF
+    do fornecedor não carrega nosso código — por isso a cotação é escolhida
+    explicitamente pela URL, não descoberta do conteúdo do arquivo.
+    """
+    if not arquivo.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="Envie um arquivo PDF.")
+
+    cotacao = await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
+    if cotacao.status == "cancelada":
+        raise HTTPException(status_code=422, detail=f"A cotação {cotacao.codigo} está cancelada.")
+
+    fornecedor = (await db.execute(
+        select(Fornecedor).where(Fornecedor.id == cotacao.fornecedor_id)
+    )).scalar_one()
+
+    conteudo = await arquivo.read()
+
+    itens_banco = [
+        {
+            "id": i.id,
+            "tipo_item": i.tipo_item,
+            "descricao": i.descricao,
+            "detalhe": i.detalhe,
+            "qtde": float(i.qtde),
+            "unidade": i.unidade,
+        }
+        for i in cotacao.itens
+    ]
+
+    result = await db.execute(
+        select(ApelidoFornecedorItem)
+        .where(ApelidoFornecedorItem.fornecedor_id == cotacao.fornecedor_id)
+    )
+    apelidos = [
+        {"termo_fornecedor": a.termo_fornecedor, "nosso_descricao": a.nosso_descricao}
+        for a in result.scalars().all()
+    ]
+
+    try:
+        relatorio = analisar_pdf_cotacao(conteudo, itens_banco, apelidos)
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível processar o PDF com a IA. Tente novamente ou use o "
+                   "caminho da planilha Excel.",
+        )
+
+    resumo = {
+        "ok": sum(1 for r in relatorio if r["status"] == "ok"),
+        "possivel_substituicao": sum(1 for r in relatorio if r["status"] == "possivel_substituicao"),
+        "nao_encontrado": sum(1 for r in relatorio if r["status"] == "nao_encontrado"),
+        "linha_extra": sum(1 for r in relatorio if r["status"] == "linha_extra"),
+    }
+
+    return {
+        "cotacao_id": str(cotacao.id),
+        "codigo": cotacao.codigo,
+        "fornecedor": fornecedor.nome,
+        "status_atual": cotacao.status,
+        "ja_processada": cotacao.status == "processada",
+        "resumo": resumo,
+        "itens": relatorio,
+    }
+
+
 class ItemConfirmacao(BaseModel):
     item_id: int
     preco_unitario: float | None = None
     marca_modelo_cotado: str | None = None
     prazo_entrega_dias: int | None = None
     obs_fornecedor: str | None = None
+    termo_fornecedor: str | None = None  # presente só quando veio do import de PDF — grava/atualiza o apelido
 
 
 class ConfirmacaoImportacao(BaseModel):
@@ -326,6 +411,19 @@ async def confirmar_importacao(
     cotacao = await _obter_cotacao_com_itens(db, cotacao_id, empresa_id)
 
     itens_por_id = {i.id: i for i in cotacao.itens}
+
+    # Apelidos já existentes pra esse fornecedor, carregados uma vez só — evita
+    # duplicar quando dois itens da mesma confirmação normalizam pro mesmo termo
+    # (ex: "Luva de Redução 5/8x1/2" e "...1/2x3/8" ambos viram "luva de cobre
+    # redutora"): sem esse cache, o segundo não veria o primeiro ainda não
+    # commitado e tentava inserir de novo, violando a unicidade.
+    apelidos_existentes: dict[str, ApelidoFornecedorItem] = {
+        a.termo_fornecedor: a
+        for a in (await db.execute(
+            select(ApelidoFornecedorItem).where(ApelidoFornecedorItem.fornecedor_id == cotacao.fornecedor_id)
+        )).scalars().all()
+    }
+
     atualizados = 0
     for conf in payload.itens:
         item = itens_por_id.get(conf.item_id)
@@ -336,6 +434,27 @@ async def confirmar_importacao(
         item.prazo_entrega_dias = conf.prazo_entrega_dias
         item.obs_fornecedor = conf.obs_fornecedor
         atualizados += 1
+
+        # Confirmação de um casamento vindo do import por PDF (via IA) — grava/
+        # atualiza o apelido pra esse fornecedor não precisar de IA de novo no mesmo termo.
+        if conf.termo_fornecedor:
+            termo = norm(conf.termo_fornecedor)
+            existente = apelidos_existentes.get(termo)
+            if existente:
+                existente.nosso_ref_id = item.ref_id
+                existente.nosso_tipo_item = item.tipo_item
+                existente.nosso_descricao = item.descricao
+            else:
+                novo = ApelidoFornecedorItem(
+                    fornecedor_id=cotacao.fornecedor_id,
+                    empresa_id=empresa_id,
+                    termo_fornecedor=termo,
+                    nosso_ref_id=item.ref_id,
+                    nosso_tipo_item=item.tipo_item,
+                    nosso_descricao=item.descricao,
+                )
+                db.add(novo)
+                apelidos_existentes[termo] = novo
 
     if atualizados == 0:
         raise HTTPException(status_code=422, detail="Nenhum item válido para atualizar.")

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # URL base do frontend (usada nos links de email)
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # IA (leitura de PDF de cotação — casamento de itens)
+    ANTHROPIC_API_KEY: str = ""
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
