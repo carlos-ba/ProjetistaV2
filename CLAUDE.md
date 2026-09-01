@@ -386,11 +386,20 @@ pagamento troca `status_assinatura` pra `"ativa"`, nunca o `plano`.
   expandido nos Cards 1-5 quando o trial venceu (cadeado no lugar). Card 6
   (Orçamento/Lista de Engenharia) continua abrindo — "ver e exportar"
   precisa continuar funcionando, e com 1-5 travados os dados que chegam lá
-  não mudam mais.
+  não mudam mais. Dentro do próprio Card 6, `GeradorOrcamento.jsx` recebe o
+  mesmo `bloqueadoTrial`: trava checklist de materiais/equipamentos, "Limpar
+  Tudo", "Gerar Planilha de Cotação", "Gerar Proposta ao Cliente", preço
+  manual de item sem preço + recalcular, confirmação do modal de escolha de
+  cotação — mas **"Aprovar Lista e Gerar Orçamento" fica de propósito sem
+  trava**: é o único jeito de abrir a seção de export (Excel/PDF da Lista de
+  Engenharia fica atrás de `listaAprovada`, um `useState` local que não
+  persiste — precisa clicar toda vez que o Card 6 abre); travar esse botão
+  quebrava a exportação inteira (achado testando a jornada completa antes
+  de commitar). Como o checklist já está congelado, clicar nele só expõe
+  pra visualização o que já estava fixo, sem deixar mudar nada.
 - **Fora do escopo desta trava:** `suspensa`/`cancelada` continuam sem
   enforcement real no backend (a property `Empresa.ativa` existe mas nunca
-  é chamada); dentro do próprio Card 6 ainda dá pra trocar a cotação
-  selecionada ou editar preço manual de item sem preço — não travado.
+  é chamada).
 - **Pendente:** a função de ativação de assinatura
   (`ativar_assinatura(empresa_id, plano, dias)`) que o admin e o futuro
   webhook do checkout de terceiro vão chamar — ainda não construída,
