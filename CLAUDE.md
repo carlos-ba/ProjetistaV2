@@ -328,7 +328,9 @@ assinatura). Papéis: `superadmin_icenexus` (equipe IceNexus) | `admin_empresa` 
   `copiar_projetos.py`, `remover_contas.py`, `backfill_empresa.py` — todos
   simulam por padrão, só gravam com `--aplicar`. `buscar_usuario.py` (só
   leitura, sem `--aplicar`) consulta usuário por username/e-mail parcial —
-  status da conta, empresa, sessões ativas.
+  status da conta, empresa, sessões ativas. `buscar_projeto.py` (só leitura)
+  consulta projeto por nome parcial — imprime gabinete, inputs de carga
+  térmica e `dados_completos` já calculado, sem a imagem base64.
 
 Detalhes de implantação, armadilhas técnicas (MissingGreenlet, `--reload`
 travando) e o passo manual obrigatório pós-deploy (`promover_superadmin.py`)
@@ -501,6 +503,8 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0027 | Tabela `perfil_metalico` (catálogo global de perfis metálicos, multi-fabricante) |
 | 0028 | Tabelas `selante_montagem`/`rebite`/`parafuso_bucha` + campos `largura_aba_padrao_mm`/`rendimento_selante_m_por_embalagem` em `configuracao_montagem` (kit de montagem) |
 | 0029 | Seed de dados reais do kit de montagem em produção: 91 perfis MBP Isoblock + selante/rebite/parafuso+bucha (fabricante genérico) |
+| 0030 | Tabela `apelido_fornecedor_item` — apelidos aprendidos por fornecedor (importação de cotação em PDF via IA) |
+| 0031 | Amplia `cotacao_item.obs_fornecedor` de 250 para 500 caracteres (explicações de substituição geradas pela IA passavam do limite) |
 
 ---
 
@@ -529,7 +533,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/orcamento` | POST | Consolidação orçamento (Card 6) — sem auth, de propósito |
 | `/api/v1/produto-empresa/*` | GET/POST/PATCH/DELETE | Lista de preços — autoadministração (Fase B) |
 | `/api/v1/classificacoes` | GET/POST | Árvore de classificação (blocos/tipos) |
-| `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel |
+| `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST | Perfis de montagem (tipo filtro, visor, trechos) |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
@@ -557,6 +561,34 @@ O catálogo (fabricantes de painel, portas) é carregado **no `App.jsx`** antes 
 - **Fase 2:** Importação da planilha devolvida pelo fornecedor com preços preenchidos
 - **Fase 3:** Geração de proposta comercial em PDF com preços da cotação
 - Acessível via sidebar "Cotações" (`PainelCotacoes.jsx`) e `GeradorOrcamento.jsx`
+
+### Importação de cotação em PDF via IA (em produção desde 2026-09-01)
+
+Caminho alternativo à Fase 2 (planilha Excel) para fornecedores que devolvem a
+cotação no PDF do próprio formato deles, sem preencher a planilha padrão.
+Arquivos: `backend/app/services/cotacao_pdf.py` (chamada à IA),
+`backend/app/models/apelido_fornecedor_item.py`, rotas em
+`backend/app/api/routes_cotacao.py`.
+
+- **Fluxo:** `POST /{cotacao_id}/importar/analisar-pdf` (upload do PDF, lê via
+  IA — modelo `claude-sonnet-5`, chamada assíncrona) → mesmo relatório de
+  conferência da planilha (`ok`/`sem_preco`/`nao_encontrado`/`linha_extra`) +
+  um status novo, `possivel_substituicao` (a IA nunca decide sozinha uma
+  substituição, só sinaliza pro humano revisar) → usuário confirma no mesmo
+  endpoint da planilha, `POST /{cotacao_id}/importar/confirmar`. Nada é
+  gravado antes da confirmação.
+- **Cotação escolhida explicitamente pela URL** — diferente da planilha (que
+  se autoidentifica pelo código embutido no arquivo), o PDF do fornecedor não
+  carrega nosso código.
+- **Apelidos por fornecedor (`apelido_fornecedor_item`, migration 0030):**
+  regime permanente do casamento híbrido — a IA só resolve o cold start
+  (termo nunca visto daquele fornecedor); uma vez o humano confirmando na
+  tela de conferência (campo `termo_fornecedor` em `ItemConfirmacao`), o par
+  `(fornecedor_id, termo_fornecedor)` vira lookup direto nas próximas
+  cotações do mesmo fornecedor, sem chamar a IA de novo pra esse termo.
+- `cotacao_item.obs_fornecedor` ampliado pra 500 caracteres (migration 0031)
+  — as explicações de possível substituição geradas pela IA passavam fácil
+  dos 250 caracteres pensados originalmente pra uma anotação manual curta.
 
 ---
 
@@ -637,7 +669,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-08-20)
+## Estado atual do código (auditado em 2026-09-01)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -661,6 +693,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Insight de estimativa de capacidade (coluna esquerda) | ✅ informativo, nunca usado em cálculo |
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
+| Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
