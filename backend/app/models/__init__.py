@@ -22,6 +22,8 @@ from app.models.cliente import Cliente
 from app.models.peso_tubo_cobre import PesoTuboCobre
 from app.models.classificacao import BlocoOrcamento, ClassificacaoItem, ItemClassificacao
 from app.models.embalagem_fluido import EmbalagemFluido
+from app.models.perfil_metalico import PerfilMetalico
+from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
 
 __all__ = [
     "Base",
@@ -52,4 +54,8 @@ __all__ = [
     "ClassificacaoItem",
     "ItemClassificacao",
     "EmbalagemFluido",
+    "PerfilMetalico",
+    "SelanteMontagem",
+    "Rebite",
+    "ParafusoBucha",
 ]

@@ -1,4 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class PerfilManualItem(BaseModel):
+    """Perfil metálico extra escolhido manualmente (Liso, Z, ou variação fora do
+    padrão de 40mm) — entra nos cálculos de selante/rebite/parafuso+bucha junto
+    com os perfis da seleção automática."""
+    perfil_id: int
+    quantidade_barras: int = Field(gt=0)
 
 
 class GabineteRequest(BaseModel):
@@ -11,6 +19,11 @@ class GabineteRequest(BaseModel):
     tipo_piso: str = "nenhum"
     espessura_concreto_cm: float = 0.0
     piso_rebaixado: bool = False   # convencional rebaixado (nivelado, sem degrau)
+    # Kit de montagem (Configurações → perfil de montagem ativo)
+    largura_aba_padrao_mm: int = Field(40, gt=0)
+    rendimento_selante_m_por_embalagem: float = Field(12.0, gt=0)
+    fator_seguranca_selante: float = Field(0.10, ge=0)
+    perfis_manuais: list[PerfilManualItem] = []
 
 
 class GabineteDXFRequest(BaseModel):
@@ -47,3 +60,8 @@ class GabineteResponse(BaseModel):
     espessura_considerada: str
     altura_util_calculada: float
     perda_altura: float
+    # Expostos pra alimentar o cálculo do kit de montagem (feito à parte, na
+    # rota, por depender do banco) sem duplicar a geometria aqui.
+    comp_parede_m: float = 0.0
+    area_total_paineis_m2: float = 0.0
+    avisos_kit_montagem: list[str] = []

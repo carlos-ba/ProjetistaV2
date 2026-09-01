@@ -5,12 +5,13 @@ from app.database.session import get_db
 from app.schemas.catalogo import (
     CategoriaOut, FabricanteOut, PerfilProdutoTermicoOut,
     TipoProdutoTermicoOut, MaterialOut, EquipamentoOut,
-    PainelFrigorificoOut, PortaFrigoriificaOut,
+    PainelFrigorificoOut, PortaFrigoriificaOut, PerfilMetalicoOut,
 )
 from app.services.catalogo import (
     listar_categorias, listar_fabricantes, listar_perfis_produto,
     listar_tipos_produto, listar_materiais, listar_equipamentos,
     listar_paineis, listar_fabricantes_paineis, listar_portas,
+    listar_perfis_metalicos,
 )
 
 router = APIRouter(prefix="/api/v1/catalogo", tags=["catalogo"])
@@ -74,3 +75,12 @@ async def get_portas(
 ):
     """Lista portas frigoríficas com filtros opcionais."""
     return await listar_portas(db, classificacao, tipo)
+
+
+@router.get("/perfis-metalicos", response_model=list[PerfilMetalicoOut])
+async def get_perfis_metalicos(
+    tipo: str | None = Query(default=None, description="Ângulo Interno | Ângulo Externo | Liso | U | Z"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lista perfis metálicos, usado na seleção manual de perfis extras (Card 1)."""
+    return await listar_perfis_metalicos(db, tipo)

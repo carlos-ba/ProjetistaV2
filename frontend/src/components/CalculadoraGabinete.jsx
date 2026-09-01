@@ -13,7 +13,7 @@ const DITAR_HABILITADO = false;
 // de número em template string confunde o técnico em campo.
 const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
 
-const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], initialValues, onValoresChange, jaFinalizado = false }) => {
+const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], perfisMetalicos = [], configuracoesMontagem, initialValues, onValoresChange, jaFinalizado = false }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
   const [largura, setLargura] = useState(initialValues?.largura ?? '');
@@ -65,6 +65,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // ── Portas frigoríficas ───────────────────────────────────────────────
   const [portasSelecionadas, setPortasSelecionadas] = useState(initialValues?.portasSelecionadas ?? []);
 
+  // ── Kit de montagem — perfis extras (seleção manual) ────────────────────
+  const [fatorSegurancaSelante, setFatorSegurancaSelante] = useState(initialValues?.fatorSegurancaSelante ?? 10);
+  const [perfisManuaisSelecionados, setPerfisManuaisSelecionados] = useState(initialValues?.perfisManuaisSelecionados ?? []);
+  const [tipoPerfilEscolha, setTipoPerfilEscolha] = useState('Liso');
+
   // ── Modo de compra dos painéis ────────────────────────────────────────
   // 'fabricante' = sob medida (comprimento exato, preço un/m²)
   // 'revenda'    = barras de comprimento fixo (padrão 12.000mm), técnico corta na obra
@@ -80,10 +85,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
+      fatorSegurancaSelante, perfisManuaisSelecionados,
     });
   }, [comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
-      portasSelecionadas, resultado, modoCompra, comprimentoBarra]);
+      portasSelecionadas, resultado, modoCompra, comprimentoBarra,
+      fatorSegurancaSelante, perfisManuaisSelecionados]);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -120,6 +127,21 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   const updateQtdePorta = (id, qtde) =>
     setPortasSelecionadas(prev =>
       prev.map(p => p.porta.id === id ? { ...p, qtde: Math.max(1, parseInt(qtde) || 1) } : p)
+    );
+
+  const adicionarPerfilManual = (perfil) => {
+    setPerfisManuaisSelecionados(prev => {
+      if (prev.some(p => p.perfil.id === perfil.id)) return prev; // já adicionado
+      return [...prev, { perfil, qtdeBarras: 1 }];
+    });
+  };
+
+  const removerPerfilManual = (id) =>
+    setPerfisManuaisSelecionados(prev => prev.filter(p => p.perfil.id !== id));
+
+  const updateQtdePerfilManual = (id, qtde) =>
+    setPerfisManuaisSelecionados(prev =>
+      prev.map(p => p.perfil.id === id ? { ...p, qtdeBarras: Math.max(1, parseInt(qtde) || 1) } : p)
     );
 
   // ── Fabricante: só carrega dados da API. Seleções downstream são preservadas.
@@ -168,7 +190,9 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       setStatusCalculo('modificado');
       setResultado(null);
     }
-  }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto, pisoRebaixado]);
+  }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto, pisoRebaixado,
+      fatorSegurancaSelante, perfisManuaisSelecionados,
+      configuracoesMontagem?.largura_aba_padrao_mm, configuracoesMontagem?.rendimento_selante_m_por_embalagem]);
 
   // ── Sincroniza com pai ────────────────────────────────────────────────
   // Portas como linhas de material — independentes do cálculo dos painéis
@@ -314,9 +338,15 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     if (!validos) { aoFinalizar(null); return; }
     // espessuraSelecionada incluída na chave para garantir sync imediato ao trocar espessura
     const portasKey = portasSelecionadas.map(p => `${p.porta.id}x${p.qtde}`).join(',');
-    const key = JSON.stringify({ res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey, modoCompra, barra: comprimentoBarra });
+    const perfisManuaisKey = perfisManuaisSelecionados.map(p => `${p.perfil.id}x${p.qtdeBarras}`).join(',');
+    const key = JSON.stringify({
+      res: !!resultado, img: imagemProjeto?.length ?? 0, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente,
+      painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey,
+      modoCompra, barra: comprimentoBarra, fatorSegurancaSelante, perfisManuais: perfisManuaisKey,
+      abaPadrao: configuracoesMontagem?.largura_aba_padrao_mm, rendimentoSelante: configuracoesMontagem?.rendimento_selante_m_por_embalagem,
+    });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra, fatorSegurancaSelante, perfisManuaisSelecionados, configuracoesMontagem]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -365,6 +395,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         tipo_piso:            tipoPiso,
         espessura_concreto_cm: parseFloat(espessuraConcreto) || 0,
         piso_rebaixado:       pisoRebaixado,
+        largura_aba_padrao_mm: configuracoesMontagem?.largura_aba_padrao_mm ?? 40,
+        rendimento_selante_m_por_embalagem: configuracoesMontagem?.rendimento_selante_m_por_embalagem ?? 12,
+        fator_seguranca_selante: (parseFloat(fatorSegurancaSelante) || 0) / 100,
+        perfis_manuais: perfisManuaisSelecionados.map(({ perfil, qtdeBarras }) => ({
+          perfil_id: perfil.id, quantidade_barras: qtdeBarras,
+        })),
       });
       setResultado(response.data);
       setStatusCalculo('pronto');
@@ -625,6 +661,87 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           )}
         </div>
 
+        {/* ── Seção Kit de Montagem — Perfis Extras ── */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-2">
+            🔩 Kit de Montagem — Perfis Extras
+          </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Perfil Ângulo Externo, Ângulo Interno e U são selecionados automaticamente pela
+            geometria do gabinete. Use esta seção só para perfil Liso, Z, ou variações de medida
+            fora do padrão de {configuracoesMontagem?.largura_aba_padrao_mm ?? 40}mm.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3 mb-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600 min-h-[32px] flex items-end">Tipo de Perfil</label>
+              <select value={tipoPerfilEscolha} onChange={e => setTipoPerfilEscolha(e.target.value)}
+                className="w-full h-9 px-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                {['Ângulo Interno', 'Ângulo Externo', 'Liso', 'U', 'Z'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600 min-h-[32px] flex items-end">
+                Perfis disponíveis ({tipoPerfilEscolha})
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-white">
+                {perfisMetalicos.filter(p => p.tipo === tipoPerfilEscolha).map(p => {
+                  const jaSelecionado = perfisManuaisSelecionados.some(s => s.perfil.id === p.id);
+                  const medidas = [p.medida_1_mm, p.medida_2_mm, p.medida_3_mm].filter(Boolean).join('x');
+                  return (
+                    <button key={p.id} type="button" disabled={jaSelecionado}
+                      onClick={() => adicionarPerfilManual(p)}
+                      className={`text-[11px] px-2 py-1 rounded-full border font-medium transition-all ${
+                        jaSelecionado
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-600 opacity-60 cursor-not-allowed'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-400 hover:text-blue-600 cursor-pointer'
+                      }`}
+                    >
+                      {medidas}x{p.comprimento_mm}mm {jaSelecionado ? '✓' : '+'}
+                    </button>
+                  );
+                })}
+                {perfisMetalicos.filter(p => p.tipo === tipoPerfilEscolha).length === 0 && (
+                  <span className="text-[11px] text-slate-400 italic">Nenhum perfil {tipoPerfilEscolha} no catálogo.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {perfisManuaisSelecionados.length > 0 && (
+            <div className="border-t border-slate-200 pt-3 space-y-2 mb-3">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Perfis extras no projeto</p>
+              {perfisManuaisSelecionados.map(({ perfil, qtdeBarras }) => (
+                <div key={perfil.id} className="flex items-center gap-3 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                  <div className="flex-1 text-xs">
+                    <span className="font-bold text-slate-700">
+                      Perfil {perfil.tipo} — {[perfil.medida_1_mm, perfil.medida_2_mm, perfil.medida_3_mm].filter(Boolean).join('x')}x{perfil.comprimento_mm}mm
+                    </span>
+                    <span className="text-slate-400 ml-1">({perfil.codigo_fabricante})</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <label className="text-[10px] text-slate-500">Barras:</label>
+                    <input type="number" min="1" value={qtdeBarras}
+                      onChange={e => updateQtdePerfilManual(perfil.id, e.target.value)}
+                      className="w-14 px-2 py-1 rounded border border-slate-300 text-center text-xs outline-none" />
+                    <button onClick={() => removerPerfilManual(perfil.id)}
+                      className="text-slate-300 hover:text-red-400 transition-colors text-sm">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-slate-200 pt-3">
+            <div className="max-w-[220px] space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Fator de Segurança do Selante (%)</label>
+              <input type="number" min="0" max="100" value={fatorSegurancaSelante}
+                onChange={e => setFatorSegurancaSelante(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+          </div>
+        </div>
+
         {/* Banner projeto carregado */}
         {jaFinalizado && !resultado && statusCalculo === 'pronto' && (
           <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
@@ -674,6 +791,14 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         {(resultado || portasSelecionadas.length > 0) && (
           <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-l-4 border-indigo-500 pl-3">Materiais Dimensionados</h3>
+
+            {(resultado?.avisos_kit_montagem || []).length > 0 && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 space-y-1">
+                {resultado.avisos_kit_montagem.map((aviso, idx) => (
+                  <p key={idx} className="text-xs text-red-600">⚠ {aviso}</p>
+                ))}
+              </div>
+            )}
 
             {/* Modo de compra dos painéis */}
             {resultado && (

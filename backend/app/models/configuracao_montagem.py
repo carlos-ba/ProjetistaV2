@@ -24,3 +24,6 @@ class ConfiguracaoMontagem(Base):
     incluir_visor:       Mapped[bool] = mapped_column(Boolean, default=True)
     incluir_gbc_entrada: Mapped[bool] = mapped_column(Boolean, default=True)
     incluir_gbc_saida:   Mapped[bool] = mapped_column(Boolean, default=True)
+
+    largura_aba_padrao_mm: Mapped[int] = mapped_column(Integer, default=40)
+    rendimento_selante_m_por_embalagem: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("12.00"))

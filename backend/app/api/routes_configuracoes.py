@@ -17,6 +17,7 @@ DEFAULTS = dict(
     trecho_subida=1.0, trecho_sifao_gbc=0.5,
     incluir_filtro=False, incluir_visor=False,
     incluir_gbc_entrada=False, incluir_gbc_saida=False,
+    largura_aba_padrao_mm=40, rendimento_selante_m_por_embalagem=12.0,
 )
 
 
@@ -32,6 +33,8 @@ class PerfilPayload(BaseModel):
     incluir_visor:       bool = Field(True)
     incluir_gbc_entrada: bool = Field(True)
     incluir_gbc_saida:   bool = Field(True)
+    largura_aba_padrao_mm: int = Field(40, gt=0)
+    rendimento_selante_m_por_embalagem: float = Field(12.0, gt=0)
 
 
 def _to_dict(cfg: ConfiguracaoMontagem) -> dict:
@@ -49,6 +52,8 @@ def _to_dict(cfg: ConfiguracaoMontagem) -> dict:
         "incluir_visor":       cfg.incluir_visor,
         "incluir_gbc_entrada": cfg.incluir_gbc_entrada,
         "incluir_gbc_saida":   cfg.incluir_gbc_saida,
+        "largura_aba_padrao_mm": cfg.largura_aba_padrao_mm,
+        "rendimento_selante_m_por_embalagem": float(cfg.rendimento_selante_m_por_embalagem),
     }
 
 

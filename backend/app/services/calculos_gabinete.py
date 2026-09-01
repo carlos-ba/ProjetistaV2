@@ -102,15 +102,6 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         if not req.piso_rebaixado:
             altura_util -= esp_m + concreto_m
 
-    materiais_extras.append(MaterialExtra(
-        item="Acessórios de Montagem (Kit)",
-        qtd=f"{area_total_paineis:.2f} m²",
-        quantidade=round(area_total_paineis, 2),
-        unidade="m²",
-        detalhe="Silicone, Fixadores, Cantoneiras (Base: Área Total de Painéis)",
-        tipo_item="acessorio_montagem",
-    ))
-
     return GabineteResponse(
         lista_corte=lista_corte,
         materiais_extras=materiais_extras,
@@ -118,4 +109,6 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         espessura_considerada=f"{req.espessura_mm}mm",
         altura_util_calculada=round(altura_util, 3),
         perda_altura=round(req.altura - altura_util, 3),
+        comp_parede_m=comp_parede,
+        area_total_paineis_m2=round(area_total_paineis, 2),
     )

@@ -11,6 +11,7 @@ from app.models.equipamento import Equipamento
 from app.models.material import Material
 from app.models.painel import PainelFrigorifico
 from app.models.porta import PortaFrigoriifica
+from app.models.perfil_metalico import PerfilMetalico
 
 
 async def listar_perfis_produto(db: AsyncSession):
@@ -100,5 +101,18 @@ async def listar_portas(
         stmt = stmt.where(PortaFrigoriifica.classificacao == classificacao.lower())
     if tipo:
         stmt = stmt.where(PortaFrigoriifica.tipo == tipo.lower())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def listar_perfis_metalicos(db: AsyncSession, tipo: str | None = None) -> list[PerfilMetalico]:
+    """Lista perfis metálicos — usado na seleção manual de perfis extras (Card 1)."""
+    stmt = (
+        select(PerfilMetalico)
+        .options(selectinload(PerfilMetalico.fabricante))
+        .order_by(PerfilMetalico.tipo, PerfilMetalico.medida_1_mm, PerfilMetalico.medida_2_mm)
+    )
+    if tipo:
+        stmt = stmt.where(PerfilMetalico.tipo == tipo)
     result = await db.execute(stmt)
     return result.scalars().all()

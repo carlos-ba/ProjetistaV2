@@ -14,6 +14,8 @@ const DEFAULTS = {
   incluir_visor: true,
   incluir_gbc_entrada: true,
   incluir_gbc_saida: true,
+  largura_aba_padrao_mm: 40,
+  rendimento_selante_m_por_embalagem: 12.0,
 };
 
 const TRECHOS = [
@@ -94,6 +96,36 @@ function FormPerfil({ form, setForm, onSalvar, onCancelar, titulo, salvando, err
               />
             </div>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Kit de Montagem (Card 1)</p>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-600">Largura de aba padrão (perfis)</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min="1" step="1"
+                value={form.largura_aba_padrao_mm}
+                onChange={e => setForm({ ...form, largura_aba_padrao_mm: parseInt(e.target.value) || 0 })}
+                className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+              <span className="text-xs text-gray-400">mm</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-600">Rendimento do selante</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min="0.1" step="0.1"
+                value={form.rendimento_selante_m_por_embalagem}
+                onChange={e => setForm({ ...form, rendimento_selante_m_por_embalagem: parseFloat(e.target.value) || 0 })}
+                className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+              <span className="text-xs text-gray-400">m/emb.</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -240,6 +272,8 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
                 <span>Evap→Sifão: <b>{p.trecho_evap_sifao} m</b></span>
                 <span>Subida: <b>{p.trecho_subida} m</b></span>
                 <span>C-Sifão→GBC: <b>{p.trecho_sifao_gbc} m</b></span>
+                <span>Aba padrão: <b>{p.largura_aba_padrao_mm ?? 40} mm</b></span>
+                <span>Selante: <b>{p.rendimento_selante_m_por_embalagem ?? 12} m/emb.</b></span>
               </div>
               <div className="flex flex-wrap gap-1">
                 {[

@@ -109,6 +109,8 @@ function AppContent({ catalogo }) {
           incluir_visor:       ativo.incluir_visor ?? true,
           incluir_gbc_entrada: ativo.incluir_gbc_entrada ?? true,
           incluir_gbc_saida:   ativo.incluir_gbc_saida ?? true,
+          largura_aba_padrao_mm: ativo.largura_aba_padrao_mm ?? 40,
+          rendimento_selante_m_por_embalagem: parseFloat(ativo.rendimento_selante_m_por_embalagem ?? 12),
         });
       }
     } catch { /* mantém o valor atual em caso de falha */ }
@@ -802,6 +804,8 @@ function AppContent({ catalogo }) {
                 incluir_visor:       perfil.incluir_visor ?? true,
                 incluir_gbc_entrada: perfil.incluir_gbc_entrada ?? true,
                 incluir_gbc_saida:   perfil.incluir_gbc_saida ?? true,
+                largura_aba_padrao_mm: perfil.largura_aba_padrao_mm ?? 40,
+                rendimento_selante_m_por_embalagem: parseFloat(perfil.rendimento_selante_m_por_embalagem ?? 12),
               })}
             />
           )}
@@ -866,6 +870,8 @@ function AppContent({ catalogo }) {
                 aoFinalizar={receberDadosGabinete}
                 fabricantes={catalogo.fabricantes}
                 portasCatalogo={catalogo.portasCatalogo}
+                perfisMetalicos={catalogo.perfisMetalicos}
+                configuracoesMontagem={configuracoesMontagem}
                 initialValues={inputsGabinete}
                 onValoresChange={setInputsGabinete}
                 jaFinalizado={!!dadosDoGabinete}
@@ -1059,11 +1065,12 @@ function useCatalogo() {
     const carregar = async () => {
       while (!cancelado) {
         try {
-          const [fabricantesRes, portasRes, classifRes, embalagensRes] = await Promise.all([
+          const [fabricantesRes, portasRes, classifRes, embalagensRes, perfisMetalicosRes] = await Promise.all([
             api.get('/api/v1/catalogo/paineis/fabricantes'),
             api.get('/api/v1/catalogo/portas'),
             api.get('/api/v1/classificacoes'),
             api.get('/api/v1/embalagem-fluido'),
+            api.get('/api/v1/catalogo/perfis-metalicos'),
           ]);
           if (!cancelado) {
             setCatalogo({
@@ -1071,6 +1078,7 @@ function useCatalogo() {
               portasCatalogo: portasRes.data,
               classificacoes: classifRes.data,
               embalagensFluido: embalagensRes.data,
+              perfisMetalicos: perfisMetalicosRes.data,
             });
           }
           return; // sucesso — encerra o loop

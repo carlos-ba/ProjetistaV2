@@ -105,3 +105,18 @@ class PainelFrigorificoOut(BaseModel):
     custo: Decimal
 
     model_config = {"from_attributes": True}
+
+
+class PerfilMetalicoOut(BaseModel):
+    id: int
+    fabricante_id: int
+    fabricante: FabricanteOut
+    codigo_fabricante: str
+    tipo: str
+    medida_1_mm: int
+    medida_2_mm: int | None
+    medida_3_mm: int | None
+    comprimento_mm: int
+    descricao_original: str
+
+    model_config = {"from_attributes": True}
