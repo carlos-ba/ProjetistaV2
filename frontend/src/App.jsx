@@ -827,7 +827,7 @@ function AppContent({ catalogo }) {
                         <div>
                           <div className="font-bold text-slate-800 group-hover:text-blue-700">{proj.nome}</div>
                           <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">
-                            {new Date(proj.created_at).toLocaleDateString('pt-BR')} | {proj.cliente}
+                            Criado {new Date(proj.created_at).toLocaleDateString('pt-BR')} · Atualizado {new Date(proj.updated_at).toLocaleDateString('pt-BR')} | {proj.cliente}
                           </div>
                         </div>
                         <button 
