@@ -26,6 +26,21 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
+// ── Cores por bloco — Proposta ao Cliente (faturamento direto, lista completa) ──
+// Uma cor por bloco (nome vem de bloco_orcamento no banco), igual na lista
+// itemizada e no resumo de investimento. Mão de obra tem cor própria, fora
+// dessa paleta, pois não é um bloco de material. `rgb` mantém o hex do
+// Tailwind equivalente pra o PDF (jsPDF não lê classes CSS).
+const CORES_BLOCO = {
+  'Materiais Termo Isolantes': { dot: 'bg-sky-500',     texto: 'text-sky-700',     rgb: [2, 132, 199] },
+  'Equipamentos':              { dot: 'bg-emerald-500', texto: 'text-emerald-700', rgb: [5, 150, 105] },
+  'Tubulação e Conexões':      { dot: 'bg-amber-500',   texto: 'text-amber-700',   rgb: [217, 119, 6] },
+  'Componentes de Fluxo':      { dot: 'bg-violet-500',  texto: 'text-violet-700',  rgb: [124, 58, 237] },
+};
+const COR_BLOCO_PADRAO = { dot: 'bg-slate-400', texto: 'text-slate-500', rgb: [100, 116, 139] }; // "Outros" ou bloco não mapeado
+const COR_MAO_DE_OBRA = { dot: 'bg-rose-500', texto: 'text-rose-700', rgb: [225, 29, 72] };
+const corDoBloco = (nome) => CORES_BLOCO[nome] || COR_BLOCO_PADRAO;
+
 const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
@@ -787,9 +802,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         const grupos = Object.entries(agruparPorBloco(orcamento.detalhamento_itens)).filter(([, it]) => it.length > 0);
         grupos.forEach(([cat, itens]) => {
           checar(14);
-          pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 4;
-          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
-          txt(cat.toUpperCase(), ML, y); pdf.setTextColor(0); y += 5;
+          const rgbCat = corDoBloco(cat).rgb;
+          pdf.setDrawColor(...rgbCat); pdf.setLineWidth(0.6); pdf.line(ML, y, MR, y); pdf.setLineWidth(0.2); y += 4;
+          pdf.setFillColor(...rgbCat); pdf.rect(ML, y - 2.1, 2.2, 2.2, 'F');
+          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...rgbCat);
+          txt(cat.toUpperCase(), ML + 4, y); pdf.setTextColor(0); y += 5;
           itens.forEach(l => {
             checar(8);
             pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
@@ -840,9 +857,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
       txt('INVESTIMENTO', ML, y); pdf.setTextColor(0); y += 5;
 
-      const linhaInv = (nome, valor, nota) => {
+      const linhaInv = (nome, valor, nota, rgbCor) => {
         checar(nota ? 10 : 7);
-        pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); txt(nome, ML, y);
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'normal');
+        if (rgbCor) {
+          pdf.setFillColor(...rgbCor); pdf.rect(ML, y - 2.6, 2, 2, 'F');
+          pdf.setTextColor(...rgbCor); txt(nome, ML + 3.5, y); pdf.setTextColor(0);
+        } else {
+          txt(nome, ML, y);
+        }
         pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(valor)}`, MR, y, { align: 'right' });
         if (nota) { pdf.setFontSize(6); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt(nota, ML, y + 3.5); pdf.setTextColor(0); y += 3.5; }
         y += 6;
@@ -851,12 +874,12 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         if (exibicaoMateriais === 'resumo') {
           linhaInv('Cj. materiais de refrigeração e isolamento', cf.custo_materiais, 'Faturamento direto ao fornecedor');
         } else if (exibicaoMateriais === 'itemizado') {
-          cf.blocosMateriais.forEach(b => linhaInv(b.nome, b.valor, 'Faturamento direto ao fornecedor — valor de cotação'));
+          cf.blocosMateriais.forEach(b => linhaInv(b.nome, b.valor, 'Faturamento direto ao fornecedor — valor de cotação', corDoBloco(b.nome).rgb));
         }
         if (exibicaoMateriais === 'resumo' || apresentacao === 'blocos') {
-          cf.blocosServicos.forEach(b => linhaInv(b.nome, b.valor));
+          cf.blocosServicos.forEach(b => linhaInv(b.nome, b.valor, null, COR_MAO_DE_OBRA.rgb));
         } else {
-          linhaInv('Instalação, mobilização e comissionamento', cf.preco_servicos_cliente);
+          linhaInv('Instalação, mobilização e comissionamento', cf.preco_servicos_cliente, null, COR_MAO_DE_OBRA.rgb);
         }
       } else if (apresentacao === 'blocos') {
         cf.blocosCliente.forEach(b => linhaInv(b.nome, b.valor));
@@ -1685,7 +1708,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div className="space-y-1 col-span-2">
-                <label className="text-[9px] font-bold text-slate-500 uppercase">Apresentação dos valores</label>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">
+                  {modoFaturamento === 'venda_direta' ? 'Apresentação da mão de obra' : 'Apresentação dos valores'}
+                </label>
                 {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'resumo' ? (
                   <p className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                     No resumo global a apresentação é fixa: conjunto de materiais + serviços + total.
@@ -2192,7 +2217,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 {Object.entries(agruparPorBloco(orcamento.detalhamento_itens)).map(([cat, itens]) =>
                   itens.length > 0 && (
                     <div key={cat}>
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2">{cat}</h4>
+                      <h4 className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2 ${corDoBloco(cat).texto}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${corDoBloco(cat).dot}`} />
+                        {cat}
+                      </h4>
                       <div className="space-y-3">
                         {itens.map((l, i) => (
                           <div key={i} className="flex justify-between items-start">
@@ -2252,8 +2280,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   {exibicaoMateriais === 'itemizado' && cf.blocosMateriais.map((b, i) => (
                     <div key={`m${i}`} className="flex justify-between items-center py-2 border-b border-slate-50">
                       <div>
-                        <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
-                        <p className="text-[10px] text-slate-400">Faturamento direto ao fornecedor — valor de cotação</p>
+                        <p className={`flex items-center gap-2 font-bold text-sm ${corDoBloco(b.nome).texto}`}>
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${corDoBloco(b.nome).dot}`} />
+                          {b.nome}
+                        </p>
+                        <p className="text-[10px] text-slate-400 pl-4">Faturamento direto ao fornecedor — valor de cotação</p>
                       </div>
                       <p className="font-black text-slate-900">R$ {fmt(b.valor)}</p>
                     </div>
@@ -2261,13 +2292,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   {(exibicaoMateriais === 'resumo' || apresentacao === 'blocos') ? (
                     cf.blocosServicos.map((b, i) => (
                       <div key={`s${i}`} className="flex justify-between items-center py-2 border-b border-slate-50">
-                        <p className="font-bold text-slate-800 text-sm">{b.nome}</p>
+                        <p className={`flex items-center gap-2 font-bold text-sm ${COR_MAO_DE_OBRA.texto}`}>
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COR_MAO_DE_OBRA.dot}`} />
+                          {b.nome}
+                        </p>
                         <p className="font-black text-slate-900">R$ {fmt(b.valor)}</p>
                       </div>
                     ))
                   ) : (
                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <p className="font-bold text-slate-800 text-sm">Instalação, mobilização e comissionamento</p>
+                      <p className={`flex items-center gap-2 font-bold text-sm ${COR_MAO_DE_OBRA.texto}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COR_MAO_DE_OBRA.dot}`} />
+                        Instalação, mobilização e comissionamento
+                      </p>
                       <p className="font-black text-slate-900">R$ {fmt(cf.preco_servicos_cliente)}</p>
                     </div>
                   )}
