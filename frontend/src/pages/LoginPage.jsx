@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [sessoesConflito, setSessoesConflito] = useState(null); // lista devolvida pelo 403 de limite
   const [encerrandoId, setEncerrandoId] = useState(null);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -180,16 +182,27 @@ export default function LoginPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  required
-                  minLength={6}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
-                  placeholder="mínimo 6 caracteres"
-                />
+                <div className="relative">
+                  <input
+                    type={mostrarSenha ? 'text' : 'password'}
+                    name="password"
+                    value={form.password}
+                    onChange={handleChange}
+                    required
+                    minLength={6}
+                    className="w-full border border-slate-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                    placeholder="mínimo 6 caracteres"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenha(v => !v)}
+                    tabIndex={-1}
+                    className="absolute right-0 top-0 h-full px-3 flex items-center text-slate-400 hover:text-slate-600"
+                    title={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  >
+                    {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <button
