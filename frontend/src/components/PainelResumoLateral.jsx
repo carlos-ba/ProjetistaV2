@@ -261,8 +261,10 @@ const PainelResumoLateral = ({
   const regimeCond   = inputsEquipamentos?.cond   !== '' && inputsEquipamentos?.cond   != null && !isNaN(inputsEquipamentos.cond)   ? Number(inputsEquipamentos.cond)   : null;
   const regimeFluido = inputsEquipamentos?.fluido || null;
 
-  // Trocas de ar
-  const evaporadores      = itensOrcamento.equipamentos.filter(e => e.vazao_ar > 0);
+  // Trocas de ar — só evaporadores: UC a ar também tem vazao_ar (ventilador do
+  // condensador, ar externo à câmara) e não pode entrar nessa soma (achado
+  // auditando o card em produção, 2026-09-01: somava as duas vazões juntas).
+  const evaporadores      = itensOrcamento.equipamentos.filter(e => e.categoria === 'Evaporadora' && e.vazao_ar > 0);
   const vazaoTotalHoraria = evaporadores.reduce((a, e) => a + e.vazao_ar * e.qtde, 0);
   const trocas0     = volumeBruto > 0 ? vazaoTotalHoraria / volumeBruto : 0;          // câmara vazia — base da norma (FAO)
   const trocasMeia  = volumeBruto > 0 ? vazaoTotalHoraria / (volumeBruto * 0.5) : 0;  // ~50% ocupada (informativo)
