@@ -1,5 +1,8 @@
+import logging
 from datetime import datetime
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -362,6 +365,7 @@ async def analisar_pdf_devolvido(
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:
+        logger.exception("Falha ao processar PDF de cotação via IA (cotacao_id=%s)", cotacao_id)
         raise HTTPException(
             status_code=502,
             detail="Não foi possível processar o PDF com a IA. Tente novamente ou use o "
