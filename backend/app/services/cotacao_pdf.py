@@ -165,6 +165,11 @@ def analisar_pdf_cotacao(
         return texto[:490] if texto else texto
 
     for it in itens_ia:
+        if not isinstance(it, dict):
+            # A IA às vezes devolve um elemento fora do formato pedido, mesmo com
+            # saída estruturada forçada — ignora esse item pontual em vez de
+            # derrubar a análise inteira (achado em produção, 2026-09-01).
+            continue
         item_id = it.get("item_id")
         if item_id is not None and item_id in banco_por_id:
             vistos.add(item_id)
