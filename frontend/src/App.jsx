@@ -853,6 +853,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={1} titulo="Configuração do Gabinete" icone="📏"
               status={statusEtapa(1)} resumo={resumoEtapa(1)}
+              bloqueadoTrial={!!user?.empresa_trial_expirado}
               expandido={passoExpandido === 1}
               selecionado={passoSelecionado === 1 && passoExpandido !== 1}
               onSelecionar={() => selecionarEtapa(1)}
@@ -875,6 +876,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={2} titulo="Cálculo de Carga Térmica" icone="❄️"
               status={statusEtapa(2)} resumo={resumoEtapa(2)}
+              bloqueadoTrial={!!user?.empresa_trial_expirado}
               invalidado={invalidados[2]}
               expandido={passoExpandido === 2}
               selecionado={passoSelecionado === 2 && passoExpandido !== 2}
@@ -890,6 +892,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={3} titulo="Seleção de Equipamentos" icone="⚙️"
               status={statusEtapa(3)} resumo={resumoEtapa(3)}
+              bloqueadoTrial={!!user?.empresa_trial_expirado}
               invalidado={invalidados[3]}
               expandido={passoExpandido === 3}
               selecionado={passoSelecionado === 3 && passoExpandido !== 3}
@@ -916,6 +919,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={4} titulo="Dimensionamento de Tubulação" icone="🔩"
               status={statusEtapa(4)} resumo={resumoEtapa(4)}
+              bloqueadoTrial={!!user?.empresa_trial_expirado}
               invalidado={invalidados[4]}
               expandido={passoExpandido === 4}
               selecionado={passoSelecionado === 4 && passoExpandido !== 4}
@@ -931,6 +935,7 @@ function AppContent({ catalogo }) {
             <EtapaCard
               numero={5} titulo="Componentes e Acessórios" icone="🔧"
               status={statusEtapa(5)} resumo={resumoEtapa(5)}
+              bloqueadoTrial={!!user?.empresa_trial_expirado}
               invalidado={invalidados[5]}
               expandido={passoExpandido === 5}
               selecionado={passoSelecionado === 5 && passoExpandido !== 5}

@@ -10,11 +10,12 @@ const EtapaCard = ({
   status,
   resumo,
   selecionado,
-  expandido,
+  expandido: expandidoProp,
   onSelecionar,
   onEditar,
   onFechar,
   somenteLeitura,
+  bloqueadoTrial,     // bool — avaliação encerrada: impede entrar em modo de edição
   invalidado,         // bool — exibe aviso de "pode estar desatualizado"
   confirmacaoProxima, // string com nome da próxima etapa (ou null)
   onConfirmar,        // () => void — avança para próxima etapa
@@ -22,10 +23,16 @@ const EtapaCard = ({
   children,
 }) => {
 
+  // Com trial vencido, o card nunca renderiza expandido — mesmo que já tivesse
+  // aberto por padrão (ex: Card 1 de um projeto novo/incompleto, sem precisar
+  // de clique em "Editar" pra chegar lá).
+  const expandido = bloqueadoTrial ? false : expandidoProp
+
   const clicavelHeader = status !== 'bloqueado'
 
   const handleHeaderClick = () => {
     if (!clicavelHeader) return
+    if (bloqueadoTrial && status !== 'concluido') return
     if (somenteLeitura || status !== 'concluido') {
       // Etapa ainda não concluída não tem botão "Editar" separado — sem isso, recolher
       // o card (Descartar/Recolher) antes de terminar deixava sem nenhum jeito de reabrir.
@@ -49,6 +56,7 @@ const EtapaCard = ({
           "flex items-center justify-between px-5 py-4 select-none",
           clicavelHeader && "cursor-pointer",
           status === 'bloqueado' && "cursor-not-allowed",
+          bloqueadoTrial && status !== 'concluido' && !expandido && "cursor-not-allowed",
         )}
         onClick={handleHeaderClick}
       >
@@ -98,7 +106,7 @@ const EtapaCard = ({
           )}
 
           {/* Botão Editar */}
-          {!somenteLeitura && status === 'concluido' && !expandido && (
+          {!somenteLeitura && !bloqueadoTrial && status === 'concluido' && !expandido && (
             <Button
               variant="outline" size="sm"
               onClick={e => { e.stopPropagation(); onEditar() }}
@@ -106,6 +114,11 @@ const EtapaCard = ({
             >
               <Pencil className="w-3 h-3" /> Editar
             </Button>
+          )}
+
+          {/* Avaliação encerrada — só visualização, sem botão de editar */}
+          {bloqueadoTrial && status === 'concluido' && !expandido && (
+            <Lock className="w-4 h-4 text-muted-foreground/40" title="Avaliação encerrada — assine um plano para editar" />
           )}
 
           {/* Botão Recolher — só fecha o card, não apaga nada preenchido/calculado */}
@@ -136,8 +149,13 @@ const EtapaCard = ({
           )}
 
           {/* Chevron disponível */}
-          {status === 'disponivel' && !expandido && !selecionado && (
+          {status === 'disponivel' && !expandido && !selecionado && !bloqueadoTrial && (
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
+
+          {/* Avaliação encerrada — etapa ainda incompleta, sem jeito de continuar editando */}
+          {bloqueadoTrial && status === 'disponivel' && !expandido && (
+            <Lock className="w-4 h-4 text-muted-foreground/40" title="Avaliação encerrada — assine um plano para editar" />
           )}
         </div>
       </div>
