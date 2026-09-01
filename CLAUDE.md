@@ -375,10 +375,22 @@ pagamento troca `status_assinatura` pra `"ativa"`, nunca o `plano`.
   os três, o que quebraria a UI de todo trial novo). Trial mostra contagem
   regressiva real; vencido, mostra aviso vermelho e desabilita
   "Salvar"/"Salvar Como".
+- **Trava de edição nos Cards 1-5 (em produção desde 2026-08-31):** o backend
+  só bloqueia `POST`/`PATCH /api/v1/projetos` — todo o resto (cálculos de
+  cada card, geração de orçamento, export Excel/PDF) roda sem nenhuma
+  checagem de trial, de propósito. Sem trava no frontend também, um trial
+  vencido conseguia editar/recalcular os 6 cards livremente e até exportar
+  Lista de Engenharia com dados nunca salvos — só não conseguia clicar em
+  "Salvar" (achado testando em produção). Fix em `EtapaCard.jsx` (prop
+  `bloqueadoTrial`) + `App.jsx`: esconde "Editar" e impede o card renderizar
+  expandido nos Cards 1-5 quando o trial venceu (cadeado no lugar). Card 6
+  (Orçamento/Lista de Engenharia) continua abrindo — "ver e exportar"
+  precisa continuar funcionando, e com 1-5 travados os dados que chegam lá
+  não mudam mais.
 - **Fora do escopo desta trava:** `suspensa`/`cancelada` continuam sem
   enforcement real no backend (a property `Empresa.ativa` existe mas nunca
-  é chamada); endpoints de cotação/proposta não são bloqueados pelo trial
-  vencido, só a edição do projeto (`routes_projetos.py`).
+  é chamada); dentro do próprio Card 6 ainda dá pra trocar a cotação
+  selecionada ou editar preço manual de item sem preço — não travado.
 - **Pendente:** a função de ativação de assinatura
   (`ativar_assinatura(empresa_id, plano, dias)`) que o admin e o futuro
   webhook do checkout de terceiro vão chamar — ainda não construída,
@@ -591,7 +603,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
-| Trial 15 dias/1 projeto — trava real de edição | ✅ em produção desde 2026-08-25 |
+| Trial 15 dias/1 projeto — trava real de edição | ✅ backend (Save) desde 2026-08-25; frontend (Cards 1-5, recalcular) desde 2026-08-31 |
 | Multiusuário/convites + painel admin ampliado (Fase C) | ❌ |
 | Billing real / gateway (Fase D) | ❌ |
 | IA com Tool Use | ❌ |
