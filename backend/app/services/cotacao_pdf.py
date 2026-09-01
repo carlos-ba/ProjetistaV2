@@ -172,6 +172,16 @@ async def analisar_pdf_cotacao(
         raise RuntimeError("A IA não retornou um resultado estruturado — tente novamente.")
 
     itens_ia = bloco.input.get("itens", [])
+    if isinstance(itens_ia, str):
+        # Achado em produção, 2026-09-01: pra respostas grandes (30+ itens ricos), a IA
+        # às vezes serializa "itens" como texto JSON dentro do campo, em vez de devolver
+        # o array nativo — mesmo com saída estruturada forçada. Tenta decodificar antes
+        # de desistir; iterar a string teria tratado cada caractere como um item.
+        try:
+            itens_ia = json.loads(itens_ia)
+        except json.JSONDecodeError:
+            logger.warning("cotacao_pdf: campo 'itens' veio como string e não é JSON válido")
+            itens_ia = []
     logger.warning(
         "cotacao_pdf: %d itens brutos recebidos, tipos=%s, %d itens no nosso lado",
         len(itens_ia), [type(x).__name__ for x in itens_ia[:10]], len(itens_banco),
