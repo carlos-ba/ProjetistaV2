@@ -981,6 +981,7 @@ function AppContent({ catalogo }) {
                 key={projetoKey}
                 dadosAutomaticos={itensOrcamento}
                 modoEngenharia={!!user?.modo_engenharia}
+                bloqueadoTrial={!!user?.empresa_trial_expirado}
                 aoRemoverEquipamento={removerEquipamentoSugerido}
                 aoReiniciar={novoProjeto}
                 projetoAtual={projetoAtual}

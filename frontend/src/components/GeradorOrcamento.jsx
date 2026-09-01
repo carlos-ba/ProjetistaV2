@@ -26,7 +26,7 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -1225,7 +1225,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             📋 Itens do Dimensionamento — Selecione o que incluir
           </h3>
           <button onClick={() => { if (window.confirm("Limpar todo o dimensionamento?")) aoReiniciar(); }}
-            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-xs font-bold border border-amber-200 transition-all">
+            disabled={bloqueadoTrial}
+            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-xs font-bold border border-amber-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
             🗑️ LIMPAR TUDO
           </button>
         </div>
@@ -1238,7 +1239,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               ? <p className="text-amber-600/50 italic text-sm">Nenhum material calculado.</p>
               : (materiaisComEmbalagem.map((item, i) => (
                 <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${materiaisAtivos[i] ? 'bg-white border-amber-200 shadow-sm' : 'bg-amber-50/30 border-amber-100 opacity-50'}`}>
-                  <input type="checkbox" checked={!!materiaisAtivos[i]} onChange={() => toggleMaterial(i)} className="mt-0.5 w-4 h-4 accent-amber-600 flex-shrink-0" />
+                  <input type="checkbox" checked={!!materiaisAtivos[i]} onChange={() => toggleMaterial(i)} disabled={bloqueadoTrial} className="mt-0.5 w-4 h-4 accent-amber-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-bold leading-tight ${materiaisAtivos[i] ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
                       {item.item}
@@ -1285,7 +1286,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               ? <p className="text-amber-600/50 italic text-sm">Nenhum equipamento selecionado.</p>
               : (dadosAutomaticos.equipamentos.map((eq, i) => (
                 <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border mb-2 cursor-pointer transition-all ${equipamentosAtivos[i] ? 'bg-white border-emerald-200 shadow-sm' : 'bg-amber-50/30 border-amber-100 opacity-50'}`}>
-                  <input type="checkbox" checked={!!equipamentosAtivos[i]} onChange={() => toggleEquipamento(i)} className="mt-0.5 w-4 h-4 accent-emerald-600 flex-shrink-0" />
+                  <input type="checkbox" checked={!!equipamentosAtivos[i]} onChange={() => toggleEquipamento(i)} disabled={bloqueadoTrial} className="mt-0.5 w-4 h-4 accent-emerald-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-bold leading-tight ${equipamentosAtivos[i] ? 'text-emerald-800' : 'text-slate-400 line-through'}`}>
                       {eq.qtde > 1 ? `${eq.qtde}× ` : ''}{eq.nome}
@@ -1787,7 +1788,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
 
               {/* Opção A: Enviar para cotação */}
-              <button onClick={() => setModalCotacaoAberto(true)} disabled={loading || !projetoSalvo}
+              <button onClick={() => setModalCotacaoAberto(true)} disabled={loading || !projetoSalvo || bloqueadoTrial}
                 title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
                 className={`w-full sm:w-auto px-6 py-3 text-white rounded-xl font-bold text-sm shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                   estaDesatualizada('cotacao') ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-300' : 'bg-amber-500 hover:bg-amber-600'}`}>
@@ -1798,7 +1799,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               <span className="text-slate-300 font-bold hidden sm:block">ou</span>
 
               {/* Opção B: Gera proposta (verifica cotação primeiro) */}
-              <button onClick={verificarEGerar} disabled={loading || loadingCotacaoCheck || !projetoSalvo}
+              <button onClick={verificarEGerar} disabled={loading || loadingCotacaoCheck || !projetoSalvo || bloqueadoTrial}
                 title={!projetoSalvo ? 'Salve o projeto primeiro' : ''}
                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg hover:-translate-y-0.5 transition-all disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 💰 GERAR PROPOSTA AO CLIENTE
@@ -1902,7 +1903,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 className="text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
                 Cancelar
               </button>
-              <button onClick={confirmarEscolhaCotacao} disabled={loading}
+              <button onClick={confirmarEscolhaCotacao} disabled={loading || bloqueadoTrial}
                 className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50">
                 {loading ? 'Gerando...' : 'Gerar proposta'}
               </button>
@@ -1931,13 +1932,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   <input type="number" min="0" step="0.01"
                     value={precosManuals[norm(desc)] ?? ''}
                     onChange={e => setPrecosManuals(p => ({ ...p, [norm(desc)]: e.target.value }))}
+                    disabled={bloqueadoTrial}
                     placeholder="0,00"
-                    className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white" />
+                    className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-50" />
                 </div>
               </div>
             ))}
           </div>
-          <button onClick={recalcularComPrecosManuals} disabled={loading}
+          <button onClick={recalcularComPrecosManuals} disabled={loading || bloqueadoTrial}
             className="mt-3 text-xs px-4 py-2 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-50">
             {loading ? 'Recalculando...' : '🔄 Recalcular proposta com esses preços'}
           </button>
