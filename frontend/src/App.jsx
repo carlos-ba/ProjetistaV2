@@ -767,11 +767,26 @@ function AppContent({ catalogo }) {
             aberto={mostrandoCotacoes}
             aoFechar={() => setMostrandoCotacoes(false)}
             projetoAtual={projetoAtual}
-            onGerarProposta={() => {
+            onGerarProposta={async (cotacao) => {
               setMostrandoCotacoes(false);
-              setPassoExpandido(6);
-              setPassoSelecionado(6);
-              setPassoAtual(prev => Math.max(prev, 6));
+              // A cotação pode pertencer a um projeto diferente do que está aberto no
+              // wizard agora (painel de Cotações lista "Todas" por padrão) — sem carregar
+              // o projeto certo antes, o Card 6 abria vazio e ficava parado sem erro
+              // nenhum (achado em produção, 2026-09-01).
+              if (cotacao?.projeto_id && cotacao.projeto_id !== projetoAtual?.id) {
+                try {
+                  const r = await api.get(`/api/v1/projetos/${cotacao.projeto_id}`);
+                  carregarProjeto(r.data);
+                  irParaOrcamento();
+                } catch {
+                  alert('Não foi possível abrir automaticamente o projeto desta cotação. Abra-o pelo Histórico e tente de novo.');
+                  return;
+                }
+              } else {
+                setPassoExpandido(6);
+                setPassoSelecionado(6);
+                setPassoAtual(prev => Math.max(prev, 6));
+              }
               setTriggerGerarProposta(n => n + 1);
             }}
           />

@@ -403,7 +403,15 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                 </div>
                 {onGerarProposta && (
                   <button
-                    onClick={() => { aoFechar(); onGerarProposta(); }}
+                    onClick={() => {
+                      // Cotação mais recente processada dentro do filtro atual — é o alvo
+                      // que "GERAR PROPOSTA" deve abrir. Sem isso, o botão só olhava pro
+                      // projeto que já estivesse aberto no wizard, não pro dono da cotação
+                      // (achado em produção, 2026-09-01: ficava preso num projeto vazio).
+                      const cotacaoAlvo = cotacoesFiltradas.find(c => c.status === 'processada') || null;
+                      aoFechar();
+                      onGerarProposta(cotacaoAlvo);
+                    }}
                     className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow transition-all whitespace-nowrap text-white ${
                       cotacoesFiltradas.some(c => c.status === 'processada')
                         ? 'bg-indigo-600 hover:bg-indigo-700'
