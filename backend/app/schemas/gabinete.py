@@ -64,4 +64,9 @@ class GabineteResponse(BaseModel):
     # rota, por depender do banco) sem duplicar a geometria aqui.
     comp_parede_m: float = 0.0
     area_total_paineis_m2: float = 0.0
+    # Idem, mas pra alimentar o cálculo da barreira de vapor (piso convencional) —
+    # 0.0 quando o piso não é "convencional" (nesse caso a barreira não se aplica).
+    area_piso_m2: float = 0.0
+    # Avisos de catálogo faltando — agrega tanto o kit de montagem quanto a
+    # barreira de vapor (mesmo mecanismo, mesmo banner no Card 1; ver CLAUDE.md).
     avisos_kit_montagem: list[str] = []

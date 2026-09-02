@@ -25,6 +25,7 @@ from app.models.embalagem_fluido import EmbalagemFluido
 from app.models.perfil_metalico import PerfilMetalico
 from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
 from app.models.apelido_fornecedor_item import ApelidoFornecedorItem
+from app.models.catalogo_generico import CatalogoGenerico
 
 __all__ = [
     "Base",
@@ -60,4 +61,5 @@ __all__ = [
     "Rebite",
     "ParafusoBucha",
     "ApelidoFornecedorItem",
+    "CatalogoGenerico",
 ]

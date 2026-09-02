@@ -6,6 +6,7 @@ from app.database.session import get_db
 from app.schemas.gabinete import GabineteRequest, GabineteResponse, GabineteDXFRequest
 from app.services.calculos_gabinete import calcular_gabinete
 from app.services.kit_montagem import calcular_kit_montagem
+from app.services.barreira_vapor import calcular_barreira_vapor
 from app.services.dxf_gabinete import gerar_dxf_gabinete
 
 router = APIRouter(prefix="/api/v1/gabinete", tags=["gabinete"])
@@ -29,8 +30,9 @@ async def calcular_gabinete_endpoint(
         fator_seguranca_selante=payload.fator_seguranca_selante,
         perfis_manuais=payload.perfis_manuais,
     )
-    resultado.materiais_extras += itens_kit
-    resultado.avisos_kit_montagem = avisos_kit
+    itens_barreira, avisos_barreira = await calcular_barreira_vapor(db, resultado.area_piso_m2)
+    resultado.materiais_extras += itens_kit + itens_barreira
+    resultado.avisos_kit_montagem = avisos_kit + avisos_barreira
     return resultado
 
 

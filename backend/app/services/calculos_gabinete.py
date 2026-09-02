@@ -54,6 +54,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
 
     # Piso
     altura_util = req.altura - esp_m
+    area_piso = 0.0   # só "convencional" usa — alimenta a barreira de vapor (resolvida à parte, depende do banco)
     if req.tipo_piso == "painel":
         qtde_piso = math.ceil(req.comprimento / req.largura_painel)
         area_piso_painel = qtde_piso * req.largura * req.largura_painel
@@ -77,14 +78,6 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             unidade="m²",
             detalhe=f"2 camadas de {esp_camada:.0f}mm (Juntas Desencontradas)",
             tipo_item="placa_isolamento",
-        ))
-        materiais_extras.append(MaterialExtra(
-            item="Barreira de Vapor",
-            qtd=f"{area_piso * 1.1:.2f} m²",
-            quantidade=round(area_piso * 1.1, 2),
-            unidade="m²",
-            detalhe="Sob isolamento (1 camada)",
-            tipo_item="barreira_vapor",
         ))
         if req.espessura_concreto_cm > 0:
             vol = area_piso * concreto_m
@@ -111,4 +104,5 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         perda_altura=round(req.altura - altura_util, 3),
         comp_parede_m=comp_parede,
         area_total_paineis_m2=round(area_total_paineis, 2),
+        area_piso_m2=round(area_piso, 2),
     )

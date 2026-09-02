@@ -182,6 +182,46 @@ m², sem cálculo real) por uma lista de itens de verdade, resolvida dentro de
 
 ---
 
+## Card 1 — Barreira de Vapor (piso convencional)
+
+Em produção desde 2026-09-02. Arquivos: `backend/app/services/barreira_vapor.py`
+(cálculo + busca no catálogo), `backend/app/models/catalogo_generico.py`.
+Design completo: ver memória `project-pendencia-desmembrar-barreira-vapor`.
+
+Substitui a antiga linha única "Barreira de Vapor" (placeholder em m², sem
+composição real) por 3 itens reais, resolvidos dentro de `POST /api/v1/gabinete`
+junto com o kit de montagem (mesma condição — só quando `tipo_piso == "convencional"`).
+
+- **Fórmulas confirmadas com quem elaborou a planilha de referência (VALFIM)**,
+  validadas contra um projeto real de 134 m² de área de piso:
+  - Lona Val Film: área do piso × 1,20 → m²
+  - Fita Branca: `ceil((área × 1,20 / 223) × 1,50)` → rolos (223 = rendimento
+    m²/rolo, 1,50 = fator de segurança — ambos fixos no código por decisão
+    consciente; viram campo configurável em `configuracao_montagem` se um dia
+    precisarem variar por projeto, mesmo caminho já percorrido pelo
+    `rendimento_selante_m_por_embalagem` do kit de montagem)
+  - Lona: (área do piso × 1,32) / 4 → m
+- **`catalogo_generico` é uma tabela nova, compartilhada por `tipo_item`**
+  (`lona_val_film`, `fita_branca`, `lona`, busca sempre
+  `WHERE tipo_item=... AND ativo ORDER BY id LIMIT 1`) — decisão consciente de
+  não abrir mais uma tabela dedicada por item (como `selante_montagem`/
+  `rebite`/`parafuso_bucha`, migration 0028, que continuam como estão) depois
+  de ver o mesmo formato se repetir uma 2ª vez. Colunas: `tipo_item`,
+  `fabricante_id` (sempre preenchido — usa o fabricante "Genérico", id 14,
+  quando não há fornecedor específico, em vez de aceitar nulo), `codigo_fabricante`,
+  `descricao`, `tipo_embalagem` (opcional, só informativo), `observacao`
+  (texto livre), `ativo` (soft-delete). É o molde pra próxima leva de cadastro
+  simples que aparecer — não só pra barreira de vapor.
+- **Avisos reaproveitam `avisos_kit_montagem`** na resposta do `/api/v1/gabinete`
+  (mesmo campo, mesmo banner vermelho no Card 1) em vez de um campo novo — item
+  sem cadastro no catálogo some da lista e aparece no aviso, mesma mecânica do
+  kit de montagem.
+- `area_piso_m2` exposto em `GabineteResponse` (0.0 quando o piso não é
+  "convencional") pra alimentar esse cálculo sem duplicar geometria — mesmo
+  padrão de `area_total_paineis_m2`/`comp_parede_m` já usado pelo kit de montagem.
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
@@ -505,6 +545,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0029 | Seed de dados reais do kit de montagem em produção: 91 perfis MBP Isoblock + selante/rebite/parafuso+bucha (fabricante genérico) |
 | 0030 | Tabela `apelido_fornecedor_item` — apelidos aprendidos por fornecedor (importação de cotação em PDF via IA) |
 | 0031 | Amplia `cotacao_item.obs_fornecedor` de 250 para 500 caracteres (explicações de substituição geradas pela IA passavam do limite) |
+| 0032 | Tabela `catalogo_generico` (cadastro genérico compartilhado, por `tipo_item`) + seed dos 3 itens da barreira de vapor (Lona Val Film, Fita Branca, Lona) |
 
 ---
 
@@ -669,7 +710,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-01)
+## Estado atual do código (auditado em 2026-09-02)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -677,6 +718,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
+| Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31 |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
