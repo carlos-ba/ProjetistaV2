@@ -169,8 +169,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [baseDesatualizada, setBaseDesatualizada] = useState(false);
   const [loadingCotacaoCheck, setLoadingCotacaoCheck] = useState(false);
   const [itensSemPreco,       setItensSemPreco]       = useState([]);
-  const [precosManuals,       setPrecosManuals]       = useState({}); // norm(desc) → string
+  // Revisão manual antes de gerar a proposta — preço, quantidade e "usar item
+  // substituído" (ex: fornecedor cotou outro modelo/embalagem). Persistidos via
+  // onValoresChange pra não precisar redigitar toda vez que o projeto reabre.
+  const [precosManuals,       setPrecosManuals]       = useState(initialValues?.precosManuals ?? {}); // norm(desc) → string
+  const [qtdesManuais,        setQtdesManuais]        = useState(initialValues?.qtdesManuais ?? {}); // norm(desc) → string
+  const [itensSubstituidos,   setItensSubstituidos]   = useState(initialValues?.itensSubstituidos ?? {}); // norm(desc) → bool
   const ultimoPrecoMapRef = useRef(new Map()); // guarda precoMap da última geração
+  const ultimoModeloMapRef = useRef(new Map()); // norm(desc) → marca_modelo_cotado (quando o fornecedor substituiu o item)
   const [dadosCliente, setDadosCliente] = useState(
     initialValues?.dadosCliente ?? { nome: '', cnpj: '', contato: '', celular: '', email: '' }
   );
@@ -235,10 +241,12 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
+      precosManuals, qtdesManuais, itensSubstituidos,
     });
   }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
-      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos]);
+      exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
+      precosManuals, qtdesManuais, itensSubstituidos]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -362,18 +370,35 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       return p ?? null;
     };
 
+    // Correção manual de quantidade (ex: fornecedor vende em pacote — a quantidade
+    // dimensionada tecnicamente não é a mesma unidade da cotação do fornecedor).
+    const qtdCorrigida = (descricao, calculada) => {
+      const manual = parseFloat(qtdesManuais[norm(descricao)]);
+      return !isNaN(manual) && manual > 0 ? manual : calculada;
+    };
+
+    // "Usar item substituído nesta proposta" — troca só o texto impresso pelo modelo
+    // que o fornecedor realmente cotou; o projeto (Cards 1-5) continua intocado.
+    const nomeCorrigido = (descricao) => {
+      const key = norm(descricao);
+      if (itensSubstituidos[key] && ultimoModeloMapRef.current.has(key)) {
+        return ultimoModeloMapRef.current.get(key);
+      }
+      return descricao;
+    };
+
     const payload = {
       materiais: materiaisAprovados.map(m => {
         const descricao = m.comprimento ? `${m.item} ${m.comprimento}m` : m.item;
         const precoManual = parseFloat(extras[norm(descricao)]) || null;
         // Tubo de cobre é cotado/pago por KG (coluna F). A quantidade do orçamento tem que ser kg,
         // não metros (coluna E) — igual à planilha de cotação (montarItensCotacao).
-        const qtd = parseFloat(m.quantidade ?? m.qtd ?? 1) || 1;
+        const qtd = qtdCorrigida(descricao, parseFloat(m.quantidade ?? m.qtd ?? 1) || 1);
         const parede = m.detalhe?.includes('grossa') ? 'grossa' : 'fina';
         const kgTotal = m.unidade === 'm' ? calcularKg(m, qtd, parede) : null;
         return {
           id: m.id,
-          item: descricao,
+          item: nomeCorrigido(descricao),
           qtde: kgTotal != null ? kgTotal : qtd,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${fmtQtd(m.area_total)} m²` : null].filter(Boolean).join(' — '),
           preco_unitario: precoManual ?? buscarPreco(descricao),
@@ -384,8 +409,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         const descricao = e.nome || e.item;
         const precoManual = parseFloat(extras[norm(descricao)]) || null;
         return {
-          id: e.id, item: descricao,
-          qtde: parseFloat(e.qtde ?? 1) || 1,
+          id: e.id, item: nomeCorrigido(descricao),
+          qtde: qtdCorrigida(descricao, parseFloat(e.qtde ?? 1) || 1),
           detalhe: e.detalhe || '',
           preco_unitario: precoManual ?? buscarPreco(descricao),
           categoria: 'equipamento',
@@ -398,10 +423,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       const r = await api.post('/api/v1/orcamento', payload);
       setOrcamento(r.data);
       setItensSemPreco(semPreco);
+      // Só acrescenta entrada nova pra item que ficou sem preço — nunca apaga uma
+      // correção manual já digitada (ou restaurada do projeto salvo) de um item que
+      // já tinha preço por outro motivo (revisão manual da 'Recursos Avançados').
       if (semPreco.length > 0) {
-        const init = {};
-        semPreco.forEach(d => { init[norm(d)] = ''; });
-        setPrecosManuals(init);
+        setPrecosManuals(prev => {
+          const next = { ...prev };
+          semPreco.forEach(d => { if (!(norm(d) in next)) next[norm(d)] = ''; });
+          return next;
+        });
       }
       setModalEscolhaCotacao(false);
       setCotacaoAviso(null);
@@ -459,6 +489,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const _gerarComCotacoes = async (ids) => {
     const cotacoesData = await Promise.all(ids.map(id => api.get(`/api/v1/cotacoes/${id}`)));
     const precoMap = new Map();
+    const modeloMap = new Map(); // norm(descrição do projeto) → marca/modelo que o fornecedor realmente cotou
     for (const r of cotacoesData) {
       for (const item of (r.data.itens || [])) {
         if (item.preco_unitario != null && item.preco_unitario > 0) {
@@ -467,9 +498,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             precoMap.set(key, item.preco_unitario);
           }
         }
+        if (item.marca_modelo_cotado && norm(item.marca_modelo_cotado) !== norm(item.descricao)) {
+          modeloMap.set(norm(item.descricao), item.marca_modelo_cotado);
+        }
       }
     }
     ultimoPrecoMapRef.current = precoMap;
+    ultimoModeloMapRef.current = modeloMap;
     await gerarOrcamentoComPrecos(precoMap);
   };
 
@@ -1939,34 +1974,68 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
       {erro && <div className="p-4 bg-red-100 text-red-700 rounded-xl text-center font-bold border border-red-200">{erro}</div>}
 
-      {/* Itens sem preço na cotação — permite entrada manual */}
-      {orcamento && itensSemPreco.length > 0 && (
+      {/* Revisão manual antes de gerar a proposta — sempre visível, pra virar hábito de
+          conferência (não só quando falta preço). Cobre 3 correções: preço, quantidade
+          (ex: fornecedor cota por pacote, não pela unidade dimensionada) e substituição
+          de item (fornecedor sugeriu outro modelo — troca só o texto da proposta, o
+          projeto/Cards 1-5 continuam intocados). Os 3 mapas persistem no projeto salvo
+          (onValoresChange) — não precisa redigitar ao reabrir. */}
+      {orcamento && (
         <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl print:hidden">
           <p className="font-bold text-amber-800 text-sm mb-1">
-            ⚠️ {itensSemPreco.length} {itensSemPreco.length === 1 ? 'item sem preço' : 'itens sem preço'} na cotação
+            🔍 Revisão antes de gerar a proposta
           </p>
           <p className="text-xs text-amber-700 mb-3">
-            Os itens abaixo não foram encontrados na cotação ou estão sem valor. Você pode informar o preço manualmente e recalcular.
+            Confira quantidade e preço de cada item — útil quando o fornecedor cota em pacote/embalagem
+            diferente da unidade dimensionada, ou sugere outro modelo.
+            {itensSemPreco.length > 0 && (
+              <span className="block mt-1 font-semibold">
+                ⚠️ {itensSemPreco.length} {itensSemPreco.length === 1 ? 'item está' : 'itens estão'} sem preço na cotação.
+              </span>
+            )}
           </p>
-          <div className="space-y-2">
-            {itensSemPreco.map(desc => (
-              <div key={desc} className="flex items-center gap-3">
-                <span className="text-xs text-slate-700 flex-1 truncate" title={desc}>{desc}</span>
-                <div className="relative w-32 flex-shrink-0">
-                  <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
-                  <input type="number" min="0" step="0.01"
-                    value={precosManuals[norm(desc)] ?? ''}
-                    onChange={e => setPrecosManuals(p => ({ ...p, [norm(desc)]: e.target.value }))}
-                    disabled={bloqueadoTrial}
-                    placeholder="0,00"
-                    className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-50" />
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {(orcamento.detalhamento_itens || []).map((l, i) => {
+              const key = norm(l.item);
+              const modeloSugerido = ultimoModeloMapRef.current.get(key);
+              return (
+                <div key={i} className="p-2 rounded-lg bg-white/60 border border-amber-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-700 flex-1 truncate" title={l.item}>{l.item}</span>
+                    <input type="number" min="0" step="0.01"
+                      value={qtdesManuais[key] ?? ''}
+                      onChange={e => setQtdesManuais(p => ({ ...p, [key]: e.target.value }))}
+                      disabled={bloqueadoTrial}
+                      placeholder={fmtQtd(l.quantidade)}
+                      title="Quantidade"
+                      className="w-20 flex-shrink-0 px-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-50" />
+                    <div className="relative w-28 flex-shrink-0">
+                      <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
+                      <input type="number" min="0" step="0.01"
+                        value={precosManuals[key] ?? ''}
+                        onChange={e => setPrecosManuals(p => ({ ...p, [key]: e.target.value }))}
+                        disabled={bloqueadoTrial}
+                        placeholder={fmtQtd(l.custo_unitario_rs)}
+                        title="Preço unitário"
+                        className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-50" />
+                    </div>
+                  </div>
+                  {modeloSugerido && (
+                    <label className="flex items-center gap-2 text-[10px] text-indigo-700 pl-1 pt-1.5 cursor-pointer">
+                      <input type="checkbox" checked={!!itensSubstituidos[key]}
+                        onChange={e => setItensSubstituidos(p => ({ ...p, [key]: e.target.checked }))}
+                        disabled={bloqueadoTrial}
+                        className="w-3 h-3 accent-indigo-600 flex-shrink-0" />
+                      Fornecedor cotou: <b>{modeloSugerido}</b> — usar este item na proposta ao cliente
+                    </label>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <button onClick={recalcularComPrecosManuals} disabled={loading || bloqueadoTrial}
             className="mt-3 text-xs px-4 py-2 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-50">
-            {loading ? 'Recalculando...' : '🔄 Recalcular proposta com esses preços'}
+            {loading ? 'Recalculando...' : '🔄 Aplicar correções e recalcular'}
           </button>
         </div>
       )}

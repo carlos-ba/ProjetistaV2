@@ -818,6 +818,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Projeto CAD (.DXF, Card 1) | ✅ reescrito 2026-09-01 com `ezdxf` — cotas reais (DIMENSION), altura, juntas nas 4 paredes, vistas Frontal/Lateral. Posição da porta na parede fica de fora (dado não capturado no wizard) |
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
+| Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos` |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Modal resumo ao carregar projeto | ✅ |
@@ -862,6 +863,42 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 - Itens não encontrados na cotação ficam com `preco_unitario=null` → backend retorna `custo_unitario_rs=0`
 - Após gerar, aparece seção âmbar com lista dos itens sem preço + inputs para preço manual
 - Botão "Recalcular" regenera a proposta usando `ultimoPrecoMapRef` (preços da cotação) + preços manuais como override
+
+### Revisão manual antes de gerar a proposta (em produção desde 2026-09-02)
+
+Painel **sempre visível** (`🔍 Revisão antes de gerar a proposta`, `GeradorOrcamento.jsx`)
+logo abaixo dos botões "Gerar Planilha de Cotação"/"Gerar Proposta ao Cliente" — por
+decisão do usuário, pra virar hábito de conferência, não só aparecer quando falta preço.
+Resolve dois problemas reais encontrados usando a importação de cotação em PDF: o
+fornecedor cota por embalagem diferente da unidade dimensionada (ex: sistema calcula
+870 un de rebite, fornecedor vende em pacote de 500 e cotou 2 pacotes — multiplicar
+870 × preço do pacote distorce o total), e o fornecedor sugere um item equivalente de
+outro modelo/fabricante.
+
+- **Correção de quantidade**: input numérico por item (placeholder = quantidade
+  calculada). Aplicado só na hora de montar o payload do orçamento
+  (`qtdCorrigida()` em `gerarOrcamentoComPrecos`) — a quantidade "real" calculada
+  pelos Cards 1-5 nunca é alterada, só o número que vai pro orçamento/proposta.
+- **Substituição de item**: quando a cotação trouxe `marca_modelo_cotado`
+  (preenchido na confirmação da importação, manual ou por IA) diferente da
+  descrição do item, aparece como sugestão com checkbox — marcar troca o nome do
+  item na proposta ao cliente (`nomeCorrigido()`), mantendo o item do
+  dimensionamento técnico intacto por trás.
+- **Zero mudança de backend/schema** — `ItemOrcamento.qtde`/`.item`
+  (`backend/app/schemas/orcamento.py`) já aceitavam qualquer valor vindo do
+  frontend sem validação nenhuma contra os valores calculados; a correção inteira
+  é resolvida no frontend, no payload que vai pro `POST /api/v1/orcamento`.
+- **Persistência entre save/reload** (pedido explícito do usuário — evitar refazer
+  a mesma revisão toda vez que o projeto reabre): `precosManuals`, `qtdesManuais`
+  e `itensSubstituidos` (todos `Map<norm(descricao), valor>`) entram no mesmo
+  `onValoresChange` que já persiste o resto do Card 6 em `dados_completos`: —
+  restaurados via `initialValues` ao reabrir o projeto salvo, reaplicados
+  automaticamente ao gerar a proposta de novo, sem precisar redigitar.
+- **Risco conhecido, aceito por ora**: mesma fragilidade de casamento por
+  `norm(descricao)` das seções acima — se a descrição do item mudar entre
+  gerações (ex: editar o Card que gerou aquele item), a correção salva não casa
+  mais. Mitigação fica para uma revisão futura (não bloqueante pro lançamento
+  desta funcionalidade).
 
 ### Riscos conhecidos
 
