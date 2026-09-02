@@ -76,10 +76,16 @@ export default function LoginPage() {
       setAba('entrar');
       setForm(f => ({ ...f, password: '' }));
     } catch (err) {
-      const data = err.response?.data;
-      if (data) {
-        const msgs = Object.values(data).flat().join(' ');
-        setErro(msgs);
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string') {
+        // HTTPException(detail="mensagem")
+        setErro(detail);
+      } else if (Array.isArray(detail)) {
+        // 422 do Pydantic — lista de {loc, msg, ...} (ex: telefone/senha/username inválidos)
+        setErro(detail.map(d => d.msg || 'Dado inválido.').join(' '));
+      } else if (detail && typeof detail === 'object') {
+        // HTTPException(detail={"campo": ["mensagem"]}) — ex: usuário/e-mail já cadastrado
+        setErro(Object.values(detail).flat().join(' '));
       } else {
         setErro('Erro ao criar conta.');
       }
