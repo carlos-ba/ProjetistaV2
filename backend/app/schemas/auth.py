@@ -65,6 +65,7 @@ class UserOut(BaseModel):
     empresa_status: str | None = None
     empresa_assinatura_fim: date | None = None
     empresa_trial_expirado: bool = False
+    empresa_recursos_avancados_habilitados: bool = False
 
     model_config = {"from_attributes": True}
 

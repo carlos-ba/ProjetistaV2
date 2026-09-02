@@ -2,7 +2,7 @@ from datetime import date
 from uuid import UUID, uuid4
 from typing import List, Optional
 
-from sqlalchemy import String, Date
+from sqlalchemy import String, Date, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -35,6 +35,14 @@ class Empresa(Base, TimestampMixin):
     status_assinatura: Mapped[str] = mapped_column(String(20), default="ativa", server_default="ativa")
     assinatura_inicio: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     assinatura_fim: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # Recursos avançados (Classificação de Itens, Catálogo de Preços) — nascem
+    # desligados pra todo mundo (técnico ou empresa); só o superadmin liga por
+    # exceção, no painel de Administração. Só esconde o menu no frontend — de
+    # propósito sem gate no backend, pra não arriscar nada nas rotas já em uso.
+    recursos_avancados_habilitados: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     usuarios: Mapped[List["Usuario"]] = relationship(back_populates="empresa")
 

@@ -707,11 +707,13 @@ function AppContent({ catalogo }) {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
             <Settings className="w-4 h-4" /> Configurações
           </div>
-          <div onClick={() => setMostrandoClassificacao(true)}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
-            <Settings className="w-4 h-4" /> Classificação de Itens
-          </div>
-          {(user?.papel === 'admin_empresa' || user?.papel === 'superadmin_icenexus') && (
+          {user?.empresa_recursos_avancados_habilitados && (
+            <div onClick={() => setMostrandoClassificacao(true)}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
+              <Settings className="w-4 h-4" /> Classificação de Itens
+            </div>
+          )}
+          {user?.empresa_recursos_avancados_habilitados && (user?.papel === 'admin_empresa' || user?.papel === 'superadmin_icenexus') && (
             <div onClick={() => setMostrandoCatalogoPrecos(true)}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground text-sm cursor-pointer transition-colors">
               <Package className="w-4 h-4" /> Catálogo de Preços

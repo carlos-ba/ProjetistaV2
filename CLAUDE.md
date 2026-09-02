@@ -379,6 +379,28 @@ estão na memória — ver `project-fase-a-multitenancy` e
 
 ---
 
+## Recursos Avançados por Empresa (em produção desde 2026-09-02)
+
+`Empresa.recursos_avancados_habilitados` (boolean, default `false`) controla
+a visibilidade de **"Classificação de Itens"** e **"Catálogo de Preços"** no
+menu lateral — nascem desligados pra toda empresa (Técnico ou Empresa,
+mesmo campo pros dois planos), o `superadmin_icenexus` liga por exceção no
+painel Administração (checkbox no formulário de editar empresa).
+
+- **Decisão consciente: só esconde no frontend, sem gate no backend.** As
+  rotas de leitura que esses dois recursos também servem
+  (`GET /api/v1/classificacoes`, `GET /api/v1/produto-empresa/mapa-precos`)
+  são usadas pelo Card 6 de **qualquer** usuário pra rotular itens e buscar
+  preço no orçamento — travar ali quebraria o fluxo normal do wizard. Só as
+  rotas de **edição** desses catálogos ficariam sob o flag se um dia o
+  bloqueio no backend for adicionado; hoje não há enforcement nenhum lá,
+  por pedido explícito do usuário (área sensível, minimizar risco).
+- Exposto em `/me` via `Usuario.empresa_recursos_avancados_habilitados`
+  (property, mesmo padrão de `empresa_trial_expirado`) →
+  `UserOut.empresa_recursos_avancados_habilitados`.
+
+---
+
 ## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
 
 Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
@@ -546,6 +568,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0030 | Tabela `apelido_fornecedor_item` — apelidos aprendidos por fornecedor (importação de cotação em PDF via IA) |
 | 0031 | Amplia `cotacao_item.obs_fornecedor` de 250 para 500 caracteres (explicações de substituição geradas pela IA passavam do limite) |
 | 0032 | Tabela `catalogo_generico` (cadastro genérico compartilhado, por `tipo_item`) + seed dos 3 itens da barreira de vapor (Lona Val Film, Fita Branca, Lona) |
+| 0033 | Campo `empresa.recursos_avancados_habilitados` (boolean, default false) — trava opcional de Classificação de Itens / Catálogo de Preços |
 
 ---
 
@@ -746,6 +769,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Gestão de clientes | ✅ |
 | Diagrama SVG do cavalete (flutuante) | ✅ |
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
+| Recursos avançados por empresa (Classificação/Catálogo de Preços) | ✅ em produção desde 2026-09-02, só trava no frontend (sem gate no backend, de propósito) |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |

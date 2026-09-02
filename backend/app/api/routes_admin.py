@@ -47,6 +47,7 @@ class EmpresaUpdate(BaseModel):
     plano: str | None = None
     status_assinatura: str | None = None
     assinatura_fim: date | None = None
+    recursos_avancados_habilitados: bool | None = None
 
 
 class EmpresaOut(BaseModel):
@@ -57,6 +58,7 @@ class EmpresaOut(BaseModel):
     status_assinatura: str
     assinatura_inicio: date | None
     assinatura_fim: date | None
+    recursos_avancados_habilitados: bool = False
     total_usuarios: int = 0
 
     model_config = {"from_attributes": True}

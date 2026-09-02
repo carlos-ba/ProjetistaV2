@@ -81,8 +81,11 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
   const salvarEmpresa = async () => {
     setSalvando(true); setErro('');
     try {
-      const { id, nome, cnpj, plano, status_assinatura, assinatura_fim } = editando;
-      await api.patch(`/api/v1/admin/empresas/${id}`, { nome, cnpj, plano, status_assinatura, assinatura_fim: assinatura_fim || null });
+      const { id, nome, cnpj, plano, status_assinatura, assinatura_fim, recursos_avancados_habilitados } = editando;
+      await api.patch(`/api/v1/admin/empresas/${id}`, {
+        nome, cnpj, plano, status_assinatura, assinatura_fim: assinatura_fim || null,
+        recursos_avancados_habilitados: !!recursos_avancados_habilitados,
+      });
       setEditando(null); await carregar(); aviso('Empresa atualizada.');
     } catch (e) { setErro(msgErro(e, 'Erro ao salvar.')); }
     finally { setSalvando(false); }
@@ -244,11 +247,18 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                         onChange={ev => setEditando(v => ({ ...v, assinatura_fim: ev.target.value || null }))} />
                     </div>
                   </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                    <input type="checkbox" className="rounded border-slate-300"
+                      checked={!!editando.recursos_avancados_habilitados}
+                      onChange={ev => setEditando(v => ({ ...v, recursos_avancados_habilitados: ev.target.checked }))} />
+                    Recursos avançados (Classificação de Itens / Catálogo de Preços)
+                  </label>
                   <p className="text-[10px] text-slate-400 leading-snug">
                     <b>Plano</b> é só o produto contratado (nunca é "trial" — todo cadastro já nasce
                     Técnico ou Empresa). <b>Status "Trial"</b> é a fase temporária de avaliação, com
                     validade: vencido o prazo, edição trava (leitura e exportação continuam liberadas).
                     Confirmou o pagamento? Troque o status pra "Ativa" — não mexe no plano.
+                    <b> Recursos avançados</b> nasce desligado pra todo mundo — liga só por exceção.
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditando(null)}
