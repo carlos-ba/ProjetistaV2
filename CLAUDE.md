@@ -691,6 +691,8 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 5 — Modo Engenharia (CoolSelector) | ✅ |
 | Card 6 — Embalagem de fluido (Card 6, converte kg em cilindros) | ✅ só R404A tem dado real |
 | Insight de estimativa de capacidade (coluna esquerda) | ✅ informativo, nunca usado em cálculo |
+| Insight "Renovação de Ar" (trocas/h, Painel Resumo Lateral) | ✅ fix 2026-09-01: somava vazão do condensador da UC junto com a do evaporador, inflando o número — corrigido filtrando por `categoria === 'Evaporadora'` |
+| Projeto CAD (.DXF, Card 1) | ✅ reescrito 2026-09-01 com `ezdxf` — cotas reais (DIMENSION), altura, juntas nas 4 paredes, vistas Frontal/Lateral. Posição da porta na parede fica de fora (dado não capturado no wizard) |
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
