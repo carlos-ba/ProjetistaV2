@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from uuid import UUID
 
@@ -8,6 +9,7 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
+    telefone: str
 
     @field_validator("password")
     @classmethod
@@ -22,6 +24,16 @@ class UserCreate(BaseModel):
         if len(v.strip()) < 3:
             raise ValueError("Username deve ter ao menos 3 caracteres.")
         return v.strip()
+
+    @field_validator("telefone")
+    @classmethod
+    def telefone_valido(cls, v: str) -> str:
+        # Só dígitos, DDD + número (10 = fixo, 11 = celular com 9º dígito) — sem
+        # exigir formatação específica do usuário (aceita com ou sem máscara).
+        digitos = re.sub(r"\D", "", v or "")
+        if len(digitos) not in (10, 11):
+            raise ValueError("Telefone inválido — informe DDD + número.")
+        return digitos
 
 
 class UserLogin(BaseModel):

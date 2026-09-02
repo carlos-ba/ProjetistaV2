@@ -112,6 +112,7 @@ class UsuarioAdminOut(BaseModel):
     id: UUID
     username: str
     email: str
+    telefone: str | None = None
     papel: str
     is_active: bool
     email_verified: bool

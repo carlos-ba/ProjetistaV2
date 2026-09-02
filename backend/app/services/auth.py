@@ -58,6 +58,7 @@ async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
+        telefone=payload.telefone,
         email_verified=False,
         email_verification_token=token_verificacao,
         empresa_id=empresa.id,

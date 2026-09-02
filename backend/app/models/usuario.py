@@ -17,6 +17,10 @@ class Usuario(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Obrigatório só no cadastro público (trial self-serve) — vira lead pro time de
+    # vendas contatar. Nullable aqui pra não quebrar conta existente (nenhuma tinha
+    # esse dado antes) nem usuário adicional criado pelo admin (não é lead).
+    telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # Verificação de email
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)

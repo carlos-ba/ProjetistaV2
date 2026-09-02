@@ -18,7 +18,7 @@ const formatarUsoRelativo = (iso) => {
 export default function LoginPage() {
   const { login, loginEncerrandoSessao } = useAuth();
   const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro'
-  const [form, setForm] = useState({ username: '', email: '', password: '' });
+  const [form, setForm] = useState({ username: '', email: '', password: '', telefone: '' });
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,6 +70,7 @@ export default function LoginPage() {
         username: form.username,
         email: form.email,
         password: form.password,
+        telefone: form.telefone,
       });
       setSucesso('Conta criada! Faça login.');
       setAba('entrar');
@@ -176,6 +177,21 @@ export default function LoginPage() {
                     onChange={handleChange}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
                     placeholder="voce@email.com"
+                  />
+                </div>
+              )}
+
+              {aba === 'cadastro' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Celular / WhatsApp</label>
+                  <input
+                    type="tel"
+                    name="telefone"
+                    value={form.telefone}
+                    onChange={handleChange}
+                    required
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                    placeholder="(11) 91234-5678"
                   />
                 </div>
               )}

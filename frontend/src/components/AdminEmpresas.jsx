@@ -316,6 +316,16 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                         </p>
                         <p className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
                           {u.email}
+                          {u.telefone && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <a href={`https://wa.me/55${u.telefone}`} target="_blank" rel="noreferrer"
+                                onClick={ev => ev.stopPropagation()}
+                                className="text-emerald-600 font-semibold hover:underline">
+                                📱 {u.telefone}
+                              </a>
+                            </>
+                          )}
                           {u.is_active && (
                             <span className="text-slate-300">
                               · {u.sessoes_ativas} sess{u.sessoes_ativas === 1 ? 'ão' : 'ões'} ativa{u.sessoes_ativas === 1 ? '' : 's'}

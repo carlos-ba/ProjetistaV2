@@ -401,6 +401,28 @@ painel Administração (checkbox no formulário de editar empresa).
 
 ---
 
+## Captura de Lead — Telefone/WhatsApp no Cadastro (em produção desde 2026-09-02)
+
+`usuario.telefone` — obrigatório só no cadastro público (`POST /api/auth/register/`,
+jornada trial self-serve), nunca no login. Coluna nullable no banco (contas
+antigas não têm, e usuário adicional criado pelo admin dentro de uma
+empresa existente também não é obrigado — não é lead, é membro de cliente
+que já converteu).
+
+- Validação (`UserCreate.telefone`, `backend/app/schemas/auth.py`): aceita
+  com ou sem máscara, normaliza pra só dígitos, exige DDD + número (10 ou
+  11 dígitos) — sem verificação por SMS, decisão consciente pra não
+  complicar o cadastro nesta fase.
+- Exposto em `UsuarioAdminOut` → aparece na "Equipe" de cada empresa no
+  painel Administração, como link direto pro WhatsApp
+  (`https://wa.me/55{telefone}`) ao lado do e-mail — clica e abre a
+  conversa, sem copiar/colar número.
+- Fora de escopo por decisão consciente: tela dedicada de "Leads" (lista
+  filtrada/ordenada por data de trial) — não compensa pro volume atual;
+  revisar se o volume de trial crescer e virar rotina de consulta diária.
+
+---
+
 ## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
 
 Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
@@ -569,6 +591,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0031 | Amplia `cotacao_item.obs_fornecedor` de 250 para 500 caracteres (explicações de substituição geradas pela IA passavam do limite) |
 | 0032 | Tabela `catalogo_generico` (cadastro genérico compartilhado, por `tipo_item`) + seed dos 3 itens da barreira de vapor (Lona Val Film, Fita Branca, Lona) |
 | 0033 | Campo `empresa.recursos_avancados_habilitados` (boolean, default false) — trava opcional de Classificação de Itens / Catálogo de Preços |
+| 0034 | Campo `usuario.telefone` (nullable) — captura celular/WhatsApp no cadastro público, vira lead pro time de vendas |
 
 ---
 
