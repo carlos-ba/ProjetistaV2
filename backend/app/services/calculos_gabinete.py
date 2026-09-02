@@ -54,7 +54,8 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
 
     # Piso
     altura_util = req.altura - esp_m
-    area_piso = 0.0   # só "convencional" usa — alimenta a barreira de vapor (resolvida à parte, depende do banco)
+    area_piso = 0.0        # só "convencional" usa — alimenta a barreira de vapor (resolvida à parte, depende do banco)
+    volume_concreto = 0.0  # idem — só informativo no Card 1, não é MaterialExtra (obra civil, não é peça de refrigeração)
     if req.tipo_piso == "painel":
         qtde_piso = math.ceil(req.comprimento / req.largura_painel)
         area_piso_painel = qtde_piso * req.largura * req.largura_painel
@@ -80,16 +81,7 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
             tipo_item="placa_isolamento",
         ))
         if req.espessura_concreto_cm > 0:
-            vol = area_piso * concreto_m
-            nota = " (piso rebaixado — nivelado, sem degrau)" if req.piso_rebaixado else ""
-            materiais_extras.append(MaterialExtra(
-                item="Concreto Armado",
-                qtd=f"{vol:.2f} m³",
-                quantidade=round(vol, 2),
-                unidade="m³",
-                detalhe=f"Esp. {req.espessura_concreto_cm}cm{nota}",
-                tipo_item="concreto_armado",
-            ))
+            volume_concreto = round(area_piso * concreto_m, 2)
         # Altura útil: apoiado desce pelo isolamento + concreto (cria degrau na porta);
         # rebaixado preenche o rebaixo e o piso fica nivelado (só desconta o teto).
         if not req.piso_rebaixado:
@@ -105,4 +97,5 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         comp_parede_m=comp_parede,
         area_total_paineis_m2=round(area_total_paineis, 2),
         area_piso_m2=round(area_piso, 2),
+        volume_concreto_m3=volume_concreto,
     )

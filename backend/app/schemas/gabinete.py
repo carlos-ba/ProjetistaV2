@@ -67,6 +67,10 @@ class GabineteResponse(BaseModel):
     # Idem, mas pra alimentar o cálculo da barreira de vapor (piso convencional) —
     # 0.0 quando o piso não é "convencional" (nesse caso a barreira não se aplica).
     area_piso_m2: float = 0.0
+    # Puramente informativo — nunca vira MaterialExtra (concreto é obra civil,
+    # não peça de refrigeração; não entra em orçamento). 0.0 quando não há
+    # concreto (piso "convencional" apoiado/rebaixado sem espessura de concreto).
+    volume_concreto_m3: float = 0.0
     # Avisos de catálogo faltando — agrega tanto o kit de montagem quanto a
     # barreira de vapor (mesmo mecanismo, mesmo banner no Card 1; ver CLAUDE.md).
     avisos_kit_montagem: list[str] = []

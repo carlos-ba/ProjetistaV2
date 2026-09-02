@@ -222,6 +222,31 @@ junto com o kit de montagem (mesma condição — só quando `tipo_piso == "conv
 
 ---
 
+## Card 1 — Concreto Armado (piso convencional) — nota informativa, não é material
+
+Em produção desde 2026-09-02. Decisão combinada com o usuário em 2026-08-17
+(`DESIGN_OPCIONAIS_CAMARA_2026-08-17.md`), implementada nesta data.
+
+- **Não é mais `MaterialExtra`** — concreto é obra civil (outra equipe/
+  fornecedor), não peça de refrigeração; misturar no mesmo orçamento de
+  peças e componentes é erro de categoria, não só UX. Antes entrava
+  automaticamente na lista de materiais do Card 1 **e pré-selecionado** no
+  checklist do Card 6 (todo item nasce com o checkbox marcado por padrão) —
+  o técnico precisava lembrar de desmarcar toda vez.
+- `GabineteResponse.volume_concreto_m3` (0.0 quando não há concreto) expõe
+  só o volume calculado — mesmo padrão de `area_piso_m2`/`comp_parede_m`,
+  sem duplicar geometria. Renderizado no Card 1 como nota informativa (faixa
+  azul, não vermelha — não é aviso de erro): "valide o volume com o
+  responsável pela obra".
+- **Sem retroatividade** — projetos já salvos com "Concreto Armado" no
+  orçamento continuam exibindo normalmente; a classificação `concreto_armado`
+  (`item_classificacao`) não foi removida do banco, só parou de ser gerada
+  pra cálculo novo.
+- Placas de Isolamento e os 3 itens de Barreira de Vapor continuam como
+  itens normais de orçamento — só o concreto saiu.
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.

@@ -800,6 +800,15 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
               </div>
             )}
 
+            {resultado?.volume_concreto_m3 > 0 && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                <p className="text-xs text-blue-700">
+                  ℹ️ <span className="font-semibold">Estimativa de concreto: {fmtQtd(resultado.volume_concreto_m3)} m³</span> —
+                  obra civil, não entra na lista de materiais nem no orçamento. Valide o volume com o responsável pela obra.
+                </p>
+              </div>
+            )}
+
             {/* Modo de compra dos painéis */}
             {resultado && (
               <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
