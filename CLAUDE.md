@@ -760,14 +760,24 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 
 ## Catálogo Técnico
 
-Painéis, unidades condensadoras e evaporadoras vêm de múltiplos fabricantes
-(Elgin, Danfoss Optyma, Mipal, Isoeste/MBP). Novo fornecedor = preencher um dos
-templates na raiz (`template_paineis_frigorificos.xlsx`,
-`template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`) e rodar o
-importador correspondente em `backend/scripts/` (`importar_paineis.py`,
-`importar_equipamentos.py`) — upsert idempotente por chave única, nunca duplica.
+Painéis, unidades condensadoras, evaporadoras e portas frigoríficas vêm de
+múltiplos fabricantes (Elgin, Danfoss Optyma, Mipal, Isoeste/MBP). Novo
+fornecedor = preencher um dos templates na raiz (`template_paineis_frigorificos.xlsx`,
+`template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`,
+`template_portas_frigorificas.xlsx`) e rodar o importador correspondente em
+`backend/scripts/` (`importar_paineis.py`, `importar_equipamentos.py`,
+`importar_portas.py`) — upsert idempotente por chave única, nunca duplica.
 Rodar local primeiro, depois em produção com `DATABASE_URL` do Render na env
 (nunca colar a credencial no chat).
+
+**Portas frigoríficas (em produção desde 2026-09-02):** catálogo real
+inaugurado com 24 portas MBP Isoblock (proposta 084830) — antes só existiam
+2 linhas placeholder sem fabricante. `PortaFrigoriifica` não tem
+`UniqueConstraint` no banco — o upsert do importador usa como chave
+`fabricante + tipo + classificacao + largura + altura + espessura + batente
++ abertura` (checado em código, mesmo padrão do `importar_paineis.py`).
+`batente` (3B/4B) e `soleira` são campos **independentes** — não presumir
+uma regra fixa entre eles sem confirmar com o fabricante.
 
 Classificação de itens do orçamento é via banco (`bloco_orcamento`,
 `classificacao_item`, `item_classificacao`), servida por `GET
