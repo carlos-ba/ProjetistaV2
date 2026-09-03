@@ -13,6 +13,10 @@ const DITAR_HABILITADO = false;
 // de número em template string confunde o técnico em campo.
 const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
 
+// "deslizante" é o valor salvo no banco (coluna porta_frigoriifica.tipo) — troca só
+// o rótulo exibido, "de correr" é o termo comum no ramo de refrigeração.
+const TIPO_PORTA_LABEL = { giratoria: 'Giratória', deslizante: 'De Correr' };
+
 const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], perfisMetalicos = [], configuracoesMontagem, initialValues, onValoresChange, jaFinalizado = false }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
@@ -64,6 +68,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
 
   // ── Portas frigoríficas ───────────────────────────────────────────────
   const [portasSelecionadas, setPortasSelecionadas] = useState(initialValues?.portasSelecionadas ?? []);
+  // Filtros do catálogo — só UI, não persistem no projeto (igual tipoPerfilEscolha)
+  const [filtroClassificacaoPorta, setFiltroClassificacaoPorta] = useState('sugerida');
+  const [filtroTipoPorta, setFiltroTipoPorta] = useState('todas');
+  const [portaEscolhidaId, setPortaEscolhidaId] = useState('');
 
   // ── Kit de montagem — perfis extras (seleção manual) ────────────────────
   const [fatorSegurancaSelante, setFatorSegurancaSelante] = useState(initialValues?.fatorSegurancaSelante ?? 10);
@@ -107,11 +115,35 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     return 'resfriados';
   };
 
-  // Portas filtradas pela classificação sugerida
-  const portasFiltradas = portasCatalogo.filter(p => {
+  // Classificações presentes no catálogo (pro filtro) e portas que batem com os
+  // 2 filtros ativos, excluindo as já adicionadas em "Portas no projeto".
+  const classificacoesCatalogo = useMemo(() =>
+    [...new Set(portasCatalogo.map(p => p.classificacao))].sort(),
+    [portasCatalogo]
+  );
+  const portasDisponiveis = useMemo(() => {
     const cs = classificacaoSugerida();
-    return cs ? p.classificacao === cs : true;
-  });
+    return portasCatalogo.filter(p => {
+      const passaClassificacao =
+        filtroClassificacaoPorta === 'todas'    ? true :
+        filtroClassificacaoPorta === 'sugerida' ? (cs ? p.classificacao === cs : true) :
+        p.classificacao === filtroClassificacaoPorta;
+      const passaTipo = filtroTipoPorta === 'todas' ? true : p.tipo === filtroTipoPorta;
+      const jaSelecionada = portasSelecionadas.some(sel => sel.porta.id === p.id);
+      return passaClassificacao && passaTipo && !jaSelecionada;
+    });
+  }, [portasCatalogo, filtroClassificacaoPorta, filtroTipoPorta, portasSelecionadas, temperaturaInterna]);
+
+  // Mantém o menu suspenso sempre numa porta válida do filtro atual
+  useEffect(() => {
+    if (portasDisponiveis.length === 0) {
+      if (portaEscolhidaId !== '') setPortaEscolhidaId('');
+      return;
+    }
+    if (!portasDisponiveis.some(p => String(p.id) === String(portaEscolhidaId))) {
+      setPortaEscolhidaId(String(portasDisponiveis[0].id));
+    }
+  }, [portasDisponiveis]);
 
   const adicionarPorta = (porta) => {
     setPortasSelecionadas(prev => {
@@ -592,46 +624,58 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
             )}
           </div>
 
-          {/* Catálogo de portas disponíveis */}
-          {portasFiltradas.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">
-              {portasCatalogo.length === 0
-                ? 'Nenhuma porta cadastrada no catálogo.'
-                : `Nenhuma porta para classificação "${classificacaoSugerida()}". Veja outras abaixo.`}
-            </p>
+          {/* Catálogo de portas disponíveis — 2 filtros + menu suspenso */}
+          {portasCatalogo.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">Nenhuma porta cadastrada no catálogo.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-              {portasCatalogo.map(porta => {
-                const jaSelecionada = portasSelecionadas.some(p => p.porta.id === porta.id);
-                const sugerida = porta.classificacao === classificacaoSugerida();
-                return (
-                  <button key={porta.id} onClick={() => !jaSelecionada && adicionarPorta(porta)}
-                    disabled={jaSelecionada}
-                    className={`flex items-center justify-between p-3 rounded-lg border text-left transition-all text-xs ${
-                      jaSelecionada
-                        ? 'border-emerald-300 bg-emerald-50 opacity-60 cursor-not-allowed'
-                        : sugerida
-                          ? 'border-blue-300 bg-blue-50 hover:border-blue-400 cursor-pointer'
-                          : 'border-slate-200 bg-white hover:border-slate-400 cursor-pointer'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-bold text-slate-700">
-                        {porta.largura_mm}×{porta.altura_mm}mm — {porta.tipo}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {porta.classificacao} | esp. {porta.espessura_mm}mm
-                        {porta.abertura && ` | ${porta.abertura}`}
-                        {porta.batente  && ` | ${porta.batente}`}
-                        {porta.soleira  ? ' | com soleira' : ''}
-                      </p>
-                    </div>
-                    <span className={`ml-2 flex-shrink-0 text-lg ${jaSelecionada ? 'text-emerald-500' : 'text-slate-300'}`}>
-                      {jaSelecionada ? '✓' : '+'}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="space-y-2 mb-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600 min-h-[20px] flex items-end">Classificação</label>
+                  <select value={filtroClassificacaoPorta} onChange={e => setFiltroClassificacaoPorta(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    {classificacaoSugerida() && <option value="sugerida">Sugerida ({classificacaoSugerida()})</option>}
+                    <option value="todas">Todas</option>
+                    {classificacoesCatalogo.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600 min-h-[20px] flex items-end">Tipo</label>
+                  <select value={filtroTipoPorta} onChange={e => setFiltroTipoPorta(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="todas">Todas</option>
+                    <option value="giratoria">Giratória</option>
+                    <option value="deslizante">De Correr</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select value={portaEscolhidaId} onChange={e => setPortaEscolhidaId(e.target.value)}
+                  disabled={portasDisponiveis.length === 0}
+                  className="flex-1 h-9 px-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
+                  {portasDisponiveis.length === 0 ? (
+                    <option value="">Nenhuma porta com esse filtro</option>
+                  ) : (
+                    portasDisponiveis.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.largura_mm}×{p.altura_mm}mm — {TIPO_PORTA_LABEL[p.tipo] || p.tipo}
+                        {p.batente ? ` · ${p.batente}` : ''}{p.abertura ? ` · ${p.abertura}` : ''} · esp. {p.espessura_mm}mm
+                        {p.soleira ? ' · com soleira' : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button type="button"
+                  onClick={() => {
+                    const porta = portasDisponiveis.find(p => String(p.id) === String(portaEscolhidaId));
+                    if (porta) adicionarPorta(porta);
+                  }}
+                  disabled={!portaEscolhidaId}
+                  className="flex-shrink-0 h-9 px-3 rounded-lg bg-[#7B2D8B] text-white text-xs font-bold hover:bg-purple-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  + Adicionar
+                </button>
+              </div>
             </div>
           )}
 
@@ -643,7 +687,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                 <div key={porta.id} className="flex items-center gap-3 bg-white border border-emerald-200 rounded-lg px-3 py-2">
                   <div className="flex-1 text-xs">
                     <span className="font-bold text-slate-700">
-                      {porta.largura_mm}×{porta.altura_mm}mm — {porta.tipo}
+                      {porta.largura_mm}×{porta.altura_mm}mm — {TIPO_PORTA_LABEL[porta.tipo] || porta.tipo}
                     </span>
                     <span className="text-slate-400 ml-1">({porta.classificacao})</span>
                   </div>
