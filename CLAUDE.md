@@ -579,7 +579,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0035)
+## Banco de Dados — Migrations (0001→0036)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -618,6 +618,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0033 | Campo `empresa.recursos_avancados_habilitados` (boolean, default false) — trava opcional de Classificação de Itens / Catálogo de Preços |
 | 0034 | Campo `usuario.telefone` (nullable) — captura celular/WhatsApp no cadastro público, vira lead pro time de vendas |
 | 0035 | Campos `empresa.proposta_nome`/`proposta_logo_base64`/`proposta_contato_nome`/`proposta_contato_telefone` (todos nullable) — identidade da proposta ao cliente |
+| 0036 | Campo `empresa.oferta_comercial` (nullable) + tabelas `webhook_checkout_evento` e `assinatura_gateway` — webhook do Checkout TheMembers (Etapa 1, endpoint desabilitado) |
 
 ---
 
@@ -649,6 +650,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
+| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, token em `x-signature`; DESABILITADO em produção (`THEMEMBERS_WEBHOOK_ENABLED=false`) até confirmar payload real |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -715,6 +717,83 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 - Prefill automático do celular a partir de `usuario.telefone` (cadastro)
   ficou **fora de escopo** de propósito — o `/me` não expõe esse campo
   hoje, seria escopo extra. Nice-to-have pra avaliar depois se fizer falta.
+
+---
+
+## Webhook do Checkout TheMembers (Etapa 1 implementada, DESABILITADO em produção)
+
+Handoff Codex → Claude, spec completa em
+`docs/handoffs/especificacao-webhook-checkout-themembers-2026-09-03.md`
+(revisada em detalhe antes de implementar). Parceiro de checkout é
+**TheMembers/TheBank** — 3 ofertas pagas (Mensal R$159, Semestral 6×R$99,
+Premium 6×R$497), todas tier técnico self-serve; montadora/revenda
+continuam 100% fora disso, fluxo manual de vendas via WhatsApp.
+
+Implementado em **branch própria** (`feature/webhook-checkout-themembers`,
+a partir da `main` já com a spec mergeada) — plano em 2 etapas combinado
+com o usuário: **Etapa 1** (este trabalho) é só código + testes, endpoint
+vivo mas travado por `THEMEMBERS_WEBHOOK_ENABLED=false`; **Etapa 2**
+(ainda não feita) é cadastrar o webhook de teste no painel TheMembers,
+capturar payload real dos 3 produtos, confirmar IDs/campos de correlação
+contra a documentação, e só então habilitar de verdade em produção — a
+spec (§20) já avisa que vários detalhes (IDs de produto, se
+Semestral/Premium são assinatura recorrente ou parcelamento avulso,
+`expires_in`) só se confirmam com payload real, não dá pra adivinhar.
+
+- **Endpoint** `POST /api/webhooks/themembers/checkout` — público, sem JWT
+  (provedor externo não carrega sessão), autenticado por token estático no
+  header `x-signature` (`secrets.compare_digest`) — **não** o HMAC da Área
+  de Membros, são dois sistemas de webhook diferentes na TheMembers (achado
+  importante da spec, ver §2).
+- **Tabelas novas**: `webhook_checkout_evento` (idempotência + auditoria,
+  `chave_evento` UNIQUE, payload em JSONB) e `assinatura_gateway`
+  (histórico de referências do provedor por empresa, permite trocar de
+  oferta sem perder o vínculo anterior). Coluna nova `empresa.oferta_comercial`
+  (nullable) — eixo comercial **independente** de `empresa.plano`, que
+  continua só técnico/empresa (`docs/decisoes/2026-08-30-plano-x-status.md`).
+  Migration 0036, com backfill (`status_assinatura='trial'` →
+  `oferta_comercial='avaliacao'`; contas ativas legadas ficam `NULL` de
+  propósito, sem inferir oferta paga sem dado real).
+- **`exigir_pode_editar` ampliado** (`backend/app/services/assinatura.py`)
+  — além do trial vencido (regra já existente), agora também bloqueia
+  `status_assinatura` `suspensa`/`cancelada`, e `ativa` com `assinatura_fim`
+  no passado. `assinatura_fim IS NULL` continua nunca bloqueando (contas
+  legadas). Leitura/exportação continuam sempre liberadas, sem mudança
+  nesse ponto.
+- **Reconciliação de compra sem conta**: se o comprador paga com um e-mail
+  que ainda não tem conta no SaaS, o evento fica `pendente_usuario`; ao
+  verificar o e-mail depois (`verificar_email` em `services/auth.py`), os
+  eventos pendentes daquele e-mail são reprocessados em ordem cronológica
+  automaticamente (`reconciliar_pendencias_email` em
+  `services/webhook_themembers.py`).
+- **Precedência de eventos fora de ordem** (spec §11): `revoke.access`,
+  `transaction.refunded` e `transaction.charged_back` sempre prevalecem;
+  um evento de ativação mais antigo que o último já aplicado pra aquela
+  empresa (`assinatura_gateway.ultimo_evento_aplicado_em`) é ignorado, não
+  reativa por cima de um cancelamento mais recente.
+- **Não inventa prazo**: se a TheMembers não mandar `expires_in` pro
+  Semestral/Premium, `assinatura_fim` não é tocado (nada de "assumir 180
+  dias" — spec §12 é explícita sobre isso). Só o Mensal usa
+  `next_billing_at` como fallback de prazo.
+- **Primeira suíte de testes automatizados do projeto** — não existia
+  pytest configurado antes. `backend/pytest.ini` +
+  `backend/tests/conftest.py` (fixtures rodam contra o banco local de
+  desenvolvimento de verdade, nunca produção; cada teste cria sua própria
+  empresa/usuário e apaga tudo que criou no fim, sem depender de rollback
+  de transação aninhada — mais simples de auditar numa suíte nova). Os 22
+  testes obrigatórios da spec (§16) estão em
+  `backend/tests/test_webhook_themembers.py`, numerados igual à lista da
+  spec — todos passando localmente antes do commit.
+- **Diagnóstico administrativo**: `backend/scripts/listar_eventos_webhook.py`
+  (só leitura) em vez de tela nova — lista eventos pendentes/erro/produto
+  desconhecido por padrão, ou filtra por status/e-mail. Segue o mesmo
+  padrão de `buscar_usuario.py`/`buscar_projeto.py`.
+- **Variáveis novas** (`Settings` + `.env.example`):
+  `THEMEMBERS_WEBHOOK_ENABLED` (default false),
+  `THEMEMBERS_WEBHOOK_TOKEN`, `THEMEMBERS_PRODUCT_MONTHLY_ID`,
+  `THEMEMBERS_PRODUCT_SEMIANNUAL_ID`, `THEMEMBERS_PRODUCT_PREMIUM_ID`. Em
+  `APP_ENV=production`, `validar_producao()` recusa inicializar se
+  `ENABLED=true` sem token e os 3 IDs preenchidos (e distintos entre si).
 
 ---
 
@@ -883,6 +962,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
+| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | 🟡 Etapa 1 pronta em branch própria (código+testes), DESABILITADO — falta Etapa 2 (payload real + habilitar) |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |

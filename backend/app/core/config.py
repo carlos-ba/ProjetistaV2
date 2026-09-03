@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # IA (leitura de PDF de cotação — casamento de itens)
     ANTHROPIC_API_KEY: str = ""
 
+    # Webhook do Checkout TheMembers/TheBank — ver
+    # docs/handoffs/especificacao-webhook-checkout-themembers-2026-09-03.md.
+    # Fica desabilitado por padrão (mesmo com token/IDs configurados) até
+    # confirmar payload real de cada produto e ligar de propósito.
+    THEMEMBERS_WEBHOOK_ENABLED: bool = False
+    THEMEMBERS_WEBHOOK_TOKEN: str = ""
+    THEMEMBERS_PRODUCT_MONTHLY_ID: str = ""
+    THEMEMBERS_PRODUCT_SEMIANNUAL_ID: str = ""
+    THEMEMBERS_PRODUCT_PREMIUM_ID: str = ""
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
@@ -63,6 +73,23 @@ class Settings(BaseSettings):
                     "CORS_ORIGINS não pode ser ['*'] em produção. "
                     "Defina as origens permitidas no .env"
                 )
+            if self.THEMEMBERS_WEBHOOK_ENABLED:
+                produto_ids = [
+                    self.THEMEMBERS_PRODUCT_MONTHLY_ID,
+                    self.THEMEMBERS_PRODUCT_SEMIANNUAL_ID,
+                    self.THEMEMBERS_PRODUCT_PREMIUM_ID,
+                ]
+                if not self.THEMEMBERS_WEBHOOK_TOKEN or not all(produto_ids):
+                    raise ValueError(
+                        "THEMEMBERS_WEBHOOK_ENABLED=true exige "
+                        "THEMEMBERS_WEBHOOK_TOKEN e os 3 THEMEMBERS_PRODUCT_*_ID "
+                        "preenchidos."
+                    )
+                if len(set(produto_ids)) != len(produto_ids):
+                    raise ValueError(
+                        "THEMEMBERS_PRODUCT_*_ID não pode repetir o mesmo valor "
+                        "entre os 3 produtos — provável erro de configuração."
+                    )
         return self
 
     model_config = SettingsConfigDict(

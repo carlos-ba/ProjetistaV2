@@ -88,6 +88,14 @@ async def verificar_email(token: str, db: AsyncSession) -> None:
 
     usuario.email_verified = True
     usuario.email_verification_token = None
+    await db.flush()
+
+    # Compra feita antes da conta existir/ser verificada fica "pendente_usuario"
+    # até aqui — reconciliar assim que o e-mail é confirmado (spec do webhook
+    # TheMembers §10). Import local pra evitar ciclo de import no módulo.
+    from app.services.webhook_themembers import reconciliar_pendencias_email
+    await reconciliar_pendencias_email(db, usuario)
+
     await db.commit()
 
 
