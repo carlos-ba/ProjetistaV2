@@ -2,7 +2,7 @@ from datetime import date
 from uuid import UUID, uuid4
 from typing import List, Optional
 
-from sqlalchemy import String, Date, Boolean
+from sqlalchemy import String, Date, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -43,6 +43,15 @@ class Empresa(Base, TimestampMixin):
     recursos_avancados_habilitados: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+
+    # Identidade da proposta ao cliente (Card 6) — editável por qualquer membro
+    # (não é área sensível de conta, é o próprio técnico personalizando o que
+    # entrega pro próprio cliente). `proposta_nome` é independente de `nome`
+    # de propósito — não abre edição do nome oficial da conta pra qualquer membro.
+    proposta_nome: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    proposta_logo_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    proposta_contato_nome: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    proposta_contato_telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     usuarios: Mapped[List["Usuario"]] = relationship(back_populates="empresa")
 

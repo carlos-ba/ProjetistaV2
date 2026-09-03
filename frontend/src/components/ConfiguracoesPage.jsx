@@ -25,6 +25,28 @@ const TRECHOS = [
   { campo: 'trecho_sifao_gbc',  label: 'Contra-sifão → GBC sucção' },
 ];
 
+// Redimensiona a imagem do logo no próprio navegador (~400px no maior lado)
+// antes de virar base64 — evita inchar o banco/payload com um arquivo grande.
+const redimensionarLogo = (file, maxDim = 400) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * escala);
+      const h = Math.round(img.height * escala);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Não foi possível ler essa imagem.'));
+    img.src = reader.result;
+  };
+  reader.onerror = () => reject(new Error('Não foi possível ler esse arquivo.'));
+  reader.readAsDataURL(file);
+});
+
 // Fora do componente pai para que o React não recrie o tipo a cada render
 function FormPerfil({ form, setForm, onSalvar, onCancelar, titulo, salvando, erro }) {
   return (
@@ -158,6 +180,48 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
   const [erro, setErro]         = useState('');
   const [salvandoModo, setSalvandoModo] = useState(false);
 
+  // ── Identidade da Proposta ──────────────────────────────────────────
+  const [identidade, setIdentidade] = useState({
+    proposta_nome: '', proposta_logo_base64: '', proposta_contato_nome: '', proposta_contato_telefone: '',
+  });
+  const [salvandoIdentidade, setSalvandoIdentidade] = useState(false);
+  const [erroIdentidade, setErroIdentidade] = useState('');
+  const [sucessoIdentidade, setSucessoIdentidade] = useState(false);
+
+  useEffect(() => {
+    api.get('/api/v1/configuracoes/identidade-proposta').then(r => setIdentidade({
+      proposta_nome: r.data.proposta_nome ?? '',
+      proposta_logo_base64: r.data.proposta_logo_base64 ?? '',
+      proposta_contato_nome: r.data.proposta_contato_nome ?? '',
+      proposta_contato_telefone: r.data.proposta_contato_telefone ?? '',
+    })).catch(() => {});
+  }, []);
+
+  const handleLogoSelecionado = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo depois
+    if (!file) return;
+    setErroIdentidade('');
+    try {
+      const base64 = await redimensionarLogo(file);
+      setIdentidade(v => ({ ...v, proposta_logo_base64: base64 }));
+    } catch {
+      setErroIdentidade('Não foi possível processar essa imagem.');
+    }
+  };
+
+  const salvarIdentidade = async () => {
+    setSalvandoIdentidade(true); setErroIdentidade(''); setSucessoIdentidade(false);
+    try {
+      await api.patch('/api/v1/configuracoes/identidade-proposta', identidade);
+      setSucessoIdentidade(true);
+    } catch (err) {
+      setErroIdentidade(err.response?.data?.detail?.[0]?.msg || 'Erro ao salvar a identidade da proposta.');
+    } finally {
+      setSalvandoIdentidade(false);
+    }
+  };
+
   const modoEngenharia = !!user?.modo_engenharia;
   const alternarModo = async (valor) => {
     setSalvandoModo(true);
@@ -213,13 +277,91 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
       <div className="relative ml-auto w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-800">
           <div>
-            <p className="text-sm font-black text-white">Configurações de Montagem</p>
-            <p className="text-[10px] text-slate-400">Perfis de padrão por tipo de instalação</p>
+            <p className="text-sm font-black text-white">Configurações</p>
+            <p className="text-[10px] text-slate-400">Identidade da proposta, modo do app e perfis de montagem</p>
           </div>
           <button onClick={onFechar} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Identidade da Proposta — marca do técnico na proposta ao cliente */}
+          <div className="rounded-xl border-2 border-[#7B2D8B]/30 bg-purple-50 p-4">
+            <p className="text-[10px] font-black text-[#7B2D8B] uppercase tracking-widest mb-1">
+              🏢 Identidade da Proposta
+            </p>
+            <p className="text-[11px] text-slate-500 mb-3">
+              Aparece na proposta que você entrega ao seu cliente (Card 6) — nome, logo e contato.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Nome da Firma</label>
+                <input
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#7B2D8B]"
+                  placeholder={user?.empresa_nome || 'Ex: WEM Refrigeração'}
+                  value={identidade.proposta_nome}
+                  onChange={e => setIdentidade(v => ({ ...v, proposta_nome: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Logo</label>
+                <div className="flex items-center gap-3">
+                  {identidade.proposta_logo_base64 ? (
+                    <img src={identidade.proposta_logo_base64} alt="Logo"
+                      className="w-12 h-12 object-contain rounded-lg border border-slate-200 bg-white flex-shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-300 text-xl flex-shrink-0">
+                      +
+                    </div>
+                  )}
+                  <label className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-600 hover:bg-slate-50 cursor-pointer">
+                    {identidade.proposta_logo_base64 ? 'Trocar' : 'Escolher imagem'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoSelecionado} />
+                  </label>
+                  {identidade.proposta_logo_base64 && (
+                    <button type="button" onClick={() => setIdentidade(v => ({ ...v, proposta_logo_base64: '' }))}
+                      className="text-xs text-red-500 hover:underline">
+                      Remover
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  PNG com fundo transparente, qualquer proporção — redimensionamos sozinhos, não precisa ser grande.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Nome do Contato</label>
+                  <input
+                    className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#7B2D8B]"
+                    placeholder="Seu nome"
+                    value={identidade.proposta_contato_nome}
+                    onChange={e => setIdentidade(v => ({ ...v, proposta_contato_nome: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Celular do Contato</label>
+                  <input
+                    className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#7B2D8B]"
+                    placeholder="(11) 91234-5678"
+                    value={identidade.proposta_contato_telefone}
+                    onChange={e => setIdentidade(v => ({ ...v, proposta_contato_telefone: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {erroIdentidade && <p className="text-xs text-red-500">{erroIdentidade}</p>}
+              {sucessoIdentidade && <p className="text-xs text-emerald-600">Identidade salva.</p>}
+
+              <button onClick={salvarIdentidade} disabled={salvandoIdentidade}
+                className="w-full py-2 bg-[#7B2D8B] text-white rounded-lg text-xs font-bold hover:bg-purple-800 disabled:opacity-50">
+                {salvandoIdentidade ? 'Salvando...' : 'Salvar identidade'}
+              </button>
+            </div>
+          </div>
 
           {/* Modo do aplicativo (preferência do usuário) */}
           <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4">

@@ -1,15 +1,22 @@
+import re
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from app.database.session import get_db
 from app.models.configuracao_montagem import ConfiguracaoMontagem
+from app.models.empresa import Empresa
 from app.schemas.auth import UserOut
 from app.services.auth import get_current_user, get_empresa_atual
 
 router = APIRouter(prefix="/api/v1/configuracoes", tags=["configuracoes"])
+
+# Base64 de imagem pequena (~200KB) já cobre um logo redimensionado no
+# navegador antes de enviar — teto aqui é só rede de segurança, a compressão
+# de verdade acontece no frontend (canvas resize).
+LOGO_BASE64_MAX_CHARS = 300_000
 
 DEFAULTS = dict(
     tipo_filtro="solda", tipo_visor="solda",
@@ -162,3 +169,70 @@ async def deletar_perfil(
         raise HTTPException(404, "Perfil não encontrado")
     await db.delete(cfg)
     await db.commit()
+
+
+# ── Identidade da Proposta ──────────────────────────────────────────────
+# Marca do técnico (nome da firma, logo, contato) que aparece na proposta ao
+# cliente (Card 6) — qualquer membro da empresa edita, sem gate de admin:
+# não é área sensível de conta, é o próprio técnico personalizando o que
+# entrega pro próprio cliente.
+
+class IdentidadePropostaOut(BaseModel):
+    proposta_nome: str | None = None
+    proposta_logo_base64: str | None = None
+    proposta_contato_nome: str | None = None
+    proposta_contato_telefone: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class IdentidadePropostaUpdate(BaseModel):
+    proposta_nome: str | None = Field(None, max_length=200)
+    proposta_logo_base64: str | None = Field(None, max_length=LOGO_BASE64_MAX_CHARS)
+    proposta_contato_nome: str | None = Field(None, max_length=150)
+    proposta_contato_telefone: str | None = None
+
+    @field_validator("proposta_contato_telefone")
+    @classmethod
+    def telefone_valido(cls, v: str | None) -> str | None:
+        # Opcional (diferente do telefone obrigatório do cadastro) — só valida
+        # formato quando algo foi informado.
+        if not v or not v.strip():
+            return None
+        digitos = re.sub(r"\D", "", v)
+        if len(digitos) not in (10, 11):
+            raise ValueError("Celular de contato inválido — informe DDD + número.")
+        return digitos
+
+
+async def _buscar_empresa(db: AsyncSession, empresa_id: UUID) -> Empresa:
+    result = await db.execute(select(Empresa).where(Empresa.id == empresa_id))
+    empresa = result.scalar_one_or_none()
+    if not empresa:
+        raise HTTPException(404, "Empresa não encontrada")
+    return empresa
+
+
+@router.get("/identidade-proposta", response_model=IdentidadePropostaOut)
+async def obter_identidade_proposta(
+    usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
+    db: AsyncSession = Depends(get_db),
+):
+    empresa = await _buscar_empresa(db, empresa_id)
+    return empresa
+
+
+@router.patch("/identidade-proposta", response_model=IdentidadePropostaOut)
+async def atualizar_identidade_proposta(
+    payload: IdentidadePropostaUpdate,
+    usuario: UserOut = Depends(get_current_user),
+    empresa_id: UUID = Depends(get_empresa_atual),
+    db: AsyncSession = Depends(get_db),
+):
+    empresa = await _buscar_empresa(db, empresa_id)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(empresa, k, v)
+    await db.commit()
+    await db.refresh(empresa)
+    return empresa

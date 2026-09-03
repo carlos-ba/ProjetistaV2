@@ -579,7 +579,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0029)
+## Banco de Dados — Migrations (0001→0035)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -617,6 +617,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0032 | Tabela `catalogo_generico` (cadastro genérico compartilhado, por `tipo_item`) + seed dos 3 itens da barreira de vapor (Lona Val Film, Fita Branca, Lona) |
 | 0033 | Campo `empresa.recursos_avancados_habilitados` (boolean, default false) — trava opcional de Classificação de Itens / Catálogo de Preços |
 | 0034 | Campo `usuario.telefone` (nullable) — captura celular/WhatsApp no cadastro público, vira lead pro time de vendas |
+| 0035 | Campos `empresa.proposta_nome`/`proposta_logo_base64`/`proposta_contato_nome`/`proposta_contato_telefone` (todos nullable) — identidade da proposta ao cliente |
 
 ---
 
@@ -647,7 +648,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/classificacoes` | GET/POST | Árvore de classificação (blocos/tipos) |
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
-| `/api/v1/configuracoes/*` | GET/POST | Perfis de montagem (tipo filtro, visor, trechos) |
+| `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -664,6 +665,56 @@ O catálogo (fabricantes de painel, portas) é carregado **no `App.jsx`** antes 
 - Projetos salvos via `PATCH /api/v1/projetos/{id}` com campo `dados_completos` (JSON contendo estado de todos os cards)
 - Carregamento automático ao abrir o projeto — reconstrói o estado de cada card
 - **Invalidação em cascata:** se Card 1 recalcula → Cards 2-6 marcados como `invalidados`. Se Card 2 recalcula → Cards 3-6 invalidados. E assim por diante.
+
+---
+
+## Identidade da Proposta ao Cliente (em produção desde 2026-09-03)
+
+Permite o técnico personalizar a proposta que entrega ao próprio cliente
+(Card 6) com nome da firma, logo e contato — 4 colunas nullable em
+`empresa` (migration 0035): `proposta_nome`, `proposta_logo_base64`,
+`proposta_contato_nome`, `proposta_contato_telefone`.
+
+- **Editável por qualquer membro da empresa**, sem gate de admin — decisão
+  consciente, diferente do Catálogo de Preços: é o próprio técnico
+  personalizando o que entrega pro próprio cliente, não é área sensível de
+  conta.
+- **`proposta_nome` não reaproveita `empresa.nome`** de propósito — esse é
+  o nome "oficial" da conta (usado no admin); `proposta_nome` é
+  independente, editável por qualquer membro sem abrir edição do nome da
+  conta em si. O campo no frontend sugere `empresa.nome` como placeholder.
+- **Logo é base64 puro, sem infra de upload nenhuma** — não existe upload
+  de arquivo no projeto (a planta da câmara no PDF também é base64,
+  gerada no navegador, nunca persistida). O navegador redimensiona a
+  imagem pra ~400px via canvas antes de enviar (`ConfiguracoesPage.jsx`,
+  `redimensionarLogo()`); o backend valida um teto de ~300KB no schema
+  como rede de segurança, não faz nenhum processamento de imagem.
+- **Rota nova**: `GET`/`PATCH /api/v1/configuracoes/identidade-proposta`
+  (`routes_configuracoes.py`), escopada por `get_empresa_atual`. Telefone
+  usa a mesma validação de dígitos do cadastro (`UserCreate.telefone`),
+  mas **opcional** aqui (campo pode ficar vazio).
+- **UI**: nova seção "🏢 Identidade da Proposta" no topo do modal que era
+  só "Configurações de Montagem" (`ConfiguracoesPage.jsx`) — o modal
+  passou a se chamar só "Configurações", já que deixou de ser
+  exclusivamente sobre perfis de montagem.
+- **PDF** (`GeradorOrcamento.jsx`, `gerarPDF()`, tudo client-side com
+  jsPDF — o backend nunca gera PDF, só persiste o JSON da proposta): logo
+  + nome da firma entram numa faixa própria abaixo do cabeçalho escuro
+  existente (só aparece se algo estiver preenchido, nunca sobrescreve o
+  cabeçalho "PROPOSTA TÉCNICA COMERCIAL"/dados do cliente já existentes);
+  contato entra num rodapé novo no fim do documento, depois do bloco de
+  assinatura — também só aparece com dado preenchido.
+- **Logo entra proporcional, sem distorcer** — o tamanho é lido direto do
+  cabeçalho IHDR do PNG (bytes 16-23, sem precisar de `<img>` assíncrono
+  dentro do `gerarPDF()` síncrono) e encaixado numa caixa de até 22×10mm
+  mantendo a proporção original (bug da 1ª versão: forçava um quadrado
+  10×10mm fixo, esticando qualquer logo não-quadrado — pego e corrigido
+  antes do commit, testado com um logo retangular real). Por isso aceita
+  qualquer proporção de imagem sem pedir recorte prévio ao usuário — dica
+  resumida disso já aparece no campo de upload em `ConfiguracoesPage.jsx`.
+- Prefill automático do celular a partir de `usuario.telefone` (cadastro)
+  ficou **fora de escopo** de propósito — o `/me` não expõe esse campo
+  hoje, seria escopo extra. Nice-to-have pra avaliar depois se fizer falta.
 
 ---
 
@@ -801,7 +852,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-02)
+## Estado atual do código (auditado em 2026-09-03)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -831,6 +882,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos` |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
+| Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |

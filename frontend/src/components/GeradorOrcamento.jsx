@@ -260,6 +260,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       .catch(() => {});
   }, []);
 
+  // Identidade da proposta (nome da firma/logo/contato do técnico) — configurada
+  // em "Configurações", entra no cabeçalho/rodapé do PDF só se preenchida.
+  const [identidadeProposta, setIdentidadeProposta] = useState(null);
+  useEffect(() => {
+    api.get('/api/v1/configuracoes/identidade-proposta').then(r => setIdentidadeProposta(r.data)).catch(() => {});
+  }, []);
+
   // Extrai bitola do nome do item: "Tubo Cobre 1/2\" (Líquido)" → "1/2\""
   const extrairBitola = (nomeItem) => {
     const m = (nomeItem || '').match(/Tubo Cobre ([^\s(]+)/);
@@ -726,6 +733,39 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setTextColor(0, 0, 0);
       y = 46;
 
+      // ── Identidade da Proposta — logo/nome do técnico que emite ────────
+      // Faixa própria abaixo do cabeçalho escuro, só aparece com algo preenchido
+      // (Configurações → Identidade da Proposta); nunca sobrescreve o cabeçalho existente.
+      if (identidadeProposta?.proposta_logo_base64 || identidadeProposta?.proposta_nome) {
+        const idY = 40, idH = 14;
+        pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.2); pdf.rect(ML, idY, CW, idH);
+        let ix = ML + 2;
+        if (identidadeProposta.proposta_logo_base64) {
+          try {
+            // A imagem sai sempre em PNG do redimensionarLogo() — lê largura/altura
+            // direto do cabeçalho IHDR (bytes 16-23) pra caber sem distorcer numa
+            // caixa de até 22×10mm, sem precisar de <img> assíncrono.
+            const b64 = identidadeProposta.proposta_logo_base64.split(',')[1] || '';
+            const bin = atob(b64.slice(0, 40));
+            const imgW = ((bin.charCodeAt(16) << 24) | (bin.charCodeAt(17) << 16) | (bin.charCodeAt(18) << 8) | bin.charCodeAt(19)) >>> 0;
+            const imgH = ((bin.charCodeAt(20) << 24) | (bin.charCodeAt(21) << 16) | (bin.charCodeAt(22) << 8) | bin.charCodeAt(23)) >>> 0;
+            const maxW = 22, maxH = 10;
+            const escala = (imgW > 0 && imgH > 0) ? Math.min(maxW / imgW, maxH / imgH) : 1;
+            const w = imgW > 0 ? imgW * escala : maxH;
+            const h = imgH > 0 ? imgH * escala : maxH;
+            pdf.addImage(identidadeProposta.proposta_logo_base64, 'PNG', ix, idY + (idH - h) / 2, w, h);
+            ix += w + 3;
+          }
+          catch { /* base64 corrompido/formato inesperado — segue sem o logo */ }
+        }
+        if (identidadeProposta.proposta_nome) {
+          pdf.setFontSize(11); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30);
+          txt(identidadeProposta.proposta_nome, ix, idY + 9);
+          pdf.setTextColor(0);
+        }
+        y = idY + idH + 4;
+      }
+
       // ── Dados do cliente ──────────────────────────────────────────────
       pdf.setFillColor(248, 250, 252);
       pdf.rect(ML, y - 4, CW, 22, 'F');
@@ -983,6 +1023,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
       txt('Aprovação do cliente', ML, y + 8);
       txt('Data: _____ / _____ / _________', MR - halfAce, y + 8);
+
+      // ── Rodapé — contato do técnico que emitiu (Identidade da Proposta) ─
+      const contatoProposta = [identidadeProposta?.proposta_contato_nome, identidadeProposta?.proposta_contato_telefone]
+        .filter(Boolean);
+      if (contatoProposta.length > 0) {
+        checar(16);
+        y += 16;
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(120);
+        txt(`Contato: ${contatoProposta.join(' · ')}`, ML, y);
+        pdf.setTextColor(0);
+      }
 
       pdf.save(`Proposta_${(dadosCliente.nome || 'Camara').replace(/\s+/g, '_')}.pdf`);
       marcarGerada('proposta');
