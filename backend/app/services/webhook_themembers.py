@@ -162,10 +162,20 @@ def mapear_oferta(produto_id: Optional[str]) -> Optional[str]:
 # ── Associação do comprador por e-mail (spec §10) ────────────────────────────
 
 async def buscar_usuario_por_email(db: AsyncSession, email_normalizado: str) -> Optional[Usuario]:
+    # Achado na revisão de código: Usuario.email é único só de forma
+    # case-sensitive no banco (e no dedup de registrar_usuario) — duas contas
+    # "User@x.com"/"user@x.com" podem coexistir. Essa busca é case-insensitive
+    # de propósito (o comprador pode digitar o e-mail com capitalização
+    # diferente no checkout), então usa .limit(1) em vez de
+    # scalar_one_or_none() pra nunca quebrar com MultipleResultsFound caso
+    # esse par exista — pega a conta mais antiga, que é a decisão razoável.
     result = await db.execute(
-        select(Usuario).where(func.lower(Usuario.email) == email_normalizado)
+        select(Usuario)
+        .where(func.lower(Usuario.email) == email_normalizado)
+        .order_by(Usuario.created_at.asc())
+        .limit(1)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 # ── Processamento principal ──────────────────────────────────────────────────
@@ -265,14 +275,19 @@ async def _aplicar_efeito(
     gateway = await _obter_ou_criar_gateway(db, empresa_id)
     timestamp_evento = evento.criado_em_provedor or datetime.now(timezone.utc)
 
-    if evento.event in EVENTOS_REVOGACAO:
-        empresa.status_assinatura = "cancelada"
-        _registrar_evento_aplicado(gateway, evento, timestamp_evento, forcar=True)
-        registro.status_processamento = STATUS_PROCESSADO
-        return
-
-    if evento.event in EVENTOS_SUSPENSAO:
-        empresa.status_assinatura = "suspensa"
+    if evento.event in EVENTOS_REVOGACAO or evento.event in EVENTOS_SUSPENSAO:
+        # Achado na revisão de código: revogação aplicava incondicionalmente,
+        # sem checar _pode_aplicar como a ativação — um revoke.access atrasado
+        # (ex: redelivery de uma compra já superada) podia cancelar uma
+        # assinatura mais nova e legítima. "Refund/chargeback/revoke sempre
+        # prevalece sobre aprovação ANTERIOR" (spec §11) já significa "quando
+        # o revoke é o evento mais novo" — é exatamente o que _pode_aplicar
+        # already checa, então a checagem é simétrica com a ativação agora.
+        if not _pode_aplicar(gateway, timestamp_evento):
+            registro.status_processamento = STATUS_IGNORADO
+            registro.erro_resumido = "Evento mais antigo que o último já aplicado para esta assinatura."
+            return
+        empresa.status_assinatura = "cancelada" if evento.event in EVENTOS_REVOGACAO else "suspensa"
         _registrar_evento_aplicado(gateway, evento, timestamp_evento, forcar=True)
         registro.status_processamento = STATUS_PROCESSADO
         return
@@ -360,10 +375,31 @@ async def _obter_ou_criar_gateway(db: AsyncSession, empresa_id: UUID) -> Assinat
         )
     )
     gateway = result.scalar_one_or_none()
-    if gateway is None:
-        gateway = AssinaturaGateway(empresa_id=empresa_id, provedor="themembers")
-        db.add(gateway)
-        await db.flush()
+    if gateway is not None:
+        return gateway
+
+    gateway = AssinaturaGateway(empresa_id=empresa_id, provedor="themembers")
+    try:
+        # SAVEPOINT (não rollback da sessão inteira): quando chegamos aqui já
+        # existe outro trabalho não commitado na mesma transação (o
+        # WebhookCheckoutEvento gravado antes, em processar_webhook) — um
+        # db.rollback() cheio, como o padrão usado lá, perderia esse registro
+        # também. begin_nested() desfaz só esta tentativa de insert.
+        async with db.begin_nested():
+            db.add(gateway)
+            await db.flush()
+    except IntegrityError:
+        # Corrida entre 2 webhooks quase simultâneos pra mesma empresa (ex:
+        # release.access + transaction.approved da mesma compra) — a
+        # constraint única (uq_assinatura_gateway_empresa_provedor, achada na
+        # revisão de código) pegou antes de nós.
+        existente = await db.execute(
+            select(AssinaturaGateway).where(
+                AssinaturaGateway.empresa_id == empresa_id,
+                AssinaturaGateway.provedor == "themembers",
+            )
+        )
+        gateway = existente.scalar_one()
     return gateway
 
 
@@ -384,15 +420,13 @@ async def reconciliar_pendencias_email(db: AsyncSession, usuario: Usuario) -> in
     )
     pendentes = result.scalars().all()
     for registro in pendentes:
-        evento = EventoNormalizado(
-            event=registro.tipo_evento,
-            objeto=registro.objeto,
-            external_id=registro.external_id,
-            produto_id=registro.produto_id,
-            email_comprador=registro.email_comprador_normalizado,
-            data=(registro.payload.get("data") if isinstance(registro.payload, dict) else {}) or {},
-            criado_em_provedor=registro.recebido_em,
-        )
+        # Achado na revisão de código: reconstruir o EventoNormalizado à mão
+        # (em vez de reusar normalizar_payload) deixava expira_em/
+        # proxima_cobranca_em/external_*_id de fora — a empresa ativava sem
+        # nunca gravar validade. Reusar o mesmo normalizador do caminho ao
+        # vivo garante os mesmos campos e usa o created_at real do provedor
+        # (não o horário em que recebemos o evento) pra precedência.
+        evento = normalizar_payload(registro.payload)
         registro.empresa_id = usuario.empresa_id
         await _aplicar_efeito(db, evento, registro, usuario.empresa_id)
         registro.processado_em = datetime.now(timezone.utc)

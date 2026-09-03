@@ -115,6 +115,11 @@ def token_themembers(monkeypatch):
 
     token = "token-teste-" + uuid4().hex
     monkeypatch.setattr(settings, "THEMEMBERS_WEBHOOK_TOKEN", token)
+    # ENABLED precisa estar ligado pra testar o processamento de verdade —
+    # achado na revisão de código: a rota passou a checar essa flag além do
+    # token (antes só o token gatava). Ver test_0_webhook_desabilitado_por_
+    # padrao pro caso ENABLED=false continuar coberto.
+    monkeypatch.setattr(settings, "THEMEMBERS_WEBHOOK_ENABLED", True)
     monkeypatch.setattr(settings, "THEMEMBERS_PRODUCT_MONTHLY_ID", "prod-mensal-001")
     monkeypatch.setattr(settings, "THEMEMBERS_PRODUCT_SEMIANNUAL_ID", "prod-semestral-002")
     monkeypatch.setattr(settings, "THEMEMBERS_PRODUCT_PREMIUM_ID", "prod-premium-003")

@@ -11,8 +11,9 @@ from sqlalchemy import delete, select
 
 from app.database.session import SessionLocal
 from app.models.webhook_checkout_evento import WebhookCheckoutEvento
+from app.schemas.auth import UserCreate
 from app.services.assinatura import exigir_pode_editar
-from app.services.auth import verificar_email
+from app.services.auth import registrar_usuario, verificar_email
 from app.services.webhook_themembers import normalizar_payload, processar_webhook
 
 URL = "/api/webhooks/themembers/checkout"
@@ -49,6 +50,21 @@ async def test_3_aceita_token_correto(client, token_themembers, empresa_factory,
     })
     r = await client.post(URL, json=body, headers={"x-signature": token_themembers})
     assert r.status_code == 200
+
+
+async def test_3b_webhook_desabilitado_por_padrao_mesmo_com_token_certo(client, monkeypatch):
+    """Achado na revisão de código: THEMEMBERS_WEBHOOK_ENABLED era só validado
+    no startup, nunca checado pela rota — um token configurado sem ENABLED=true
+    ainda processava webhooks de verdade. Sem a fixture token_themembers
+    (que liga ENABLED) — só o token, simulando exatamente esse cenário."""
+    from app.core.config import settings
+    token = "token-desabilitado-teste"
+    monkeypatch.setattr(settings, "THEMEMBERS_WEBHOOK_TOKEN", token)
+    assert settings.THEMEMBERS_WEBHOOK_ENABLED is False
+
+    body = payload_direto("release.access", {"customer": {"email": "nao-importa@teste.local"}})
+    r = await client.post(URL, json=body, headers={"x-signature": token})
+    assert r.status_code == 503
 
 
 # ── 4: normalização dos 2 formatos de envelope ───────────────────────────────
@@ -175,6 +191,57 @@ async def test_10_email_associado_sem_diferenca_maiusculas(client, token_thememb
     assert empresa.status_assinatura == "ativa"
 
 
+async def test_10b_nao_quebra_com_contas_case_variante_duplicadas(client, token_themembers, empresa_factory, usuario_factory, db):
+    """Achado na revisão de código: Usuario.email é único só case-sensitive no
+    banco — duas contas "User@x.com"/"user@x.com" já existentes (de antes do
+    fix no dedup de registrar_usuario, ou inseridas por outro caminho) faziam
+    buscar_usuario_por_email quebrar com MultipleResultsFound. Usa
+    usuario_factory pra simular o par já existente direto no banco (sem passar
+    por registrar_usuario, que agora bloqueia isso na criação)."""
+    empresa1 = await empresa_factory(status_assinatura="trial")
+    empresa2 = await empresa_factory(status_assinatura="trial")
+    await usuario_factory(empresa1, email="Duplicado10b@Teste.local")
+    await usuario_factory(empresa2, email="duplicado10b@teste.local")
+
+    body = payload_direto("release.access", {
+        "customer": {"email": "duplicado10b@teste.local"}, "product": {"id": "prod-mensal-001"},
+    })
+    r = await client.post(URL, json=body, headers={"x-signature": token_themembers})
+    assert r.status_code == 200
+    assert r.json()["status"] == "processado"  # não 500 — não quebrou
+
+
+async def test_10c_registrar_usuario_rejeita_email_case_variante(empresa_factory, usuario_factory, db):
+    """Outra metade do fix 10b: registrar_usuario agora nega um cadastro novo
+    que só difere na capitalização de um e-mail já existente, fechando a
+    origem do par que causava o crash em buscar_usuario_por_email."""
+    from app.models.empresa import Empresa
+    from app.models.usuario import Usuario
+
+    empresa = await empresa_factory(status_assinatura="trial")
+    await usuario_factory(empresa, email="jacadastrado10c@example.com")
+
+    payload = UserCreate(
+        username="novo10c",
+        email="JaCadastrado10c@Example.com",
+        password="senha123456",
+        telefone="11999999999",
+    )
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await registrar_usuario(payload, db)
+        assert exc.value.status_code == 400
+    finally:
+        # Rede de segurança: se o dedup não bloqueasse (bug), registrar_usuario
+        # teria commitado uma empresa+usuario novos que a fixture não conhece.
+        await db.execute(delete(Usuario).where(Usuario.username == "novo10c"))
+        orfa = await db.execute(select(Empresa).where(Empresa.nome == "novo10c"))
+        empresa_orfa = orfa.scalar_one_or_none()
+        if empresa_orfa:
+            await db.execute(delete(Empresa).where(Empresa.id == empresa_orfa.id))
+        await db.commit()
+
+
 async def test_11_comprador_sem_conta_fica_pendente(client, token_themembers, db):
     body = payload_direto("release.access", {
         "customer": {"email": "nao-tem-conta-11@teste.local"}, "product": {"id": "prod-mensal-001"},
@@ -279,6 +346,38 @@ async def test_15_evento_antigo_nao_reativa_assinatura_cancelada(client, token_t
 
     await db.refresh(empresa)
     assert empresa.status_assinatura == "cancelada"
+
+
+async def test_15b_revoke_antigo_nao_cancela_ativacao_mais_nova(client, token_themembers, empresa_factory, usuario_factory, db):
+    """Direção simétrica do teste 15, achada na revisão de código: revoke.access
+    aplicava incondicionalmente (sem checar _pode_aplicar), então um revoke
+    atrasado podia cancelar uma assinatura já renovada por um evento mais novo."""
+    empresa = await empresa_factory(status_assinatura="trial")
+    email = "precedencia15b@teste.local"
+    await usuario_factory(empresa, email=email)
+
+    agora = datetime.now(timezone.utc)
+    mais_antigo = (agora - timedelta(days=5)).isoformat()
+    mais_recente = agora.isoformat()
+
+    # Ativa com timestamp recente.
+    body_ativar = payload_envelope("release.access", {
+        "customer": {"email": email}, "product": {"id": "prod-mensal-001"},
+    }, id_="evt-ativar-15b")
+    body_ativar["payload"]["created_at"] = mais_recente
+    r1 = await client.post(URL, json=body_ativar, headers={"x-signature": token_themembers})
+    assert r1.status_code == 200
+    await db.refresh(empresa)
+    assert empresa.status_assinatura == "ativa"
+
+    # Revoke mais antigo chega depois — não pode cancelar a ativação mais nova.
+    body_revoke_antigo = payload_direto("revoke.access", {"customer": {"email": email}}, created_at=mais_antigo)
+    r2 = await client.post(URL, json=body_revoke_antigo, headers={"x-signature": token_themembers})
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "ignorado"
+
+    await db.refresh(empresa)
+    assert empresa.status_assinatura == "ativa"
 
 
 # ── 16-17: robustez de payload ────────────────────────────────────────────────

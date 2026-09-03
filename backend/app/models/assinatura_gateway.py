@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, ForeignKey, Date, DateTime
+from sqlalchemy import String, ForeignKey, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -16,6 +16,9 @@ class AssinaturaGateway(Base, TimestampMixin):
     """
 
     __tablename__ = "assinatura_gateway"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "provedor", name="uq_assinatura_gateway_empresa_provedor"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     empresa_id: Mapped[UUID] = mapped_column(

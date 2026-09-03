@@ -27,6 +27,14 @@ async def receber_webhook_checkout(
     if not token_configurado or not x_signature or not secrets.compare_digest(x_signature, token_configurado):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida.")
 
+    # Trava real da Etapa 1 (achado na revisão de código: validar_producao() só
+    # cobre consistência de config no startup, não impedia a rota de processar
+    # de verdade se o token fosse configurado antes da hora). Fica DEPOIS da
+    # checagem de token de propósito — o passo de deploy da spec (§18.6) exige
+    # confirmar que token ausente/incorreto retorna 401 mesmo desabilitado.
+    if not settings.THEMEMBERS_WEBHOOK_ENABLED:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook desabilitado.")
+
     corpo_bruto = await request.body()
     try:
         body = json.loads(corpo_bruto)

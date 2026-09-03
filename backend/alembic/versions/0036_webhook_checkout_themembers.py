@@ -69,6 +69,11 @@ def upgrade() -> None:
         sa.Column("ultimo_evento_aplicado_em", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        # Achado na revisão de código: sem essa constraint, 2 webhooks quase
+        # simultâneos pra mesma empresa (ex: release.access + transaction.approved
+        # da mesma compra) podiam criar 2 linhas — daí em diante todo evento
+        # futuro daquela empresa quebrava com MultipleResultsFound.
+        sa.UniqueConstraint("empresa_id", "provedor", name="uq_assinatura_gateway_empresa_provedor"),
     )
     op.create_index("ix_assinatura_gateway_empresa_id", "assinatura_gateway", ["empresa_id"])
 
