@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -35,6 +36,12 @@ from app.models.webhook_checkout_evento import (
 from app.schemas.webhook_themembers import EventoNormalizado
 
 logger = logging.getLogger(__name__)
+
+# Doc oficial ("Estrutura dos webhooks") confirma o formato de data como
+# "YYYY-MM-DD HH:MM:SS" — sem offset em nenhum campo. TheMembers/TheBank é
+# plataforma brasileira; tratamos datas sem tz como horário de Brasília, não
+# UTC (achado na verificação do dashboard/documentação ao vivo, 2026-09-03).
+FUSO_HORARIO_PROVEDOR = ZoneInfo("America/Sao_Paulo")
 
 # Eventos que ativam ou renovam acesso.
 EVENTOS_ATIVACAO = {"release.access"}
@@ -128,11 +135,11 @@ def _parsear_data(valor: Any) -> Optional[datetime]:
         return None
     try:
         dt = datetime.fromisoformat(valor.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
     except ValueError:
         return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=FUSO_HORARIO_PROVEDOR)
+    return dt.astimezone(timezone.utc)
 
 
 # ── Idempotência (spec §9) ───────────────────────────────────────────────────

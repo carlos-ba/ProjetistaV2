@@ -650,7 +650,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
-| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, token em `x-signature`; DESABILITADO em produção (`THEMEMBERS_WEBHOOK_ENABLED=false`) até confirmar payload real |
+| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, HMAC-SHA256 em `x-signature`; DESABILITADO em produção (`THEMEMBERS_WEBHOOK_ENABLED=false`) até confirmar payload real |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -756,14 +756,40 @@ cadastros "User@x.com"/"user@x.com" quebravam o webhook; (6) revogação
 aplicava sem checar precedência por timestamp como a ativação — um
 `revoke.access` atrasado podia cancelar uma assinatura mais nova
 legítima. 8 testes novos fecham a cobertura (30 no total). 3 achados
-menores (truncamento de data sem fuso, reuso de `norm()`, 2 round-trips
-evitáveis) ficaram registrados, não corrigidos — fora do que foi pedido.
+menores (reuso de `norm()`, 2 round-trips evitáveis) ficaram registrados,
+não corrigidos — fora do que foi pedido.
+
+**Verificação ao vivo no dashboard/documentação real da TheMembers**
+(2026-09-03, `dashboard.themembers.com.br` com a sessão logada do usuário +
+`documentation.themembers.dev.br`) corrigiu 2 suposições erradas da spec
+original — 2 testes novos fecham a cobertura (32 no total):
+- **Assinatura é HMAC-SHA256, não token estático.** A doc oficial do
+  Checkout (`webhooks-do-checkout/seguranca`) confirma: `x-signature` é
+  `hash_hmac('sha256', corpo_bruto, secret)`, o oposto do que a spec havia
+  atribuído à Área de Membros. Sem esse fix, toda entrega real cairia em
+  401. `THEMEMBERS_WEBHOOK_TOKEN` continua sendo o mesmo secret, só muda
+  como ele é usado (chave HMAC, não comparação direta).
+- **Datas sem timezone = horário de Brasília, não UTC.** A doc confirma o
+  formato `YYYY-MM-DD HH:MM:SS` sem nenhum offset em nenhum campo (era o
+  achado #7 "plausível" da revisão de código, virou confirmado). Como é
+  plataforma brasileira, `_parsear_data` agora rotula datas sem tz como
+  `America/Sao_Paulo` (`zoneinfo`, `tzdata` adicionado ao requirements.txt
+  por segurança no Windows) antes de converter pra UTC — antes assumia UTC
+  direto.
+- Confirmado sem mudança de código: nomes de evento reais
+  (`release.access`/`revoke.access`/`transaction.approved`/etc.) batem
+  exatamente com as constantes já implementadas; produto vem com `id` **e**
+  `reference_id` no payload real e o código já tentava os dois, nessa
+  ordem; `expires_in` é campo obrigatório no payload de `release.access`
+  pra qualquer produto (resolve uma das 3 pendências da spec §20).
 
 - **Endpoint** `POST /api/webhooks/themembers/checkout` — público, sem JWT
-  (provedor externo não carrega sessão), autenticado por token estático no
-  header `x-signature` (`secrets.compare_digest`) — **não** o HMAC da Área
-  de Membros, são dois sistemas de webhook diferentes na TheMembers (achado
-  importante da spec, ver §2).
+  (provedor externo não carrega sessão), autenticado por HMAC-SHA256 do
+  corpo bruto no header `x-signature` (`hmac.compare_digest` sobre o
+  digest calculado com `THEMEMBERS_WEBHOOK_TOKEN` como secret) — confirmado
+  na documentação oficial do Checkout, **não** o token estático que a spec
+  original havia assumido (isso é só na Área de Membros, sistema diferente
+  na TheMembers).
 - **Tabelas novas**: `webhook_checkout_evento` (idempotência + auditoria,
   `chave_evento` UNIQUE, payload em JSONB) e `assinatura_gateway`
   (histórico de referências do provedor por empresa, permite trocar de
@@ -800,9 +826,11 @@ evitáveis) ficaram registrados, não corrigidos — fora do que foi pedido.
   desenvolvimento de verdade, nunca produção; cada teste cria sua própria
   empresa/usuário e apaga tudo que criou no fim, sem depender de rollback
   de transação aninhada — mais simples de auditar numa suíte nova). Os 22
-  testes obrigatórios da spec (§16) estão em
+  testes obrigatórios da spec (§16) + 10 achados na revisão de código e na
+  verificação do dashboard real estão em
   `backend/tests/test_webhook_themembers.py`, numerados igual à lista da
-  spec — todos passando localmente antes do commit.
+  spec (os extras levam sufixo de letra, ex: `test_2b`) — 32 no total,
+  todos passando localmente antes do commit.
 - **Diagnóstico administrativo**: `backend/scripts/listar_eventos_webhook.py`
   (só leitura) em vez de tela nova — lista eventos pendentes/erro/produto
   desconhecido por padrão, ou filtra por status/e-mail. Segue o mesmo

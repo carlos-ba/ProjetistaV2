@@ -1,5 +1,6 @@
+import hashlib
+import hmac
 import json
-import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,14 +18,23 @@ async def receber_webhook_checkout(
     x_signature: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Webhook do Checkout TheMembers/TheBank — token estático em `x-signature`,
-    não o HMAC da Área de Membros (são 2 sistemas diferentes na TheMembers,
-    ver docs/handoffs/especificacao-webhook-checkout-themembers-2026-09-03.md §2).
+    """Webhook do Checkout TheMembers/TheBank — `x-signature` é um HMAC-SHA256
+    do corpo bruto usando THEMEMBERS_WEBHOOK_TOKEN como secret (confirmado na
+    documentação oficial, documentation.themembers.dev.br/webhooks/webhooks-do-checkout/seguranca,
+    verificada ao vivo em 2026-09-03 — corrige a suposição original da spec de
+    token estático comparado direto, que só vale pra Área de Membros, sistema
+    diferente).
 
     Sem JWT de propósito — provedor externo não carrega sessão de usuário.
     """
-    token_configurado = settings.THEMEMBERS_WEBHOOK_TOKEN
-    if not token_configurado or not x_signature or not secrets.compare_digest(x_signature, token_configurado):
+    secret_configurado = settings.THEMEMBERS_WEBHOOK_TOKEN
+    corpo_bruto = await request.body()
+    assinatura_esperada = (
+        hmac.new(secret_configurado.encode("utf-8"), corpo_bruto, hashlib.sha256).hexdigest()
+        if secret_configurado
+        else None
+    )
+    if not assinatura_esperada or not x_signature or not hmac.compare_digest(x_signature, assinatura_esperada):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida.")
 
     # Trava real da Etapa 1 (achado na revisão de código: validar_producao() só
@@ -35,7 +45,6 @@ async def receber_webhook_checkout(
     if not settings.THEMEMBERS_WEBHOOK_ENABLED:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook desabilitado.")
 
-    corpo_bruto = await request.body()
     try:
         body = json.loads(corpo_bruto)
         if not isinstance(body, dict):
