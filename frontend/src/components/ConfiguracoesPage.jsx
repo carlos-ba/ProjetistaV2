@@ -187,14 +187,22 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
   const [salvandoIdentidade, setSalvandoIdentidade] = useState(false);
   const [erroIdentidade, setErroIdentidade] = useState('');
   const [sucessoIdentidade, setSucessoIdentidade] = useState(false);
+  // Reflete o que está salvo no servidor (não o formulário em edição) — atualizado
+  // só no carregamento e após salvar com sucesso, pra o botão indicar corretamente
+  // "primeira vez" × "já existe uma identidade salva" mesmo depois de reabrir o modal.
+  const [identidadeExistente, setIdentidadeExistente] = useState(false);
 
   useEffect(() => {
-    api.get('/api/v1/configuracoes/identidade-proposta').then(r => setIdentidade({
-      proposta_nome: r.data.proposta_nome ?? '',
-      proposta_logo_base64: r.data.proposta_logo_base64 ?? '',
-      proposta_contato_nome: r.data.proposta_contato_nome ?? '',
-      proposta_contato_telefone: r.data.proposta_contato_telefone ?? '',
-    })).catch(() => {});
+    api.get('/api/v1/configuracoes/identidade-proposta').then(r => {
+      const dados = {
+        proposta_nome: r.data.proposta_nome ?? '',
+        proposta_logo_base64: r.data.proposta_logo_base64 ?? '',
+        proposta_contato_nome: r.data.proposta_contato_nome ?? '',
+        proposta_contato_telefone: r.data.proposta_contato_telefone ?? '',
+      };
+      setIdentidade(dados);
+      setIdentidadeExistente(Object.values(dados).some(v => v));
+    }).catch(() => {});
   }, []);
 
   const handleLogoSelecionado = async (e) => {
@@ -215,6 +223,7 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
     try {
       await api.patch('/api/v1/configuracoes/identidade-proposta', identidade);
       setSucessoIdentidade(true);
+      setIdentidadeExistente(true);
     } catch (err) {
       setErroIdentidade(err.response?.data?.detail?.[0]?.msg || 'Erro ao salvar a identidade da proposta.');
     } finally {
@@ -357,8 +366,12 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
               {sucessoIdentidade && <p className="text-xs text-emerald-600">Identidade salva.</p>}
 
               <button onClick={salvarIdentidade} disabled={salvandoIdentidade}
-                className="w-full py-2 bg-[#7B2D8B] text-white rounded-lg text-xs font-bold hover:bg-purple-800 disabled:opacity-50">
-                {salvandoIdentidade ? 'Salvando...' : 'Salvar identidade'}
+                className={`w-full py-2 rounded-lg text-xs font-bold disabled:opacity-50 ${
+                  identidadeExistente
+                    ? 'border-2 border-[#7B2D8B] text-[#7B2D8B] bg-white hover:bg-purple-50'
+                    : 'bg-[#7B2D8B] text-white hover:bg-purple-800'
+                }`}>
+                {salvandoIdentidade ? 'Salvando...' : (identidadeExistente ? 'Atualizar Identidade' : 'Salvar Identidade')}
               </button>
             </div>
           </div>
