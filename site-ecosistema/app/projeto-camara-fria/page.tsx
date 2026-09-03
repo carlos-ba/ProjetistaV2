@@ -76,14 +76,35 @@ export default function ColdRoomProject() {
         </section>
 
         <section className="section pricing-section" id="planos">
-          <div className="section-heading"><p className="eyebrow">PLANOS INDIVIDUAIS</p><h2>Comece com um projeto. Evolua com software, suporte e capacitação.</h2><p>Escolha entre o acesso de teste, os planos profissionais e a experiência Premium da IceNexus.</p></div>
+          <div className="section-heading"><p className="eyebrow">PLANOS INDIVIDUAIS</p><h2>Comece com um projeto. Evolua com software, suporte e capacitação.</h2><p>Experimente gratuitamente ou escolha o plano que melhor combina com o momento da sua operação.</p></div>
           <div className="pricing-grid">
-            <article className="price-card"><p className="plan-name">Free</p><div className="price"><strong>R$ 0</strong><span>por 15 dias</span></div><ul><li>1 projeto de câmara fria</li><li>Acesso de teste à plataforma</li><li>Suporte básico</li></ul><a className="button ghost full" href="https://camara-fria.icenexus.com.br">Criar conta gratuita</a></article>
-            <article className="price-card"><p className="plan-name">Profissional Mensal</p><div className="price"><strong>R$ 159</strong><span>por mês</span></div><ul><li>Plataforma completa</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>1 validação técnica por mês</li><li>Suporte via WhatsApp</li></ul><a className="button ghost full" href="mailto:financeiro@icenexus.com.br?subject=Contratação%20do%20Profissional%20Mensal">Solicitar contratação</a></article>
-            <article className="price-card"><p className="plan-name">Profissional Semestral</p><div className="price"><strong>6 × R$ 99</strong><span>total de R$ 594</span></div><ul><li>Plataforma completa por 6 meses</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>1 validação técnica por mês</li><li>Suporte via WhatsApp</li><li>1 mês adicional para cada indicado com assinatura confirmada e válida no Profissional Semestral</li></ul><a className="button ghost full" href="mailto:financeiro@icenexus.com.br?subject=Contratação%20do%20Profissional%20Semestral">Solicitar contratação</a></article>
-            <article className="price-card preferred"><span className="recommended">Plano mais completo</span><p className="plan-name">Premium</p><div className="price"><strong>6 × R$ 497</strong><span>total de R$ 2.982</span></div><ul><li>Plataforma completa por 6 meses</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>3 validações técnicas por mês</li><li>Cursos EAD IceNexus inclusos</li><li>70% de desconto nos cursos presenciais IceNexus</li><li>Suporte prioritário</li></ul><a className="button primary full" href="mailto:financeiro@icenexus.com.br?subject=Contratação%20do%20Plano%20Premium">Solicitar contratação</a></article>
+            <article className="price-card">
+              <p className="plan-name">Avaliação gratuita</p>
+              <div className="price"><strong>R$ 0</strong><span>15 dias • 1 projeto</span></div>
+              <ul><li>Crie seu primeiro projeto de câmara fria</li><li>Conheça a jornada completa da plataforma</li><li>Suporte básico</li></ul>
+              <a className="button ghost full" href="https://camara-fria.icenexus.com.br">Começar minha avaliação</a>
+            </article>
+            <article className="price-card">
+              <p className="plan-name">Profissional Mensal</p>
+              <div className="price"><strong>R$ 159</strong><span>por mês</span></div>
+              <ul><li>Plataforma completa</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>1 validação técnica por mês</li><li>Suporte via WhatsApp</li></ul>
+              <a className="button ghost full" href="https://checkout.thebank.com.br/7501283916486672384" target="_blank" rel="noopener noreferrer">Assinar plano mensal</a>
+            </article>
+            <article className="price-card preferred">
+              <span className="recommended">Melhor custo-benefício</span>
+              <p className="plan-name">Profissional Semestral</p>
+              <div className="price"><strong>6 × R$ 99</strong><span>total de R$ 594</span></div>
+              <ul><li>Plataforma completa por 6 meses</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>1 validação técnica por mês</li><li>Suporte via WhatsApp</li><li>1 mês adicional para cada indicado com assinatura confirmada e válida no Profissional Semestral</li></ul>
+              <a className="button primary full" href="https://checkout.thebank.com.br/7501283403359830016" target="_blank" rel="noopener noreferrer">Escolher plano semestral</a>
+            </article>
+            <article className="price-card">
+              <p className="plan-name">Premium — Engenharia e Capacitação</p>
+              <div className="price"><strong>6 × R$ 497</strong><span>total de R$ 2.982</span></div>
+              <ul><li>Plataforma completa por 6 meses</li><li>Projetos ilimitados*</li><li>Lives técnicas</li><li>3 validações técnicas por mês</li><li>Cursos EAD IceNexus inclusos</li><li>70% de desconto nos cursos presenciais IceNexus</li><li>Suporte prioritário</li></ul>
+              <a className="button ghost full" href="https://checkout.thebank.com.br/7501282048323481600" target="_blank" rel="noopener noreferrer">Assinar plano Premium</a>
+            </article>
           </div>
-          <p className="pricing-note">*Projetos ilimitados conforme as regras e limites operacionais definidos pela plataforma. Validações técnicas estão sujeitas aos critérios e ao escopo técnico estabelecidos pela IceNexus.</p>
+          <p className="pricing-note">*Projetos ilimitados conforme as regras e limites operacionais definidos pela plataforma. Validações técnicas estão sujeitas aos critérios e ao escopo técnico estabelecidos pela IceNexus. Os pagamentos dos produtos IceNexus são processados em nome da WEM, empresa responsável pela operação da marca IceNexus.</p>
         </section>
 
         <section className="section enterprise-cta" id="empresas"><div><p className="eyebrow">SOLUÇÃO PARA EMPRESAS</p><h2>Sua operação tem equipes, tabelas próprias ou uma jornada de venda específica?</h2><p>Montadoras e revendas recebem atendimento especializado para entender usuários, produtos, preços e implantação.</p></div><a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Projeto%20de%20Câmara%20Fria%20para%20empresa">Falar com especialista</a></section>
