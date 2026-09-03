@@ -107,7 +107,7 @@ export default function ColdRoomProject() {
           <p className="pricing-note">*Projetos ilimitados conforme as regras e limites operacionais definidos pela plataforma. Validações técnicas estão sujeitas aos critérios e ao escopo técnico estabelecidos pela IceNexus. Os pagamentos dos produtos IceNexus são processados em nome da WEM, empresa responsável pela operação da marca IceNexus.</p>
         </section>
 
-        <section className="section enterprise-cta" id="empresas"><div><p className="eyebrow">SOLUÇÃO PARA EMPRESAS</p><h2>Sua operação tem equipes, tabelas próprias ou uma jornada de venda específica?</h2><p>Montadoras e revendas recebem atendimento especializado para entender usuários, produtos, preços e implantação.</p></div><a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Projeto%20de%20Câmara%20Fria%20para%20empresa">Falar com especialista</a></section>
+        <section className="section enterprise-cta" id="empresas"><div><p className="eyebrow">SOLUÇÃO PARA EMPRESAS</p><h2>Sua operação tem equipes, tabelas próprias ou uma jornada de venda específica?</h2><p>Montadoras e revendas recebem atendimento especializado para entender usuários, produtos, preços e implantação.</p></div><a className="button primary" href="mailto:contato@icenexus.com.br?subject=Projeto%20de%20Câmara%20Fria%20para%20empresa">Falar com especialista</a></section>
       </main>
     </PageFrame>
   );

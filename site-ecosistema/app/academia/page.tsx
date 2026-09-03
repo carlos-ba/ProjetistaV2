@@ -21,7 +21,7 @@ export default function Academy() {
             <h1>Conhecimento técnico conectado à prática da refrigeração.</h1>
             <p className="hero-lead">A divisão de educação da IceNexus aproxima fundamentos técnicos, aplicação em laboratório e troca entre profissionais do setor.</p>
             <div className="hero-actions">
-              <a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Informações%20sobre%20a%20Academia%20IceNexus">Solicitar informações</a>
+              <a className="button primary" href="mailto:contato@icenexus.com.br?subject=Informações%20sobre%20a%20Academia%20IceNexus">Solicitar informações</a>
               <a className="button ghost" href="#academia-em-acao">Ver a Academia em ação</a>
             </div>
           </div>
@@ -78,7 +78,7 @@ export default function Academy() {
           <div className="training-points"><article><span>01</span><h3>Capacitação técnica</h3><p>Conteúdos orientados aos desafios encontrados por profissionais da refrigeração.</p></article><article><span>02</span><h3>Desenvolvimento de equipes</h3><p>Treinamentos que podem atender necessidades específicas de empresas.</p></article><article><span>03</span><h3>Formatos conectados</h3><p>Possibilidades presenciais, online, ao vivo e EAD conforme a oferta publicada.</p></article></div>
         </section>
 
-        <section className="section enterprise-cta"><div><p className="eyebrow">PROGRAMAÇÃO EM PREPARAÇÃO</p><h2>Novos treinamentos serão apresentados aqui.</h2><p>Enquanto a programação pública é organizada, profissionais e empresas podem solicitar informações diretamente à IceNexus.</p></div><a className="button primary" href="mailto:financeiro@icenexus.com.br?subject=Interesse%20em%20treinamentos%20IceNexus">Falar com a Academia</a></section>
+        <section className="section enterprise-cta"><div><p className="eyebrow">PROGRAMAÇÃO EM PREPARAÇÃO</p><h2>Novos treinamentos serão apresentados aqui.</h2><p>Enquanto a programação pública é organizada, profissionais e empresas podem solicitar informações diretamente à IceNexus.</p></div><a className="button primary" href="mailto:contato@icenexus.com.br?subject=Interesse%20em%20treinamentos%20IceNexus">Falar com a Academia</a></section>
       </main>
     </PageFrame>
   );

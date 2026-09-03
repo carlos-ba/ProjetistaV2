@@ -53,7 +53,8 @@ export function Footer() {
       </div>
       <div className="footer-pending">
         <strong>Contato</strong>
-        <a href="mailto:financeiro@icenexus.com.br">financeiro@icenexus.com.br</a>
+        <a href="mailto:contato@icenexus.com.br">contato@icenexus.com.br</a>
+        <a href="https://wa.me/5511957214799" target="_blank" rel="noopener noreferrer">WhatsApp: (11) 95721-4799</a>
       </div>
     </footer>
   );
