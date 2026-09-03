@@ -392,14 +392,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         const descricao = m.comprimento ? `${m.item} ${m.comprimento}m` : m.item;
         const precoManual = parseFloat(extras[norm(descricao)]) || null;
         // Tubo de cobre é cotado/pago por KG (coluna F). A quantidade do orçamento tem que ser kg,
-        // não metros (coluna E) — igual à planilha de cotação (montarItensCotacao).
-        const qtd = qtdCorrigida(descricao, parseFloat(m.quantidade ?? m.qtd ?? 1) || 1);
+        // não metros (coluna E) — igual à planilha de cotação (montarItensCotacao). A correção manual
+        // (qtdesManuais) é sempre na unidade que aparece na Revisão — kg pro tubo, não metros — então
+        // ela precisa ser aplicada DEPOIS da conversão pra kg, nunca antes (senão o valor digitado é
+        // tratado como metros e convertido de novo, ou — pior — o calcularKg ignora a correção porque
+        // usa `item.quantidade_kg` salvo direto, sem olhar o parâmetro `quantidade`).
+        const qtdBase = parseFloat(m.quantidade ?? m.qtd ?? 1) || 1;
         const parede = m.detalhe?.includes('grossa') ? 'grossa' : 'fina';
-        const kgTotal = m.unidade === 'm' ? calcularKg(m, qtd, parede) : null;
+        const kgTotal = m.unidade === 'm' ? calcularKg(m, qtdBase, parede) : null;
+        const qtd = qtdCorrigida(descricao, kgTotal != null ? kgTotal : qtdBase);
         return {
           id: m.id,
           item: nomeCorrigido(descricao),
-          qtde: kgTotal != null ? kgTotal : qtd,
+          qtde: qtd,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${fmtQtd(m.area_total)} m²` : null].filter(Boolean).join(' — '),
           preco_unitario: precoManual ?? buscarPreco(descricao),
           tipo_item: m.tipo_item ?? null,
