@@ -779,6 +779,16 @@ inaugurado com 24 portas MBP Isoblock (proposta 084830) — antes só existiam
 `batente` (3B/4B) e `soleira` são campos **independentes** — não presumir
 uma regra fixa entre eles sem confirmar com o fabricante.
 
+**Seleção no Card 1 (`CalculadoraGabinete.jsx`, redesenhada 2026-09-02):**
+com o catálogo real (26 portas), a grade de cards antiga (renderizava o
+catálogo inteiro sem filtro — bug pré-existente, o filtro por
+classificação era calculado mas nunca aplicado) virou 2 selects de filtro
+(Classificação — default "Sugerida" pela T.Interna, com opção "Todas" —
+e Tipo) + 1 menu suspenso compacto com as portas que batem nos 2 filtros
+e ainda não foram adicionadas. `TIPO_PORTA_LABEL` troca só a **exibição**
+de `deslizante` → "De Correr" (termo comum no ramo); o valor gravado no
+projeto continua `deslizante`, sem migração de dado.
+
 Classificação de itens do orçamento é via banco (`bloco_orcamento`,
 `classificacao_item`, `item_classificacao`), servida por `GET
 /api/v1/classificacoes`. Todos os geradores (gabinete, tubulação, cavalete,
