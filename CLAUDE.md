@@ -740,6 +740,25 @@ spec (§20) já avisa que vários detalhes (IDs de produto, se
 Semestral/Premium são assinatura recorrente ou parcelamento avulso,
 `expires_in`) só se confirmam com payload real, não dá pra adivinhar.
 
+**Revisão de código feita antes do merge** (`/code-review`, 8 ângulos +
+verificação independente) achou 6 bugs reais, todos corrigidos no mesmo
+commit da entrega (nenhum chegou a ir pra `main`): (1) `ENABLED` era só
+validado no startup, nunca checado pela rota — agora recusa (503) quando
+desabilitado; (2) `assinatura_gateway` sem constraint única — 2 webhooks
+quase simultâneos podiam duplicar a linha e quebrar todo evento futuro
+daquela empresa; (3) `verificar_email` rodava a reconciliação na mesma
+transação sem tratar erro — uma falha ali revertia a verificação de
+e-mail junto; (4) `reconciliar_pendencias_email` reconstruía o evento à
+mão em vez de reusar `normalizar_payload`, perdendo `expira_em` — empresa
+ficava "ativa" pra sempre sem validade; (5) e-mail único só
+case-sensitive no banco vs. busca case-insensitive do webhook — dois
+cadastros "User@x.com"/"user@x.com" quebravam o webhook; (6) revogação
+aplicava sem checar precedência por timestamp como a ativação — um
+`revoke.access` atrasado podia cancelar uma assinatura mais nova
+legítima. 8 testes novos fecham a cobertura (30 no total). 3 achados
+menores (truncamento de data sem fuso, reuso de `norm()`, 2 round-trips
+evitáveis) ficaram registrados, não corrigidos — fora do que foi pedido.
+
 - **Endpoint** `POST /api/webhooks/themembers/checkout` — público, sem JWT
   (provedor externo não carrega sessão), autenticado por token estático no
   header `x-signature` (`secrets.compare_digest`) — **não** o HMAC da Área
