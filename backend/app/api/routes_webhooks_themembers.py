@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import json
-import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,8 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.database.session import get_db
 from app.services.webhook_themembers import processar_webhook
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webhooks/themembers", tags=["webhooks"])
 
@@ -38,13 +35,6 @@ async def receber_webhook_checkout(
         else None
     )
     if not assinatura_esperada or not x_signature or not hmac.compare_digest(x_signature, assinatura_esperada):
-        # DEBUG TEMPORÁRIO (2026-09-04) — diagnosticar 401 em entregas reais.
-        # REMOVER logo depois: loga corpo bruto, não é pra ficar em produção.
-        logger.error(
-            "DEBUG_WEBHOOK_401 recebido=%r esperado=%r corpo_len=%s corpo_b64=%r",
-            x_signature, assinatura_esperada, len(corpo_bruto),
-            __import__("base64").b64encode(corpo_bruto).decode("ascii"),
-        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida.")
 
     # Trava real da Etapa 1 (achado na revisão de código: validar_producao() só
