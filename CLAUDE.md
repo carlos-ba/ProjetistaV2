@@ -783,6 +783,44 @@ original — 2 testes novos fecham a cobertura (32 no total):
   ordem; `expires_in` é campo obrigatório no payload de `release.access`
   pra qualquer produto (resolve uma das 3 pendências da spec §20).
 
+**Etapa 2 — captura de payload real com compra de teste** (2026-09-04):
+webhook de teste cadastrado em `Checkout → Ferramentas → Webhooks`
+(**não** o "Webhooks" da Área de Membros — são 2 áreas distintas com
+catálogos de evento diferentes) apontando pro webhook.site, produto
+Icenexus Premium, evento "Todos". Compra de teste real da oferta
+**Profissional Mensal** (única oferta recorrente de verdade das 3 — Ofertas
+Base/Semestral são venda única com prazo fixo, confirmado direto na tela de
+edição do produto no painel) via Pix capturou **6 eventos reais** no mesmo
+segundo — achados que mudaram o código:
+- **Assinatura mensal não recebe data de expiração na ativação**: nem
+  `release.access` nem o `transaction.approved` da 1ª compra carregam
+  `expires_in`/`data.subscription` pra produto recorrente — `assinatura_fim`
+  ficava sem data até o 2º ciclo de cobrança (não bloqueava ninguém,
+  `assinatura_fim IS NULL` nunca bloqueia, só ficava incompleto). Fix: novo
+  evento `subscription.date_changed` (não documentado publicamente, dispara
+  logo após o pagamento) traz `data.dates.next_billing_at` — processado
+  agora só pra sincronizar `assinatura_fim`/`gateway.proxima_cobranca_em`,
+  nunca ativa/muda status sozinho. Independente de ordem de chegada em
+  relação ao `release.access` (chegaram no mesmo segundo na captura real) —
+  se `date_changed` chega primeiro, fica guardado no `gateway` e o branch de
+  ativação usa como fallback.
+- Formato de payload desse evento é bem diferente dos outros: sem `object`
+  no topo, timestamp em **epoch millis** (`creation_date`, não
+  `created_at`) — `_parsear_data()` ganhou suporte a isso — e e-mail só em
+  `data.buyer.email` (novo fallback na cadeia de extração de e-mail).
+- **3 eventos reais não catalogados na doc pública**: `order.paid`,
+  `subscription.date_changed`, `transaction.pending_provider` — nenhum
+  quebra nada (fallback final de `_aplicar_efeito` já auditava sem erro
+  qualquer evento reconhecido fora do mapeamento conhecido).
+- **IDs reais confirmados** (3 ofertas dentro de 1 só "Produto" no
+  catálogo, não 3 produtos separados como a spec supôs):
+  `THEMEMBERS_PRODUCT_MONTHLY_ID=7501283916486672384`,
+  `THEMEMBERS_PRODUCT_SEMIANNUAL_ID=7501283403359830016`,
+  `THEMEMBERS_PRODUCT_PREMIUM_ID=7501282048323481600` — já no `.env` local
+  (nunca comitado; ainda faltam no Render).
+- 2 testes novos (`test_23`/`test_23b`, cobrindo as 2 ordens de chegada) —
+  35 no total.
+
 - **Endpoint** `POST /api/webhooks/themembers/checkout` — público, sem JWT
   (provedor externo não carrega sessão), autenticado por HMAC-SHA256 do
   corpo bruto no header `x-signature` (`hmac.compare_digest` sobre o
