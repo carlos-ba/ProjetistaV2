@@ -650,7 +650,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
-| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, HMAC-SHA256 em `x-signature`; DESABILITADO em produção (`THEMEMBERS_WEBHOOK_ENABLED=false`) até confirmar payload real |
+| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, HMAC-SHA256 em `x-signature`; EM PRODUÇÃO desde 2026-09-04 (`THEMEMBERS_WEBHOOK_ENABLED=true`) |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -720,7 +720,40 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 
 ---
 
-## Webhook do Checkout TheMembers (Etapa 1 implementada, DESABILITADO em produção)
+## Webhook do Checkout TheMembers (EM PRODUÇÃO desde 2026-09-04)
+
+**Etapa 2 concluída e habilitada de verdade em produção em 2026-09-04** —
+`THEMEMBERS_WEBHOOK_ENABLED=true` no Render, webhook real cadastrado no
+painel da TheMembers (`Checkout → Ferramentas → Webhooks`, nome "IceNexus
+SaaS - Produção", apontando pra
+`https://projetista-v2-api-alt.onrender.com/api/webhooks/themembers/checkout`),
+token e os 3 IDs reais de oferta configurados. Jornada completa validada
+com uma compra real (Mensal, R$159, Pix): pagamento → webhook →
+`pendente_usuario` → cadastro na plataforma → verificação de e-mail →
+reconciliação automática → `status_assinatura=ativa`. Mais 2 fixes que
+saíram dessa validação (precedência em `subscription.date_changed`, limpar
+`gateway.proxima_cobranca_em` no cancelamento — ver `project_jornada_assinatura_saas`
+na memória pro detalhe). 39 testes automatizados, todos passando.
+
+**Pendências reais, não bloqueantes:**
+- Landing page (`icenexus.com.br/projeto-camara-fria`) ainda não linka pro
+  checkout real — botões "Solicitar contratação" apontam pra
+  `mailto:financeiro@icenexus.com.br` (placeholder). Handoff registrado pro
+  Codex em `docs/handoffs/checkout-links-landing-page-2026-09-04.md` com os
+  3 links reais.
+- E-mail transacional (verificação de conta, reset de senha) agora
+  configurado em produção via SMTP do Hostinger (`contato@icenexus.com.br`,
+  `smtp.hostinger.com:465` SSL) — antes não existia nenhuma variável
+  `MAIL_*` no Render, então nenhum cliente conseguia verificar o próprio
+  e-mail sozinho. SPF já existia (`v=spf1 include:_spf.mail.hostinger.com
+  ~all`); DKIM não existia (nenhum registro publicado) e foi gerado no
+  próprio painel do Hostinger (`E-mails → DKIM personalizado → Gerar
+  registro DKIM`, seletor `hostingermail1._domainkey`, confirmado resolvendo
+  no DNS público) — sem isso, e-mail de cliente real caía direto no spam
+  (confirmado testando: sem DKIM foi pro spam, mecanismo em si já
+  funcionava). Hostinger avisa até 8h pra propagar de vez.
+
+### Histórico da implementação (Etapa 1)
 
 Handoff Codex → Claude, spec completa em
 `docs/handoffs/especificacao-webhook-checkout-themembers-2026-09-03.md`
@@ -1047,7 +1080,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
-| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | 🟡 Etapa 1 pronta em branch própria (código+testes), DESABILITADO — falta Etapa 2 (payload real + habilitar) |
+| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ✅ EM PRODUÇÃO desde 2026-09-04, validado com compra real ponta a ponta |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |
