@@ -316,6 +316,12 @@ async def _aplicar_efeito(
             registro.erro_resumido = "Evento mais antigo que o último já aplicado para esta assinatura."
             return
         empresa.status_assinatura = "cancelada" if evento.event in EVENTOS_REVOGACAO else "suspensa"
+        # Achado na revisão de código: sem limpar isso, uma data de próxima
+        # cobrança antiga ficava pendurada no gateway e era reusada como
+        # fallback (abaixo, no branch de ativação) numa reativação futura —
+        # travava o cliente que acabou de pagar de novo com uma data já
+        # vencida (assinatura_fim no passado).
+        gateway.proxima_cobranca_em = None
         _registrar_evento_aplicado(gateway, evento, timestamp_evento, forcar=True)
         registro.status_processamento = STATUS_PROCESSADO
         return
@@ -326,10 +332,21 @@ async def _aplicar_efeito(
         # evento chega primeiro, fica guardado em gateway.proxima_cobranca_em
         # pro branch de ativação usar como fallback (abaixo); se chega
         # depois, atualiza assinatura_fim direto (empresa já está "ativa").
+        # Achado na revisão de código: esse evento não tem `id` em lugar
+        # nenhum do payload real (idempotência cai no hash do corpo bruto),
+        # então uma reentrega com bytes diferentes não é deduplicada — sem
+        # a mesma checagem de precedência dos outros branches, uma
+        # reentrega atrasada podia sobrescrever uma data mais nova com uma
+        # mais velha.
+        if not _pode_aplicar(gateway, timestamp_evento):
+            registro.status_processamento = STATUS_IGNORADO
+            registro.erro_resumido = "Evento mais antigo que o último já aplicado para esta assinatura."
+            return
         if evento.proxima_cobranca_em is not None:
             gateway.proxima_cobranca_em = evento.proxima_cobranca_em.date()
             if empresa.status_assinatura == "ativa":
                 empresa.assinatura_fim = gateway.proxima_cobranca_em
+        _registrar_evento_aplicado(gateway, evento, timestamp_evento, forcar=False)
         registro.status_processamento = STATUS_PROCESSADO
         return
 

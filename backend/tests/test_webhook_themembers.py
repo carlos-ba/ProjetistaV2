@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 
 from app.database.session import SessionLocal
+from app.models.assinatura_gateway import AssinaturaGateway
 from app.models.webhook_checkout_evento import WebhookCheckoutEvento
 from app.schemas.auth import UserCreate
 from app.services.assinatura import exigir_pode_editar
@@ -525,9 +526,15 @@ async def test_22_logs_nao_contem_token_nem_payload_integral(client, token_theme
 
 def payload_date_changed(email: str, produto_id: str = "prod-mensal-001",
                           next_billing_at: str = "2026-10-04T15:58:12.000000Z",
-                          creation_date: int = 1788537492599):
+                          creation_date: int | None = None):
     """Formato real capturado em 2026-09-04 (compra de teste Mensal via Pix)
-    — sem "object", data em epoch millis, e-mail só em data.buyer.email."""
+    — sem "object", data em epoch millis, e-mail só em data.buyer.email.
+    creation_date default é "agora" (não o valor fixo da captura real) —
+    esse evento agora passa pela mesma checagem de precedência dos outros
+    (_pode_aplicar), então precisa ser mais novo que o release.access já
+    aplicado no mesmo teste, não uma data fixa no passado."""
+    if creation_date is None:
+        creation_date = int(datetime.now(timezone.utc).timestamp() * 1000)
     return {
         "event": "subscription.date_changed",
         "creation_date": creation_date,
@@ -592,3 +599,84 @@ async def test_23b_subscription_date_changed_antes_do_release_access_tambem_func
     await db.refresh(empresa)
     assert empresa.status_assinatura == "ativa"
     assert empresa.assinatura_fim == date(2026, 10, 4)
+
+
+async def test_23c_subscription_date_changed_antigo_e_ignorado(
+    client, token_themembers, empresa_factory, usuario_factory, db,
+):
+    """Achado na revisão de código: sem checar precedência (_pode_aplicar),
+    uma reentrega atrasada de subscription.date_changed sobrescrevia uma
+    data mais nova com uma mais velha — mesma classe de bug já corrigida
+    pra revoke.access na 1ª revisão. Esse evento não tem `id` em lugar
+    nenhum do payload real, então a idempotência por chave_evento não pega
+    esse caso (cai no hash do corpo bruto, que muda a cada next_billing_at
+    diferente) — só a checagem de precedência protege."""
+    empresa = await empresa_factory(status_assinatura="trial", assinatura_fim=None)
+    email = "mensal23c@teste.local"
+    await usuario_factory(empresa, email=email)
+
+    body_ativar = payload_direto("release.access", {
+        "customer": {"email": email}, "product": {"id": "prod-mensal-001"},
+    })
+    await post_assinado(client, body_ativar, token_themembers)
+
+    agora = datetime.now(timezone.utc)
+    r_novo = await post_assinado(
+        client,
+        payload_date_changed(email, next_billing_at="2026-10-04T15:58:12.000000Z",
+                              creation_date=int(agora.timestamp() * 1000)),
+        token_themembers,
+    )
+    assert r_novo.status_code == 200
+    await db.refresh(empresa)
+    assert empresa.assinatura_fim == date(2026, 10, 4)
+
+    mais_antigo = agora - timedelta(days=10)
+    r_antigo = await post_assinado(
+        client,
+        payload_date_changed(email, next_billing_at="2026-09-01T00:00:00.000000Z",
+                              creation_date=int(mais_antigo.timestamp() * 1000)),
+        token_themembers,
+    )
+    assert r_antigo.status_code == 200
+    assert r_antigo.json()["status"] == "ignorado"
+
+    await db.refresh(empresa)
+    assert empresa.assinatura_fim == date(2026, 10, 4)  # não regrediu pra 1º de setembro
+
+
+async def test_23d_revogacao_limpa_proxima_cobranca_em_do_gateway(
+    client, token_themembers, empresa_factory, usuario_factory, db,
+):
+    """Achado na revisão de código: sem limpar isso, gateway.proxima_cobranca_em
+    ficava com uma data velha pendurada pra sempre depois de um
+    cancelamento — mesma linha do fallback do branch de ativação (usado
+    quando uma reativação futura chega sem sua própria data), então uma
+    reassinatura meses depois podia herdar a data vencida da assinatura
+    anterior antes de uma nova sincronização (subscription.date_changed)
+    chegar pra corrigir."""
+    empresa = await empresa_factory(status_assinatura="trial", assinatura_fim=None)
+    email = "mensal23d@teste.local"
+    await usuario_factory(empresa, email=email)
+
+    body_ativar = payload_direto("release.access", {
+        "customer": {"email": email}, "product": {"id": "prod-mensal-001"},
+    })
+    await post_assinado(client, body_ativar, token_themembers)
+    await post_assinado(client, payload_date_changed(email), token_themembers)
+
+    async with SessionLocal() as s:
+        gateway = (await s.execute(
+            select(AssinaturaGateway).where(AssinaturaGateway.empresa_id == empresa.id)
+        )).scalar_one()
+        assert gateway.proxima_cobranca_em == date(2026, 10, 4)
+
+    body_cancelar = payload_direto("revoke.access", {"customer": {"email": email}})
+    r_cancelar = await post_assinado(client, body_cancelar, token_themembers)
+    assert r_cancelar.status_code == 200
+
+    async with SessionLocal() as s:
+        gateway = (await s.execute(
+            select(AssinaturaGateway).where(AssinaturaGateway.empresa_id == empresa.id)
+        )).scalar_one()
+        assert gateway.proxima_cobranca_em is None
