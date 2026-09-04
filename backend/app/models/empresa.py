@@ -35,6 +35,10 @@ class Empresa(Base, TimestampMixin):
     status_assinatura: Mapped[str] = mapped_column(String(20), default="ativa", server_default="ativa")
     assinatura_inicio: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     assinatura_fim: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Eixo comercial independente de `plano` (que é só técnico/empresa) — identifica
+    # a oferta paga (avaliacao/profissional_mensal/profissional_semestral/premium),
+    # ver docs/decisoes/2026-08-30-plano-x-status.md e o handoff do webhook TheMembers.
+    oferta_comercial: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     # Recursos avançados (Classificação de Itens, Catálogo de Preços) — nascem
     # desligados pra todo mundo (técnico ou empresa); só o superadmin liga por
