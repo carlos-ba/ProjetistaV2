@@ -519,3 +519,76 @@ async def test_22_logs_nao_contem_token_nem_payload_integral(client, token_theme
     assert token_themembers not in texto_logs
     assert "123.456.789-00" not in texto_logs
     assert "99999-8888" not in texto_logs
+
+
+# ── 23: subscription.date_changed — achado no payload real de compra Mensal ──
+
+def payload_date_changed(email: str, produto_id: str = "prod-mensal-001",
+                          next_billing_at: str = "2026-10-04T15:58:12.000000Z",
+                          creation_date: int = 1788537492599):
+    """Formato real capturado em 2026-09-04 (compra de teste Mensal via Pix)
+    — sem "object", data em epoch millis, e-mail só em data.buyer.email."""
+    return {
+        "event": "subscription.date_changed",
+        "creation_date": creation_date,
+        "data": {
+            "subscription": {"code": "SB1B4QSTS", "status": "active"},
+            "buyer": {"name": "Teste", "email": email},
+            "product": {"id": produto_id, "title": "Profissional Mensal", "price": 15900},
+            "dates": {"next_billing_at": next_billing_at},
+        },
+    }
+
+
+async def test_23_subscription_date_changed_preenche_assinatura_fim_apos_ativacao(
+    client, token_themembers, empresa_factory, usuario_factory, db,
+):
+    """Achado no payload real: release.access do Mensal não traz expires_in
+    nem data.subscription — assinatura_fim fica None até subscription.date_changed
+    chegar (evento separado, não documentado, disparado logo em seguida)."""
+    empresa = await empresa_factory(status_assinatura="trial", assinatura_fim=None)
+    email = "mensal23@teste.local"
+    await usuario_factory(empresa, email=email)
+
+    body_ativar = payload_direto("release.access", {
+        "customer": {"email": email}, "product": {"id": "prod-mensal-001"},
+    })
+    r1 = await post_assinado(client, body_ativar, token_themembers)
+    assert r1.status_code == 200
+    await db.refresh(empresa)
+    assert empresa.status_assinatura == "ativa"
+    assert empresa.assinatura_fim is None
+
+    r2 = await post_assinado(client, payload_date_changed(email), token_themembers)
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "processado"
+
+    await db.refresh(empresa)
+    assert empresa.assinatura_fim == date(2026, 10, 4)
+
+
+async def test_23b_subscription_date_changed_antes_do_release_access_tambem_funciona(
+    client, token_themembers, empresa_factory, usuario_factory, db,
+):
+    """Ordem de chegada entre os 2 eventos não é garantida (chegaram no mesmo
+    segundo na captura real) — se date_changed chega ANTES da ativação, a
+    data fica guardada no gateway e o release.access usa como fallback."""
+    empresa = await empresa_factory(status_assinatura="trial", assinatura_fim=None)
+    email = "mensal23b@teste.local"
+    await usuario_factory(empresa, email=email)
+
+    r1 = await post_assinado(client, payload_date_changed(email), token_themembers)
+    assert r1.status_code == 200
+    await db.refresh(empresa)
+    assert empresa.status_assinatura == "trial"  # não ativa sozinho
+    assert empresa.assinatura_fim is None  # empresa ainda não está "ativa"
+
+    body_ativar = payload_direto("release.access", {
+        "customer": {"email": email}, "product": {"id": "prod-mensal-001"},
+    })
+    r2 = await post_assinado(client, body_ativar, token_themembers)
+    assert r2.status_code == 200
+
+    await db.refresh(empresa)
+    assert empresa.status_assinatura == "ativa"
+    assert empresa.assinatura_fim == date(2026, 10, 4)

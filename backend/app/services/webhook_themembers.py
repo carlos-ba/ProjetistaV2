@@ -50,6 +50,12 @@ EVENTOS_PAGAMENTO = {"transaction.approved"}
 # uma aprovação anterior da mesma empresa (spec §11, regra de precedência).
 EVENTOS_REVOGACAO = {"revoke.access", "transaction.refunded"}
 EVENTOS_SUSPENSAO = {"transaction.charged_back"}
+# Achado capturando payload real de uma compra Mensal (2026-09-04): nem
+# release.access nem o transaction.approved da 1ª compra carregam data de
+# próxima cobrança pra assinatura recorrente (sem expires_in, sem
+# data.subscription) — só esse evento, disparado logo em seguida, traz
+# data.dates.next_billing_at. Só sincroniza data, nunca ativa/revoga sozinho.
+EVENTOS_ATUALIZACAO_ASSINATURA = {"subscription.date_changed"}
 # Só auditoria — não mudam estado de acesso.
 EVENTOS_SOMENTE_AUDITORIA = {
     "transaction.failed",
@@ -89,6 +95,9 @@ def normalizar_payload(body: dict[str, Any]) -> EventoNormalizado:
         _buscar_aninhado(data, "customer", "email")
         or _buscar_aninhado(data, "subscription", "subscriber", "email")
         or _buscar_aninhado(data, "order", "customer", "email")
+        # subscription.date_changed (achado no payload real) só traz e-mail
+        # aqui — não tem customer/subscription.subscriber/order.
+        or _buscar_aninhado(data, "buyer", "email")
     )
 
     produto_id = _stringificar(
@@ -104,8 +113,13 @@ def normalizar_payload(body: dict[str, Any]) -> EventoNormalizado:
         produto_id=produto_id,
         email_comprador=email.strip().lower() if isinstance(email, str) and email.strip() else None,
         data=data,
-        criado_em_provedor=_parsear_data(envelope.get("created_at") or data.get("created_at")),
-        proxima_cobranca_em=_parsear_data(_buscar_aninhado(data, "subscription", "next_billing_at")),
+        criado_em_provedor=_parsear_data(
+            envelope.get("created_at") or data.get("created_at") or envelope.get("creation_date")
+        ),
+        proxima_cobranca_em=_parsear_data(
+            _buscar_aninhado(data, "subscription", "next_billing_at")
+            or _buscar_aninhado(data, "dates", "next_billing_at")
+        ),
         expira_em=_parsear_data(_buscar_aninhado(data, "product", "expires_in")),
         external_customer_id=_stringificar(_buscar_aninhado(data, "customer", "id")),
         external_order_id=_stringificar(_buscar_aninhado(data, "order", "id")),
@@ -131,6 +145,13 @@ def _stringificar(valor: Any) -> Optional[str]:
 
 
 def _parsear_data(valor: Any) -> Optional[datetime]:
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        # subscription.date_changed manda `creation_date` em epoch millis
+        # (achado no payload real) — único campo do payload nesse formato.
+        try:
+            return datetime.fromtimestamp(valor / 1000, tz=timezone.utc)
+        except (ValueError, OSError, OverflowError):
+            return None
     if not valor or not isinstance(valor, str):
         return None
     try:
@@ -299,6 +320,19 @@ async def _aplicar_efeito(
         registro.status_processamento = STATUS_PROCESSADO
         return
 
+    if evento.event in EVENTOS_ATUALIZACAO_ASSINATURA:
+        # Só sincroniza data — nunca ativa/muda status sozinho. Cobre os 2
+        # sentidos de ordem de chegada em relação a release.access: se este
+        # evento chega primeiro, fica guardado em gateway.proxima_cobranca_em
+        # pro branch de ativação usar como fallback (abaixo); se chega
+        # depois, atualiza assinatura_fim direto (empresa já está "ativa").
+        if evento.proxima_cobranca_em is not None:
+            gateway.proxima_cobranca_em = evento.proxima_cobranca_em.date()
+            if empresa.status_assinatura == "ativa":
+                empresa.assinatura_fim = gateway.proxima_cobranca_em
+        registro.status_processamento = STATUS_PROCESSADO
+        return
+
     if evento.event in EVENTOS_SOMENTE_AUDITORIA:
         registro.status_processamento = STATUS_PROCESSADO
         return
@@ -327,8 +361,18 @@ async def _aplicar_efeito(
         empresa.oferta_comercial = oferta
         if evento.expira_em is not None:
             empresa.assinatura_fim = evento.expira_em.date()
-        elif oferta == "profissional_mensal" and evento.proxima_cobranca_em is not None:
-            empresa.assinatura_fim = evento.proxima_cobranca_em.date()
+        elif oferta == "profissional_mensal":
+            # release.access/transaction.approved da 1ª compra não carregam
+            # next_billing_at (achado no payload real) — usa o que já tiver
+            # sido sincronizado por subscription.date_changed, se esse evento
+            # já tiver chegado antes deste (ordem entre os 2 não é garantida).
+            proxima_data = (
+                evento.proxima_cobranca_em.date()
+                if evento.proxima_cobranca_em is not None
+                else gateway.proxima_cobranca_em
+            )
+            if proxima_data is not None:
+                empresa.assinatura_fim = proxima_data
         # Semestral/Premium sem expires_in no payload: não inventa "180 dias"
         # (spec §12) — assinatura_fim fica como estava até confirmar a regra
         # com payload real.
