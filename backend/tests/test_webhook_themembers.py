@@ -118,6 +118,17 @@ def test_4b_data_sem_timezone_tratada_como_horario_brasilia():
     assert evento.criado_em_provedor == datetime(2026, 1, 8, 21, 32, 19, tzinfo=timezone.utc)
 
 
+def test_4c_codigo_assinatura_le_campo_code_nao_id():
+    """Achado na verificação do dashboard/documentação real em 2026-09-03
+    (Webhooks de Assinatura): o payload de renovação identifica a assinatura
+    em `subscription.code` — não existe `subscription.id`. Sem esse fix,
+    external_subscription_code ficava sempre None em produção."""
+    evento = normalizar_payload(payload_direto("transaction.approved", {
+        "subscription": {"code": "SB1B4H1HJ", "subscriber": {"email": "a@b.com"}},
+    }))
+    assert evento.external_subscription_code == "SB1B4H1HJ"
+
+
 # ── 5-7: ativação e mapeamento de produto ────────────────────────────────────
 
 async def test_5_release_access_ativa_empresa_existente(client, token_themembers, empresa_factory, usuario_factory, db):

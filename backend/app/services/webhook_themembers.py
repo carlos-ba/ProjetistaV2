@@ -109,7 +109,7 @@ def normalizar_payload(body: dict[str, Any]) -> EventoNormalizado:
         expira_em=_parsear_data(_buscar_aninhado(data, "product", "expires_in")),
         external_customer_id=_stringificar(_buscar_aninhado(data, "customer", "id")),
         external_order_id=_stringificar(_buscar_aninhado(data, "order", "id")),
-        external_subscription_code=_stringificar(_buscar_aninhado(data, "subscription", "id")),
+        external_subscription_code=_stringificar(_buscar_aninhado(data, "subscription", "code")),
     )
 
 
