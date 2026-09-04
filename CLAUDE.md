@@ -579,7 +579,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0035)
+## Banco de Dados — Migrations (0001→0036)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -618,6 +618,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0033 | Campo `empresa.recursos_avancados_habilitados` (boolean, default false) — trava opcional de Classificação de Itens / Catálogo de Preços |
 | 0034 | Campo `usuario.telefone` (nullable) — captura celular/WhatsApp no cadastro público, vira lead pro time de vendas |
 | 0035 | Campos `empresa.proposta_nome`/`proposta_logo_base64`/`proposta_contato_nome`/`proposta_contato_telefone` (todos nullable) — identidade da proposta ao cliente |
+| 0036 | Campo `empresa.oferta_comercial` (nullable) + tabelas `webhook_checkout_evento` e `assinatura_gateway` — webhook do Checkout TheMembers (Etapa 1, endpoint desabilitado) |
 
 ---
 
@@ -649,6 +650,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
+| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, HMAC-SHA256 em `x-signature`; DESABILITADO em produção (`THEMEMBERS_WEBHOOK_ENABLED=false`) até confirmar payload real |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -715,6 +717,168 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 - Prefill automático do celular a partir de `usuario.telefone` (cadastro)
   ficou **fora de escopo** de propósito — o `/me` não expõe esse campo
   hoje, seria escopo extra. Nice-to-have pra avaliar depois se fizer falta.
+
+---
+
+## Webhook do Checkout TheMembers (Etapa 1 implementada, DESABILITADO em produção)
+
+Handoff Codex → Claude, spec completa em
+`docs/handoffs/especificacao-webhook-checkout-themembers-2026-09-03.md`
+(revisada em detalhe antes de implementar). Parceiro de checkout é
+**TheMembers/TheBank** — 3 ofertas pagas (Mensal R$159, Semestral 6×R$99,
+Premium 6×R$497), todas tier técnico self-serve; montadora/revenda
+continuam 100% fora disso, fluxo manual de vendas via WhatsApp.
+
+Implementado em **branch própria** (`feature/webhook-checkout-themembers`,
+a partir da `main` já com a spec mergeada) — plano em 2 etapas combinado
+com o usuário: **Etapa 1** (este trabalho) é só código + testes, endpoint
+vivo mas travado por `THEMEMBERS_WEBHOOK_ENABLED=false`; **Etapa 2**
+(ainda não feita) é cadastrar o webhook de teste no painel TheMembers,
+capturar payload real dos 3 produtos, confirmar IDs/campos de correlação
+contra a documentação, e só então habilitar de verdade em produção — a
+spec (§20) já avisa que vários detalhes (IDs de produto, se
+Semestral/Premium são assinatura recorrente ou parcelamento avulso,
+`expires_in`) só se confirmam com payload real, não dá pra adivinhar.
+
+**Revisão de código feita antes do merge** (`/code-review`, 8 ângulos +
+verificação independente) achou 6 bugs reais, todos corrigidos no mesmo
+commit da entrega (nenhum chegou a ir pra `main`): (1) `ENABLED` era só
+validado no startup, nunca checado pela rota — agora recusa (503) quando
+desabilitado; (2) `assinatura_gateway` sem constraint única — 2 webhooks
+quase simultâneos podiam duplicar a linha e quebrar todo evento futuro
+daquela empresa; (3) `verificar_email` rodava a reconciliação na mesma
+transação sem tratar erro — uma falha ali revertia a verificação de
+e-mail junto; (4) `reconciliar_pendencias_email` reconstruía o evento à
+mão em vez de reusar `normalizar_payload`, perdendo `expira_em` — empresa
+ficava "ativa" pra sempre sem validade; (5) e-mail único só
+case-sensitive no banco vs. busca case-insensitive do webhook — dois
+cadastros "User@x.com"/"user@x.com" quebravam o webhook; (6) revogação
+aplicava sem checar precedência por timestamp como a ativação — um
+`revoke.access` atrasado podia cancelar uma assinatura mais nova
+legítima. 8 testes novos fecham a cobertura (30 no total). 3 achados
+menores (reuso de `norm()`, 2 round-trips evitáveis) ficaram registrados,
+não corrigidos — fora do que foi pedido.
+
+**Verificação ao vivo no dashboard/documentação real da TheMembers**
+(2026-09-03, `dashboard.themembers.com.br` com a sessão logada do usuário +
+`documentation.themembers.dev.br`) corrigiu 2 suposições erradas da spec
+original — 2 testes novos fecham a cobertura (32 no total):
+- **Assinatura é HMAC-SHA256, não token estático.** A doc oficial do
+  Checkout (`webhooks-do-checkout/seguranca`) confirma: `x-signature` é
+  `hash_hmac('sha256', corpo_bruto, secret)`, o oposto do que a spec havia
+  atribuído à Área de Membros. Sem esse fix, toda entrega real cairia em
+  401. `THEMEMBERS_WEBHOOK_TOKEN` continua sendo o mesmo secret, só muda
+  como ele é usado (chave HMAC, não comparação direta).
+- **Datas sem timezone = horário de Brasília, não UTC.** A doc confirma o
+  formato `YYYY-MM-DD HH:MM:SS` sem nenhum offset em nenhum campo (era o
+  achado #7 "plausível" da revisão de código, virou confirmado). Como é
+  plataforma brasileira, `_parsear_data` agora rotula datas sem tz como
+  `America/Sao_Paulo` (`zoneinfo`, `tzdata` adicionado ao requirements.txt
+  por segurança no Windows) antes de converter pra UTC — antes assumia UTC
+  direto.
+- Confirmado sem mudança de código: nomes de evento reais
+  (`release.access`/`revoke.access`/`transaction.approved`/etc.) batem
+  exatamente com as constantes já implementadas; produto vem com `id` **e**
+  `reference_id` no payload real e o código já tentava os dois, nessa
+  ordem; `expires_in` é campo obrigatório no payload de `release.access`
+  pra qualquer produto (resolve uma das 3 pendências da spec §20).
+
+**Etapa 2 — captura de payload real com compra de teste** (2026-09-04):
+webhook de teste cadastrado em `Checkout → Ferramentas → Webhooks`
+(**não** o "Webhooks" da Área de Membros — são 2 áreas distintas com
+catálogos de evento diferentes) apontando pro webhook.site, produto
+Icenexus Premium, evento "Todos". Compra de teste real da oferta
+**Profissional Mensal** (única oferta recorrente de verdade das 3 — Ofertas
+Base/Semestral são venda única com prazo fixo, confirmado direto na tela de
+edição do produto no painel) via Pix capturou **6 eventos reais** no mesmo
+segundo — achados que mudaram o código:
+- **Assinatura mensal não recebe data de expiração na ativação**: nem
+  `release.access` nem o `transaction.approved` da 1ª compra carregam
+  `expires_in`/`data.subscription` pra produto recorrente — `assinatura_fim`
+  ficava sem data até o 2º ciclo de cobrança (não bloqueava ninguém,
+  `assinatura_fim IS NULL` nunca bloqueia, só ficava incompleto). Fix: novo
+  evento `subscription.date_changed` (não documentado publicamente, dispara
+  logo após o pagamento) traz `data.dates.next_billing_at` — processado
+  agora só pra sincronizar `assinatura_fim`/`gateway.proxima_cobranca_em`,
+  nunca ativa/muda status sozinho. Independente de ordem de chegada em
+  relação ao `release.access` (chegaram no mesmo segundo na captura real) —
+  se `date_changed` chega primeiro, fica guardado no `gateway` e o branch de
+  ativação usa como fallback.
+- Formato de payload desse evento é bem diferente dos outros: sem `object`
+  no topo, timestamp em **epoch millis** (`creation_date`, não
+  `created_at`) — `_parsear_data()` ganhou suporte a isso — e e-mail só em
+  `data.buyer.email` (novo fallback na cadeia de extração de e-mail).
+- **3 eventos reais não catalogados na doc pública**: `order.paid`,
+  `subscription.date_changed`, `transaction.pending_provider` — nenhum
+  quebra nada (fallback final de `_aplicar_efeito` já auditava sem erro
+  qualquer evento reconhecido fora do mapeamento conhecido).
+- **IDs reais confirmados** (3 ofertas dentro de 1 só "Produto" no
+  catálogo, não 3 produtos separados como a spec supôs):
+  `THEMEMBERS_PRODUCT_MONTHLY_ID=7501283916486672384`,
+  `THEMEMBERS_PRODUCT_SEMIANNUAL_ID=7501283403359830016`,
+  `THEMEMBERS_PRODUCT_PREMIUM_ID=7501282048323481600` — já no `.env` local
+  (nunca comitado; ainda faltam no Render).
+- 2 testes novos (`test_23`/`test_23b`, cobrindo as 2 ordens de chegada) —
+  35 no total.
+
+- **Endpoint** `POST /api/webhooks/themembers/checkout` — público, sem JWT
+  (provedor externo não carrega sessão), autenticado por HMAC-SHA256 do
+  corpo bruto no header `x-signature` (`hmac.compare_digest` sobre o
+  digest calculado com `THEMEMBERS_WEBHOOK_TOKEN` como secret) — confirmado
+  na documentação oficial do Checkout, **não** o token estático que a spec
+  original havia assumido (isso é só na Área de Membros, sistema diferente
+  na TheMembers).
+- **Tabelas novas**: `webhook_checkout_evento` (idempotência + auditoria,
+  `chave_evento` UNIQUE, payload em JSONB) e `assinatura_gateway`
+  (histórico de referências do provedor por empresa, permite trocar de
+  oferta sem perder o vínculo anterior). Coluna nova `empresa.oferta_comercial`
+  (nullable) — eixo comercial **independente** de `empresa.plano`, que
+  continua só técnico/empresa (`docs/decisoes/2026-08-30-plano-x-status.md`).
+  Migration 0036, com backfill (`status_assinatura='trial'` →
+  `oferta_comercial='avaliacao'`; contas ativas legadas ficam `NULL` de
+  propósito, sem inferir oferta paga sem dado real).
+- **`exigir_pode_editar` ampliado** (`backend/app/services/assinatura.py`)
+  — além do trial vencido (regra já existente), agora também bloqueia
+  `status_assinatura` `suspensa`/`cancelada`, e `ativa` com `assinatura_fim`
+  no passado. `assinatura_fim IS NULL` continua nunca bloqueando (contas
+  legadas). Leitura/exportação continuam sempre liberadas, sem mudança
+  nesse ponto.
+- **Reconciliação de compra sem conta**: se o comprador paga com um e-mail
+  que ainda não tem conta no SaaS, o evento fica `pendente_usuario`; ao
+  verificar o e-mail depois (`verificar_email` em `services/auth.py`), os
+  eventos pendentes daquele e-mail são reprocessados em ordem cronológica
+  automaticamente (`reconciliar_pendencias_email` em
+  `services/webhook_themembers.py`).
+- **Precedência de eventos fora de ordem** (spec §11): `revoke.access`,
+  `transaction.refunded` e `transaction.charged_back` sempre prevalecem;
+  um evento de ativação mais antigo que o último já aplicado pra aquela
+  empresa (`assinatura_gateway.ultimo_evento_aplicado_em`) é ignorado, não
+  reativa por cima de um cancelamento mais recente.
+- **Não inventa prazo**: se a TheMembers não mandar `expires_in` pro
+  Semestral/Premium, `assinatura_fim` não é tocado (nada de "assumir 180
+  dias" — spec §12 é explícita sobre isso). Só o Mensal usa
+  `next_billing_at` como fallback de prazo.
+- **Primeira suíte de testes automatizados do projeto** — não existia
+  pytest configurado antes. `backend/pytest.ini` +
+  `backend/tests/conftest.py` (fixtures rodam contra o banco local de
+  desenvolvimento de verdade, nunca produção; cada teste cria sua própria
+  empresa/usuário e apaga tudo que criou no fim, sem depender de rollback
+  de transação aninhada — mais simples de auditar numa suíte nova). Os 22
+  testes obrigatórios da spec (§16) + 10 achados na revisão de código e na
+  verificação do dashboard real estão em
+  `backend/tests/test_webhook_themembers.py`, numerados igual à lista da
+  spec (os extras levam sufixo de letra, ex: `test_2b`) — 32 no total,
+  todos passando localmente antes do commit.
+- **Diagnóstico administrativo**: `backend/scripts/listar_eventos_webhook.py`
+  (só leitura) em vez de tela nova — lista eventos pendentes/erro/produto
+  desconhecido por padrão, ou filtra por status/e-mail. Segue o mesmo
+  padrão de `buscar_usuario.py`/`buscar_projeto.py`.
+- **Variáveis novas** (`Settings` + `.env.example`):
+  `THEMEMBERS_WEBHOOK_ENABLED` (default false),
+  `THEMEMBERS_WEBHOOK_TOKEN`, `THEMEMBERS_PRODUCT_MONTHLY_ID`,
+  `THEMEMBERS_PRODUCT_SEMIANNUAL_ID`, `THEMEMBERS_PRODUCT_PREMIUM_ID`. Em
+  `APP_ENV=production`, `validar_producao()` recusa inicializar se
+  `ENABLED=true` sem token e os 3 IDs preenchidos (e distintos entre si).
 
 ---
 
@@ -883,6 +1047,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
+| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | 🟡 Etapa 1 pronta em branch própria (código+testes), DESABILITADO — falta Etapa 2 (payload real + habilitar) |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |

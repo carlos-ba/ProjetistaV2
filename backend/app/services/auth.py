@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
@@ -7,7 +8,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,8 @@ from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_SUPERADMIN, PAPEL_MEM
 from app.models.sessao_usuario import SessaoUsuario
 from app.schemas.auth import UserCreate, TokenResponse, TokenRefreshResponse, UserOut
 from app.services.email import enviar_verificacao_email, enviar_reset_senha
+
+logger = logging.getLogger(__name__)
 
 _bearer = HTTPBearer()
 
@@ -33,7 +36,13 @@ async def registrar_usuario(payload: UserCreate, db: AsyncSession) -> Usuario:
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={"username": ["Este usuário já existe."]})
 
-    existing_email = await db.execute(select(Usuario).where(Usuario.email == payload.email))
+    # Case-insensitive de propósito (achado na revisão de código do webhook
+    # TheMembers): a associação de comprador por e-mail é case-insensitive
+    # (buscar_usuario_por_email), mas essa checagem era exata — permitia
+    # "User@x.com" e "user@x.com" coexistirem, o par que causava o crash.
+    existing_email = await db.execute(
+        select(Usuario).where(func.lower(Usuario.email) == payload.email.strip().lower())
+    )
     if existing_email.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={"email": ["Este e-mail já está cadastrado."]})
 
@@ -88,7 +97,28 @@ async def verificar_email(token: str, db: AsyncSession) -> None:
 
     usuario.email_verified = True
     usuario.email_verification_token = None
+    # Commit já aqui, ANTES de tentar a reconciliação — achado na revisão de
+    # código: antes, uma falha na reconciliação (não relacionada ao token do
+    # usuário) revertia a sessão inteira e derrubava também a verificação de
+    # e-mail que acabou de suceder. Agora a verificação de e-mail é garantida
+    # assim que o token é validado, independente do que acontecer depois.
     await db.commit()
+
+    # Compra feita antes da conta existir/ser verificada fica "pendente_usuario"
+    # até aqui — reconciliar assim que o e-mail é confirmado (spec do webhook
+    # TheMembers §10). Best-effort: uma falha aqui não pode invalidar a
+    # verificação de e-mail já commitada acima. Import local pra evitar ciclo
+    # de import no módulo.
+    try:
+        from app.services.webhook_themembers import reconciliar_pendencias_email
+        await reconciliar_pendencias_email(db, usuario)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "Falha ao reconciliar pendências de webhook para usuario_id=%s (e-mail já verificado normalmente).",
+            usuario.id,
+        )
 
 
 async def solicitar_reset_senha(email: str, db: AsyncSession) -> None:

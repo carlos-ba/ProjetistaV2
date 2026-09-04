@@ -26,6 +26,8 @@ from app.models.perfil_metalico import PerfilMetalico
 from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
 from app.models.apelido_fornecedor_item import ApelidoFornecedorItem
 from app.models.catalogo_generico import CatalogoGenerico
+from app.models.webhook_checkout_evento import WebhookCheckoutEvento
+from app.models.assinatura_gateway import AssinaturaGateway
 
 __all__ = [
     "Base",
@@ -62,4 +64,6 @@ __all__ = [
     "ParafusoBucha",
     "ApelidoFornecedorItem",
     "CatalogoGenerico",
+    "WebhookCheckoutEvento",
+    "AssinaturaGateway",
 ]
