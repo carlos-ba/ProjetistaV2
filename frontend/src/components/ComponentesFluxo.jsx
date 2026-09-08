@@ -212,6 +212,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       fluido,
       volume_interno_evap_kg: evaporador?.volume_interno_kg ?? null,
       volume_interno_uc_kg:   condensadora?.volume_interno_kg ?? null,
+      carga_refrigerante_evap_kg: evaporador?.carga_refrigerante_kg ?? null,
+      carga_refrigerante_uc_kg:   condensadora?.carga_refrigerante_kg ?? null,
       bitola_liquido:         dadosTubulacao.diametro_liquido,
       comprimento_liquido_m:  lm,
       bitola_succao:          dadosTubulacao.diametro_succao,
@@ -652,7 +654,9 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Estimativa de Carga de Fluido</span>
                     <p className="text-xs text-indigo-700 mt-0.5">
                       Bitolas: líquido <strong>{dadosTubulacao.diametro_liquido}</strong> | sucção <strong>{dadosTubulacao.diametro_succao}</strong>
-                      {evaporador?.volume_interno_kg ? ` | evap. ${fmtQtd(evaporador.volume_interno_kg)} kg` : ' | volume evap. não disponível'}
+                      {evaporador?.carga_refrigerante_kg || evaporador?.volume_interno_kg
+                        ? ` | evap. ${fmtQtd(evaporador.carga_refrigerante_kg || evaporador.volume_interno_kg)} kg`
+                        : ' | volume evap. não disponível'}
                     </p>
                   </div>
                   {cargaFluido && (

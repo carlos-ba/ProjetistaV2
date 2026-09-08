@@ -168,6 +168,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       categoria:         abaAtiva,
       tipo_item:         abaAtiva === 'Unidade Condensadora' ? 'unidade_condensadora' : 'evaporadora',
       volume_interno_kg: item.volume_interno_kg ?? null,
+      carga_refrigerante_kg: item.carga_refrigerante_kg ?? null,
       conexao_liquido:   item.conexao_liquido   ?? null,
       conexao_succao:    item.conexao_succao     ?? null,
       consumo_kw:        item.consumo_kw ?? null,

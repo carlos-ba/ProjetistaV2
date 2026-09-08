@@ -20,6 +20,7 @@ class EquipamentoSelecionado(BaseModel):
     percentual: float
     status: str
     volume_interno_kg: float | None = None
+    carga_refrigerante_kg: float | None = None
     conexao_liquido:   str   | None = None
     conexao_succao:    str   | None = None
     consumo_kw: float | None = None

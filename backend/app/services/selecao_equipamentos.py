@@ -201,6 +201,7 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
             percentual=round(percentual, 1),
             status=status,
             volume_interno_kg=float(eq.volume_interno_kg) if eq.volume_interno_kg else None,
+            carga_refrigerante_kg=float(eq.carga_refrigerante_kg) if eq.carga_refrigerante_kg else None,
             conexao_liquido=eq.conexao_liquido,
             conexao_succao=eq.conexao_succao,
             consumo_kw=round(consumo_kw, 2) if consumo_kw is not None else None,

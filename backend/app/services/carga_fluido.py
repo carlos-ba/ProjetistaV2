@@ -77,13 +77,17 @@ def estimar_carga_fluido(
     bitola_succao: str,
     comprimento_succao_m: float,
     volume_interno_uc_kg: float | None = None,
+    carga_refrigerante_evap_kg: float | None = None,
+    carga_refrigerante_uc_kg: float | None = None,
 ) -> dict:
     """
     Estima a carga total de fluido refrigerante do sistema.
 
     Args:
         fluido:                 R404A, R22, etc.
-        volume_interno_evap_kg: volume interno do evaporador em kg (do catálogo)
+        volume_interno_evap_kg: volume interno do evaporador em kg (do catálogo) —
+                                 estimativa antiga, usada só quando o fabricante não
+                                 publica a carga de refrigerante pronta.
         bitola_liquido:         ex: '1/2"'
         comprimento_liquido_m:  comprimento da linha de líquido em metros
         bitola_succao:          ex: '7/8"'
@@ -94,6 +98,14 @@ def estimar_carga_fluido(
                                  não vier, a carga da UC entra como 0 e o retorno
                                  sinaliza isso em `aviso_volume_uc` pra aparecer na
                                  lista de peças.
+        carga_refrigerante_evap_kg: carga de refrigerante já publicada pronta pelo
+                                 fabricante do evaporador (kg) — quando presente,
+                                 preferida a volume_interno_evap_kg (achado
+                                 importando o catálogo Mipal Hd/Hdl400 Pro: o campo
+                                 foi criado com essa prioridade documentada no
+                                 model, mas o cálculo nunca tinha sido ligado nele —
+                                 evaporador entrava com carga 0).
+        carga_refrigerante_uc_kg:  mesma ideia, pro lado da unidade condensadora.
 
     Returns:
         dict com carga por componente e total em kg
@@ -107,8 +119,10 @@ def estimar_carga_fluido(
 
     carga_liq  = round(vol_liq_L * rho_liq, 3)
     carga_suc  = round(vol_suc_L * rho_vap, 3)
-    carga_evap = round(float(volume_interno_evap_kg), 3) if volume_interno_evap_kg else 0.0
-    carga_uc   = round(float(volume_interno_uc_kg), 3) if volume_interno_uc_kg else 0.0
+    valor_evap = carga_refrigerante_evap_kg if carga_refrigerante_evap_kg else volume_interno_evap_kg
+    valor_uc   = carga_refrigerante_uc_kg if carga_refrigerante_uc_kg else volume_interno_uc_kg
+    carga_evap = round(float(valor_evap), 3) if valor_evap else 0.0
+    carga_uc   = round(float(valor_uc), 3) if valor_uc else 0.0
     carga_total = round(carga_evap + carga_uc + carga_liq + carga_suc, 2)
 
     nota = ""
@@ -131,5 +145,5 @@ def estimar_carga_fluido(
             "bitola_succao":  bitola_succao,
         },
         "nota": nota,
-        "aviso_volume_uc": None if volume_interno_uc_kg else AVISO_VOLUME_UC,
+        "aviso_volume_uc": None if valor_uc else AVISO_VOLUME_UC,
     }

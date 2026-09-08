@@ -17,6 +17,7 @@ Tipos de acoplamento:
 
 from __future__ import annotations
 import math
+import re
 
 
 def _luvas_passagem(bitola: str, metros: float) -> list[dict]:
@@ -57,7 +58,15 @@ _ORDEM = [
 
 
 def _normalizar(b: str) -> str:
-    return b.strip().replace(' ', '').replace('"', '"').replace('"', '"')
+    s = b.strip().replace(' ', '').replace('"', '"').replace('"', '"')
+    # Achado no catálogo Bitzer: conexao_liquido/conexao_succao guardam o sufixo
+    # de tipo (B=rosca, L=solda) do próprio PDF do fabricante — só informativo
+    # no cadastro, nenhum cálculo aqui usa esse sufixo pra decidir tipo de
+    # acoplamento (isso já vem por parâmetro separado, ex: filtro_tipo/visor_tipo).
+    # Sem isso, "1/2\"B" nunca batia com "1/2\"" e toda comparação de bitola
+    # envolvendo equipamento Bitzer dava sempre "diferente".
+    s = re.sub(r'"[LB]$', '"', s, flags=re.IGNORECASE)
+    return s
 
 
 def _rank(b: str) -> int:
