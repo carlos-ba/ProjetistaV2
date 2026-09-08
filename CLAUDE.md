@@ -340,6 +340,41 @@ via helper compartilhado `desmembrarItem()` em `ComponentesFluxo.jsx`:
 - Seleção exclusivamente pelo diâmetro da linha de líquido
 - Tamanhos: SGN 6 (1/4"), SGN 10 (3/8"), SGN 12 (1/2"), SGN 16 (5/8"), SGN 19 (3/4"), SGN 22s (7/8")
 
+### Aviso quando capacidade/bitola excede o catálogo (em produção desde 2026-09-08)
+
+Unidades condensadoras maiores (catálogo Bitzer) passaram a gerar capacidade/
+bitola de linha de líquido acima do que VET, filtro secador e visor de líquido
+cobrem — Card 4 suporta bitola até 2.1/8" (257.600 kcal/h R404A / 235.200 R22),
+bem além do corpo Danfoss T2 (VET, T2-6 é o maior orifício da família), da
+tabela DML (filtro, só até 1.3/8") e da família SGN (visor, só até 7/8"). Antes
+desses 3 gaps o item simplesmente sumia da seleção sem nenhum aviso ao técnico.
+Commit `7f342c7`.
+
+- **VET**: `ComponentesFluxoResponse.avisos` (`componentes_fluxo.py`) — quando
+  nenhum modelo cobre capacidade/T.Evap/fluido pedidos, entra em `avisos`
+  (banner vermelho no Card 5, mesmo padrão de `avisos_kit_montagem` do Card 1)
+  com a maior capacidade cadastrada nesse fluido como contexto. Filtro Secador
+  e Válvula Solenoide **não** entram nessa checagem — catálogo delas em
+  `componente_tecnico` está sempre vazio por design (são por algoritmo
+  próprio, nunca busca no banco); checá-las geraria alarme falso permanente.
+- **Filtro secador**: "Consultar Engenharia" (linha > 1.3/8") ganhou um campo
+  `aviso` de verdade em `acessorios.py`, em vez de aparecer como se fosse um
+  modelo real sem nenhum destaque.
+- **Visor de líquido**: nenhum modelo SGN passa de 7/8" de conexão — decisão
+  do usuário pra esse caso (não dá pra simplesmente não ter visor): mantém o
+  maior SGN disponível e adiciona `aviso` orientando montar em **tubo
+  paralelo de bitola igual à conexão do próprio visor** sempre que a linha
+  calculada for maior que 7/8" — nunca soldar o visor direto na linha
+  principal maior.
+- Frontend (`ComponentesFluxo.jsx`): banner vermelho de `avisos` reaproveitado
+  pro caso VET (categoria inteira sem card nenhum); a prop `aviso` que já
+  existia no `CardAuto` (banner âmbar inline) reaproveitada pro filtro/visor
+  (card renderiza normal, só precisa de atenção).
+- **Pendente, fora deste fix**: catálogo de VET (corpo T2) ainda não cobre as
+  capacidades maiores dos UCs Bitzer novos — usuário vai providenciar as
+  linhas novas separadamente; este fix só resolve o silêncio, não o gap de
+  catálogo em si.
+
 ---
 
 ## Card 2 — Cálculo de Carga Térmica
@@ -1062,10 +1097,10 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31 |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
-| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31 |
+| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08 |
 | Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |
-| Card 5 — Filtro secador automático (DML/DMC) | ✅ |
-| Card 5 — Visor de líquido automático (SGN) | ✅ |
+| Card 5 — Filtro secador automático (DML/DMC) | ✅ avisa quando cai em "Consultar Engenharia" (linha > 1.3/8") desde 2026-09-08 |
+| Card 5 — Visor de líquido automático (SGN) | ✅ avisa pra montar em tubo paralelo quando linha > 7/8" (maior SGN) desde 2026-09-08 |
 | Card 5 — Tanque de Líquido (NBR 16.069) | ✅ |
 | Card 5 — Carga de Fluido (kg por trecho) | ✅ |
 | Card 5 — Cavalete (luvas/porcas/reduções + válvulas GBC) | ✅ |
