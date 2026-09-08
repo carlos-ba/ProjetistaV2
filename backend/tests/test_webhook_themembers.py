@@ -72,6 +72,47 @@ async def test_2b_rejeita_esquema_antigo_de_token_estatico(client, token_thememb
     assert r.status_code == 401
 
 
+async def test_2c_aceita_token_no_payload_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
+    """Achado em 2026-09-08: artigo de ajuda oficial da TheMembers
+    (ajuda.themembers.com.br) descreve um mecanismo diferente do HMAC
+    documentado em documentation.themembers.dev.br — token embutido no
+    próprio payload. Usuário pediu pra tratar esse artigo como fonte de
+    verdade e aceitar esse mecanismo como alternativa (OR), já que o HMAC
+    segue confirmadamente incompatível com entregas reais (chamado aberto).
+    Sem x-signature nenhum — só o campo "token" no corpo."""
+    empresa = await empresa_factory()
+    await usuario_factory(empresa, email="compra2c@teste.local")
+    body = payload_direto("release.access", {
+        "customer": {"email": "compra2c@teste.local"}, "product": {"id": "prod-mensal-001"},
+    })
+    body["token"] = token_themembers
+    r = await client.post(URL, json=body)
+    assert r.status_code == 200
+
+
+async def test_2d_aceita_token_no_envelope_payload_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
+    """Mesmo mecanismo do test_2c, mas no formato de envelope
+    ({"payload": {...}}) — o token pode vir dentro do envelope, não só na
+    raiz do corpo."""
+    empresa = await empresa_factory()
+    await usuario_factory(empresa, email="compra2d@teste.local")
+    body = payload_envelope("release.access", {
+        "customer": {"email": "compra2d@teste.local"}, "product": {"id": "prod-mensal-001"},
+    })
+    body["payload"]["token"] = token_themembers
+    r = await client.post(URL, json=body)
+    assert r.status_code == 200
+
+
+async def test_2e_rejeita_token_errado_no_payload(client, token_themembers):
+    """Token errado embutido no payload não deve autorizar — mesma exigência
+    de correspondência exata do mecanismo HMAC."""
+    body = payload_direto("release.access", {"customer": {"email": "nao-importa@teste.local"}})
+    body["token"] = "token-errado-no-payload"
+    r = await client.post(URL, json=body)
+    assert r.status_code == 401
+
+
 async def test_3_aceita_token_correto(client, token_themembers, empresa_factory, usuario_factory):
     empresa = await empresa_factory()
     await usuario_factory(empresa, email="compra3@teste.local")
