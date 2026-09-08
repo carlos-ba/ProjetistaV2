@@ -1,11 +1,63 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
 import api from '../api';
 import PainelInsights from './PainelInsights';
 
 // Vírgula decimal (padrão BR) em vez do "." padrão de JS.
 const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
 
-const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false }) => {
+// Pizza desenhada num <canvas> off-screen (sem lib de gráfico no projeto —
+// mesma técnica já usada em VisualizadorProjeto.jsx pra planta do gabinete),
+// devolve PNG base64 pronto pra `pdf.addImage`. Círculo à esquerda, legenda
+// com valor + percentual à direita — cabe direto na largura do PDF.
+const CORES_CARGA = {
+  conducao: '#7B2D8B', infiltracao: '#3B82F6', produto: '#F59E0B',
+  respiracao: '#10B981', iluminacao: '#FBBF24', pessoas: '#EF4444', motores: '#6366F1',
+};
+const gerarImagemPizzaCarga = (fatias) => {
+  const H = 480, W = 1150;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  const cx = H / 2, cy = H / 2, r = H / 2 - 30;
+  let anguloAtual = -Math.PI / 2;
+  fatias.forEach(f => {
+    const fatiaAngulo = (f.valor / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, anguloAtual, anguloAtual + fatiaAngulo);
+    ctx.closePath();
+    ctx.fillStyle = f.cor;
+    ctx.fill();
+    anguloAtual += fatiaAngulo;
+  });
+  let ly = 50;
+  const lx = H + 24;
+  const larguraDisponivel = W - lx - 30 - 12; // menos o quadrinho de cor + respiro na borda
+  ctx.textBaseline = 'middle';
+  fatias.forEach(f => {
+    const pct = ((f.valor / total) * 100).toFixed(1);
+    const texto = `${f.label} — ${Math.round(f.valor).toLocaleString('pt-BR')} kcal/h (${pct}%)`;
+    // Reduz a fonte até caber na largura disponível — evita texto cortado
+    // quando o rótulo + valor fica comprido (ex: "Condução Térmica").
+    let tamanho = 22;
+    ctx.font = `bold ${tamanho}px Arial`;
+    while (tamanho > 12 && ctx.measureText(texto).width > larguraDisponivel) {
+      tamanho -= 1;
+      ctx.font = `bold ${tamanho}px Arial`;
+    }
+    ctx.fillStyle = f.cor;
+    ctx.fillRect(lx, ly - 11, 22, 22);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillText(texto, lx + 30, ly);
+    ly += 40;
+  });
+  return canvas.toDataURL('image/png');
+};
+
+const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, onValoresChange, jaFinalizado = false, invalidado = false, modoEngenharia = false, projetoAtual = null }) => {
   // --- VALIDAÇÃO: Verificar se gabinete foi configurado ---
   if (!dadosIniciais) {
     return (
@@ -175,6 +227,126 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Relatório de Engenharia (Modo Engenharia) ───────────────────────────
+  const gerarRelatorioPDF = () => {
+    if (!projetoAtual) { setErro('Salve o projeto antes de gerar o relatório — o nome dele entra no cabeçalho.'); return; }
+    if (!resultado) return;
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const PW = 210, PH = 297, ML = 14, MR = 196, CW = MR - ML;
+    let y = 0;
+    const novaP = () => { pdf.addPage(); y = 14; };
+    const checar = (h = 10) => { if (y + h > PH - 14) novaP(); };
+    const txt = (t, x, yy, opts = {}) => pdf.text(String(t ?? ''), x, yy, opts);
+
+    // Cabeçalho
+    pdf.setFillColor(15, 23, 42);
+    pdf.rect(0, 0, PW, 30, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
+    txt('RELATÓRIO TÉCNICO — CÁLCULO DE CARGA TÉRMICA', ML, 10);
+    pdf.setFontSize(15); pdf.setFont('helvetica', 'bold');
+    txt(projetoAtual.nome, ML, 19);
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+    txt(`Emitido em ${new Date().toLocaleDateString('pt-BR')}`, ML, 25);
+    pdf.setTextColor(0, 0, 0);
+    y = 38;
+
+    // Especificações
+    pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+    txt('ESPECIFICAÇÕES', ML, y); pdf.setTextColor(0); y += 4;
+    const specs = [
+      ['Dimensões', `${fmtQtd(comprimento)}×${fmtQtd(largura)}×${fmtQtd(altura)} m`],
+      ['T. Externa', `${fmtQtd(tempExterna)} °C`],
+      ['T. Interna', `${fmtQtd(tempInterna)} °C`],
+      ['Isolamento', `${espessura}mm / ${nucleo}`],
+      ['Piso', tipoPiso === 'painel' ? 'Painel' : tipoPiso === 'convencional' ? 'Isolado' : 'Sem Isol.'],
+    ];
+    const colW = CW / specs.length;
+    specs.forEach((s, i) => {
+      const x = ML + i * colW;
+      pdf.setFillColor(241, 245, 249); pdf.rect(x, y, colW - 2, 12, 'F');
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt(s[0].toUpperCase(), x + 2, y + 4);
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+      txt(s[1], x + 2, y + 10);
+    });
+    y += 18;
+
+    // Produto/movimentação, se houver
+    if (produtoDetalhe) {
+      checar(16);
+      pdf.setFillColor(248, 250, 252); pdf.rect(ML, y, CW, 12, 'F');
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('PRODUTO E MOVIMENTAÇÃO', ML + 2, y + 4);
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+      txt(`${produtoDetalhe.nome} · ${fmtQtd(movimentacao)} kg/dia · entrada ${fmtQtd(tempEntrada)}°C · resfriamento ${fmtQtd(tempoResfriamento)}h`, ML + 2, y + 9);
+      y += 16;
+    }
+
+    // Gráfico de pizza — carga parcial de cada componente
+    const fatias = [
+      { label: 'Condução Térmica', valor: resultado.carga_conducao_kcalh, cor: CORES_CARGA.conducao },
+      { label: 'Infiltração', valor: resultado.carga_infiltracao_kcalh, cor: CORES_CARGA.infiltracao },
+      { label: 'Produto/Movimentação', valor: resultado.carga_produto_kcalh, cor: CORES_CARGA.produto },
+      { label: 'Respiração', valor: resultado.carga_respiracao_kcalh, cor: CORES_CARGA.respiracao },
+      { label: 'Iluminação', valor: resultado.carga_iluminacao_kcalh, cor: CORES_CARGA.iluminacao },
+      { label: 'Pessoas', valor: resultado.carga_pessoas_kcalh, cor: CORES_CARGA.pessoas },
+      { label: 'Motores/Outros', valor: resultado.carga_motores_kcalh, cor: CORES_CARGA.motores },
+    ].filter(f => f.valor > 0);
+
+    if (fatias.length > 0) {
+      checar(72);
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('DISTRIBUIÇÃO DA CARGA TÉRMICA POR COMPONENTE', ML, y); pdf.setTextColor(0); y += 4;
+      const imgW = CW; const imgH = imgW * (480 / 1150);
+      pdf.addImage(gerarImagemPizzaCarga(fatias), 'PNG', ML, y, imgW, imgH);
+      y += imgH + 6;
+    }
+
+    // Tabela detalhada
+    checar(14);
+    pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+    txt('COMPOSIÇÃO DETALHADA DA CARGA', ML, y); pdf.setTextColor(0); y += 4;
+
+    const linhasTabela = [
+      ['Condução Térmica', resultado.carga_conducao_kcalh, false],
+      resultado.carga_infiltracao_kcalh > 0 ? ['Infiltração por Portas', resultado.carga_infiltracao_kcalh, false] : null,
+      ['Produto/Movimentação', resultado.carga_produto_kcalh, false],
+      resultado.carga_respiracao_kcalh > 0 ? ['Respiração do Produto', resultado.carga_respiracao_kcalh, false] : null,
+      ['— Iluminação', resultado.carga_iluminacao_kcalh, false],
+      ['— Pessoas', resultado.carga_pessoas_kcalh, false],
+      ['— Motores/Outros', resultado.carga_motores_kcalh, false],
+      ['Subtotal Cargas Internas', resultado.carga_internas_total_kcalh, true],
+      ['CARGA LÍQUIDA (24h)', resultado.carga_total_24h_kcalh, true],
+      [`Fator de Segurança (${resultado.fator_seguranca_aplicado})`, resultado.carga_total_com_seguranca_kcalh - resultado.carga_total_24h_kcalh, false],
+      ['CAPACIDADE REQUERIDA DO EQUIPAMENTO', resultado.capacidade_requerida_equipamento_kcalh, true],
+    ].filter(Boolean);
+
+    const colLabel = ML, colValor = MR - 45;
+    pdf.setFillColor(30, 58, 95); pdf.rect(ML, y, CW, 6, 'F');
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255);
+    txt('COMPONENTE', colLabel + 2, y + 4); txt('VALOR (kcal/h)', colValor, y + 4);
+    pdf.setTextColor(0); y += 6;
+    linhasTabela.forEach(([label, valor, destaque], idx) => {
+      checar(7);
+      if (destaque) { pdf.setFillColor(236, 253, 245); pdf.rect(ML, y, CW, 7, 'F'); }
+      else if (idx % 2 === 0) { pdf.setFillColor(248, 250, 252); pdf.rect(ML, y, CW, 7, 'F'); }
+      pdf.setFontSize(7.5); pdf.setFont('helvetica', destaque ? 'bold' : 'normal');
+      txt(label, colLabel + 2, y + 4.5);
+      txt(`${fmtQtd(valor)} kcal/h`, colValor, y + 4.5);
+      y += 7;
+    });
+
+    checar(10);
+    y += 3;
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(100);
+    txt(`Tempo de compressor considerado: ${fmtQtd(resultado.baseado_em_horas_funcionamento)}h/dia`, ML, y);
+    pdf.setTextColor(0);
+
+    pdf.save(`Relatorio_CargaTermica_${projetoAtual.nome.replace(/\s+/g, '_')}.pdf`);
   };
 
   return (
@@ -547,6 +719,22 @@ const CalculadoraCargaTermica = ({ dadosIniciais, aoFinalizar, initialValues, on
                 </li>
               </ul>
             </div>
+          </div>
+        )}
+
+        {modoEngenharia && resultado && (
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">📋 Relatório de Engenharia — Card 2</h4>
+            {!projetoAtual ? (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                ⚠️ Salve o projeto para poder gerar o relatório — o nome dele entra no cabeçalho.
+              </p>
+            ) : (
+              <button onClick={gerarRelatorioPDF} type="button"
+                className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm transition-colors">
+                📄 Relatório PDF — Cálculo de Carga Térmica
+              </button>
+            )}
           </div>
         )}
       </div>

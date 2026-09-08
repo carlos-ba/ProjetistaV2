@@ -892,6 +892,8 @@ function AppContent({ catalogo }) {
                 initialValues={inputsGabinete}
                 onValoresChange={setInputsGabinete}
                 jaFinalizado={!!dadosDoGabinete}
+                modoEngenharia={!!user?.modo_engenharia}
+                projetoAtual={projetoAtual}
               />
             </EtapaCard>
 
@@ -908,7 +910,7 @@ function AppContent({ catalogo }) {
               confirmacaoProxima={passoExpandido === 2 && proximaEtapa ? proximaEtapa.label : null}
               onConfirmar={confirmarAvanco} onRecusar={recusarAvanco}
             >
-              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} initialValues={inputsCargaTermica} onValoresChange={setInputsCargaTermica} jaFinalizado={!!cargaCalculada} invalidado={invalidados[2]} />
+              <CalculadoraCargaTermica key={projetoKey} dadosIniciais={dadosDoGabinete} aoFinalizar={receberResultadoCarga} initialValues={inputsCargaTermica} onValoresChange={setInputsCargaTermica} jaFinalizado={!!cargaCalculada} invalidado={invalidados[2]} modoEngenharia={!!user?.modo_engenharia} projetoAtual={projetoAtual} />
             </EtapaCard>
 
             {/* 3. Seleção de Equipamentos */}

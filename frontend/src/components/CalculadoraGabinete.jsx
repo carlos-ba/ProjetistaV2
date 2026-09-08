@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import ExcelJS from 'exceljs';
 import api from '../api';
 import VisualizadorProjeto from './VisualizadorProjeto';
 
@@ -17,7 +19,7 @@ const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximu
 // o rótulo exibido, "de correr" é o termo comum no ramo de refrigeração.
 const TIPO_PORTA_LABEL = { giratoria: 'Giratória', deslizante: 'De Correr' };
 
-const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], perfisMetalicos = [], configuracoesMontagem, initialValues, onValoresChange, jaFinalizado = false }) => {
+const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [], perfisMetalicos = [], configuracoesMontagem, initialValues, onValoresChange, jaFinalizado = false, modoEngenharia = false, projetoAtual = null }) => {
   // Dimensões da câmara
   const [comprimento, setComprimento] = useState(initialValues?.comprimento ?? '');
   const [largura, setLargura] = useState(initialValues?.largura ?? '');
@@ -455,6 +457,200 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       document.body.appendChild(link); link.click(); link.remove();
     } catch { setErro('Erro ao gerar DXF.'); }
     finally  { setLoadingCAD(false); }
+  };
+
+  // ── Relatório de Engenharia (Modo Engenharia) ───────────────────────────
+  // Mesmas 3 fontes de linha que a tabela "Materiais Dimensionados" já
+  // renderiza na tela (painéis/barras, materiais extras, portas) — reusa a
+  // mesma lógica em vez de reconciliar com dadosParaSincronizar.lista_materiais,
+  // que tem formato levemente diferente entre as 3 fontes.
+  const montarLinhasRelatorioGabinete = () => {
+    const linhas = [];
+    if (modoCompra === 'revenda' && planoCorte) {
+      linhas.push({
+        item: `Painel ${resultado?.nucleo_selecionado || ''} — Barra ${fmtQtd(planoCorte.barraM)}m`,
+        detalhe: `Corte na obra · sobra total ${fmtQtd(planoCorte.sobraTotalM)}m`,
+        qtd: planoCorte.numBarras,
+        medida: `${fmtQtd(planoCorte.areaBarrasM2, 1)} m² (barras)`,
+      });
+    } else {
+      (resultado?.lista_corte || []).forEach(item => {
+        linhas.push({
+          item: item.item,
+          detalhe: item.descricao || '',
+          qtd: item.quantidade,
+          medida: `${fmtQtd(item.comprimento)}m | ${fmtQtd(item.area_total)}m²`,
+        });
+      });
+    }
+    (resultado?.materiais_extras || []).forEach(item => {
+      linhas.push({ item: item.item, detalhe: item.detalhe || '', qtd: fmtQtd(item.quantidade), medida: 'Material Extra' });
+    });
+    portasMateriais.forEach(p => {
+      linhas.push({ item: p.item, detalhe: p.detalhe || '', qtd: p.quantidade, medida: 'Porta Frigorífica' });
+    });
+    return linhas;
+  };
+
+  const gerarRelatorioPDF = () => {
+    if (!projetoAtual) { setErro('Salve o projeto antes de gerar o relatório — o nome dele entra no cabeçalho.'); return; }
+    const linhas = montarLinhasRelatorioGabinete();
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const PW = 210, PH = 297, ML = 14, MR = 196, CW = MR - ML;
+    let y = 0;
+    const novaP = () => { pdf.addPage(); y = 14; };
+    const checar = (h = 10) => { if (y + h > PH - 14) novaP(); };
+    const txt = (t, x, yy, opts = {}) => pdf.text(String(t ?? ''), x, yy, opts);
+
+    // Cabeçalho
+    pdf.setFillColor(15, 23, 42);
+    pdf.rect(0, 0, PW, 30, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
+    txt('RELATÓRIO TÉCNICO — CONFIGURAÇÃO DO GABINETE', ML, 10);
+    pdf.setFontSize(15); pdf.setFont('helvetica', 'bold');
+    txt(projetoAtual.nome, ML, 19);
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+    txt(`Emitido em ${new Date().toLocaleDateString('pt-BR')}`, ML, 25);
+    pdf.setTextColor(0, 0, 0);
+    y = 38;
+
+    // Especificações
+    pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+    txt('ESPECIFICAÇÕES DO GABINETE', ML, y); pdf.setTextColor(0); y += 4;
+    const specs = [
+      ['Comprimento', `${fmtQtd(comprimento)} m`],
+      ['Largura', `${fmtQtd(largura)} m`],
+      ['Altura', `${fmtQtd(altura)} m`],
+      ['T. Interna', `${fmtQtd(temperaturaInterna)} °C`],
+      ['T. Ambiente', `${fmtQtd(temperaturaAmbiente)} °C`],
+    ];
+    const colW = CW / specs.length;
+    specs.forEach((s, i) => {
+      const x = ML + i * colW;
+      pdf.setFillColor(241, 245, 249); pdf.rect(x, y, colW - 2, 12, 'F');
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt(s[0].toUpperCase(), x + 2, y + 4);
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+      txt(s[1], x + 2, y + 10);
+    });
+    y += 18;
+
+    // Painel + piso
+    checar(16);
+    pdf.setFillColor(248, 250, 252); pdf.rect(ML, y, CW, 12, 'F');
+    pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+    txt('PAINEL', ML + 2, y + 4);
+    txt('PISO', ML + CW * 0.6, y + 4);
+    pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+    const painelTxt = painelSelecionado
+      ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | larg. ${painelSelecionado.largura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
+      : '—';
+    txt(painelTxt, ML + 2, y + 9);
+    const pisoTxt = tipoPiso === 'painel' ? 'Painel' : tipoPiso === 'convencional' ? 'Isolado (Concreto)' : 'Sem Isolamento';
+    txt(pisoTxt, ML + CW * 0.6, y + 9);
+    y += 16;
+
+    // Planta do projeto — mesma imagem que já aparece na tela
+    if (imagemProjeto) {
+      checar(75);
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+      txt('PLANTA DO PROJETO', ML, y); pdf.setTextColor(0); y += 4;
+      const imgW = CW * 0.6; const imgX = ML + (CW - imgW) / 2;
+      pdf.addImage(imagemProjeto, 'PNG', imgX, y, imgW, 65);
+      y += 70;
+    }
+
+    // Tabela de materiais
+    checar(14);
+    pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+    txt('MATERIAIS DIMENSIONADOS', ML, y); pdf.setTextColor(0); y += 4;
+    const colItem = ML, colQtd = ML + CW * 0.62, colMedida = ML + CW * 0.74;
+    pdf.setFillColor(30, 58, 95); pdf.rect(ML, y, CW, 6, 'F');
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255);
+    txt('ITEM', colItem + 2, y + 4); txt('QTD', colQtd, y + 4); txt('MEDIDA/ÁREA', colMedida, y + 4);
+    pdf.setTextColor(0); y += 6;
+    linhas.forEach((l, idx) => {
+      checar(8);
+      if (idx % 2 === 0) { pdf.setFillColor(248, 250, 252); pdf.rect(ML, y, CW, 7, 'F'); }
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+      const nl = pdf.splitTextToSize(l.item, colQtd - colItem - 4);
+      pdf.text(nl, colItem + 2, y + 4.5);
+      pdf.setFont('helvetica', 'bold');
+      txt(String(l.qtd), colQtd, y + 4.5);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5);
+      txt(l.medida, colMedida, y + 4.5);
+      y += Math.max(7, nl.length * 3.5);
+    });
+
+    pdf.save(`Relatorio_Gabinete_${projetoAtual.nome.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const gerarRelatorioExcel = async () => {
+    if (!projetoAtual) { setErro('Salve o projeto antes de gerar o relatório — o nome dele entra no cabeçalho.'); return; }
+    const linhas = montarLinhasRelatorioGabinete();
+    const COR_HEADER = 'FF1E3A5F';
+    const BORDA_FINA = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Gabinete', { properties: { defaultRowHeight: 18 } });
+    ws.views = [{ showGridLines: false }];
+    const larguras = [40, 32, 10, 22];
+    ws.columns = larguras.map(w => ({ width: w }));
+    const NCOL = larguras.length;
+
+    const preencherLinha = (rowIdx, cor, negrito = false, tamanho = 11) => {
+      const row = ws.getRow(rowIdx);
+      for (let c = 1; c <= NCOL; c++) {
+        const cell = row.getCell(c);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor } };
+        cell.font = { name: 'Arial', bold: negrito, size: tamanho, color: { argb: cor === COR_HEADER ? 'FFFFFFFF' : 'FF1E293B' } };
+      }
+      return row;
+    };
+
+    ws.mergeCells(1, 1, 1, NCOL);
+    preencherLinha(1, COR_HEADER, true, 14).getCell(1).value = 'RELATÓRIO — CONFIGURAÇÃO DO GABINETE';
+    ws.getRow(1).height = 24;
+
+    ws.mergeCells(2, 1, 2, NCOL);
+    const linha2 = preencherLinha(2, 'FFEAF2FF', false, 10);
+    linha2.getCell(1).value = `Projeto: ${projetoAtual.nome}   |   Emitido em: ${new Date().toLocaleDateString('pt-BR')}`;
+    linha2.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF1E293B' } };
+
+    const headers = ['Item', 'Detalhe', 'Qtd', 'Medida/Área'];
+    const linha3 = ws.getRow(3);
+    headers.forEach((h, i) => {
+      const cell = linha3.getCell(i + 1);
+      cell.value = h;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_HEADER } };
+      cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = { top: BORDA_FINA, bottom: BORDA_FINA, left: BORDA_FINA, right: BORDA_FINA };
+    });
+    linha3.height = 22;
+
+    linhas.forEach((l, idx) => {
+      const row = ws.getRow(4 + idx);
+      const valores = [l.item, l.detalhe, l.qtd, l.medida];
+      valores.forEach((v, i) => {
+        const cell = row.getCell(i + 1);
+        cell.value = v;
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? 'FFFDFEFE' : 'FFF4F6F6' } };
+        cell.font = { name: 'Arial', size: 10 };
+        cell.alignment = { vertical: 'middle', horizontal: i === 2 ? 'center' : 'left', wrapText: true };
+        cell.border = { top: BORDA_FINA, bottom: BORDA_FINA, left: BORDA_FINA, right: BORDA_FINA };
+      });
+    });
+
+    ws.views = [{ showGridLines: false, state: 'frozen', ySplit: 3 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Relatorio_Gabinete_${projetoAtual.nome.replace(/\s+/g, '_')}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -967,6 +1163,28 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
               <span className="text-xl">✅</span>
               <span className="text-sm font-medium">Dados enviados para o próximo passo!</span>
             </div>
+
+            {modoEngenharia && resultado && (
+              <div className="mt-6 border-t border-slate-200 pt-4">
+                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">📋 Relatório de Engenharia — Card 1</h4>
+                {!projetoAtual ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    ⚠️ Salve o projeto para poder gerar o relatório — o nome dele entra no cabeçalho.
+                  </p>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button onClick={gerarRelatorioPDF} type="button"
+                      className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm transition-colors">
+                      📄 Relatório PDF (lista + desenho)
+                    </button>
+                    <button onClick={gerarRelatorioExcel} type="button"
+                      className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm transition-colors">
+                      📊 Relatório Excel (lista)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
