@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models.equipamento import Equipamento, PerformanceEquipamento
+from app.models.equipamento import Equipamento, PerformanceEquipamento, FatorCorrecaoFluido
 from app.schemas.selecao import SelecaoRequest, EquipamentoSelecionado
 
 
@@ -79,10 +79,35 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
     )
     equipamentos = result.scalars().unique().all()
 
+    # Fatores de correção de fluido (achado no catálogo Mipal: só mede em R22,
+    # os demais fluidos são esse valor × um fator publicado pelo fabricante,
+    # em vez de medição própria) — carrega 1 vez pra não repetir query por
+    # equipamento dentro do loop abaixo.
+    fabricante_ids = {eq.fabricante_id for eq in equipamentos}
+    fatores: dict[tuple[int, str, str], float] = {}
+    if fabricante_ids:
+        result_fatores = await db.execute(
+            select(FatorCorrecaoFluido).where(FatorCorrecaoFluido.fabricante_id.in_(fabricante_ids))
+        )
+        for f in result_fatores.scalars().all():
+            fatores[(f.fabricante_id, f.fluido_base, f.fluido)] = float(f.fator)
+
     candidatos: list[EquipamentoSelecionado] = []
 
     for eq in equipamentos:
         pontos_fluido = [p for p in eq.performance if p.fluido == req.fluido]
+        fator_correcao_aplicado = None
+        if not pontos_fluido:
+            # Sem medição direta pro fluido pedido — tenta achar uma curva de
+            # referência (fluido_base) com fator de correção publicado pelo
+            # fabricante daquele equipamento especificamente.
+            fluidos_base = {p.fluido for p in eq.performance if p.usa_fator_correcao}
+            for fluido_base in fluidos_base:
+                fator = fatores.get((eq.fabricante_id, fluido_base, req.fluido))
+                if fator is not None:
+                    pontos_fluido = [p for p in eq.performance if p.fluido == fluido_base and p.usa_fator_correcao]
+                    fator_correcao_aplicado = fator
+                    break
         if not pontos_fluido:
             continue
 
@@ -142,6 +167,13 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
                     consumo_kw = _interpolar(req.temp_ambiente, amb_abaixo, cons_abaixo, amb_acima, cons_acima)
                 else:
                     consumo_kw = cons_acima if cons_acima is not None else cons_abaixo
+
+        if fator_correcao_aplicado is not None:
+            capacidade *= fator_correcao_aplicado
+            # Sem base pra corrigir consumo_kw pro fluido pedido (o fabricante
+            # só publica fator pra capacidade) — melhor não mostrar um valor
+            # de R22 como se fosse do fluido corrigido.
+            consumo_kw = None
 
         if req.carga_termica_total <= 0:
             continue
