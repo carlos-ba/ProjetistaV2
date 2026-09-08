@@ -69,6 +69,13 @@ class EquipamentoOut(BaseModel):
     diametro_ventilador_mm: int
     vazao_ar_m3h: int
     flecha_ar_m: int
+    tipo_motor: str | None
+    comprimento_mm: int | None
+    altura_mm: int | None
+    profundidade_mm: int | None
+    peso_liquido_kg: Decimal | None
+    ruido_dba: int | None
+    carga_refrigerante_kg: Decimal | None
 
     model_config = {"from_attributes": True}
 
