@@ -11,16 +11,24 @@ não importa, colunas ausentes ficam None/são puladas):
     Aba "Equipamentos": modelo | fabricante | qtde_ventiladores | diametro_ventilador_mm |
         vazao_ar_m3h | flecha_ar_m | volume_interno_kg | conexao_liquido | conexao_succao |
         custo | tipo_motor | comprimento_mm | altura_mm | profundidade_mm | peso_liquido_kg |
-        ruido_dba | carga_refrigerante_kg
-        (as últimas 7 colunas são novas e opcionais — achado importando o catálogo Mipal
-        Hd/Hdl400 Pro, ver `project_evolucao_dados_evaporador` na memória)
+        ruido_dba | carga_refrigerante_kg | volume_deslocado_m3h | potencia_nominal_hp |
+        motor_ventilador_corrente_a | motor_ventilador_potencia_w |
+        capacitor_marcha_especificacao | resistencia_carter_especificacao | tanque_liquido_l
+        (tipo_motor...carga_refrigerante_kg vieram do catálogo Mipal Hd/Hdl400 Pro; as 7
+        últimas vieram do catálogo Bitzer Combat/Combat+/BIG CDU — todas opcionais, ver
+        `project_evolucao_dados_evaporador`/`project_evolucao_dados_uc` na memória)
 
     Aba "Performance": modelo | fluido | T_ambiente_C | temp_evaporacao_C | delta_t |
         capacidade_kcalh | consumo_kw | tipo_motor | usa_fator_correcao
         (tipo_motor e usa_fator_correcao são opcionais)
 
     Aba "Variantes Eletricas" (opcional, pulada se a planilha não tiver): modelo | tipo_motor |
-        tensao | fase | frequencia_hz | vazao_ar_m3h | potencia_w | corrente_a
+        tensao | fase | frequencia_hz | vazao_ar_m3h | potencia_w | corrente_a |
+        codigo_fabricante | corrente_partida_a
+        (as 2 últimas são novas e opcionais — achado no catálogo Bitzer: aqui a "variante
+        elétrica" é o compressor da UC por tensão, não o motor do ventilador; código de
+        fabricante muda por variante de tensão, e corrente_partida_a é o LRA ao lado do
+        corrente_a/FLA)
 
     Aba "Resistencia Degelo" (opcional): modelo | tensao | potencia_individual_w |
         corrente_a | consumo_nao_equilibrado
@@ -218,6 +226,13 @@ async def importar(caminho: str, categoria_nome: str):
                 peso_liquido_kg=_num(cel_eq(row, "peso_liquido_kg")),
                 ruido_dba=_int(cel_eq(row, "ruido_dba")),
                 carga_refrigerante_kg=_num(cel_eq(row, "carga_refrigerante_kg")),
+                volume_deslocado_m3h=_num(cel_eq(row, "volume_deslocado_m3h")),
+                potencia_nominal_hp=_num(cel_eq(row, "potencia_nominal_hp")),
+                motor_ventilador_corrente_a=_num(cel_eq(row, "motor_ventilador_corrente_a")),
+                motor_ventilador_potencia_w=_num(cel_eq(row, "motor_ventilador_potencia_w")),
+                capacitor_marcha_especificacao=_texto(cel_eq(row, "capacitor_marcha_especificacao")),
+                resistencia_carter_especificacao=_texto(cel_eq(row, "resistencia_carter_especificacao")),
+                tanque_liquido_l=_num(cel_eq(row, "tanque_liquido_l")),
             )
             if existente:
                 for k, v in campos.items():
@@ -322,6 +337,8 @@ async def importar(caminho: str, categoria_nome: str):
                     vazao_ar_m3h=_int(cel_ve(row, "vazao_ar_m3h")),
                     potencia_w=_num(cel_ve(row, "potencia_w")),
                     corrente_a=_num(cel_ve(row, "corrente_a")),
+                    codigo_fabricante=_texto(cel_ve(row, "codigo_fabricante")),
+                    corrente_partida_a=_num(cel_ve(row, "corrente_partida_a")),
                 )
                 existente = (await db.execute(
                     select(EquipamentoVarianteEletrica).where(

@@ -67,6 +67,20 @@ class Equipamento(Base):
         ForeignKey("biblioteca_tecnica.id"), nullable=True
     )
 
+    # Achado no catálogo Bitzer Combat/Combat+/BIG CDU — dados de compressor
+    # de unidade condensadora, sem análogo em evaporador. Só informativo por
+    # ora (nenhum Card consome ainda), mesmo padrão do peso/ruído do Mipal.
+    volume_deslocado_m3h: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    potencia_nominal_hp: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    motor_ventilador_corrente_a: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    motor_ventilador_potencia_w: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    # Texto livre de propósito — o formato varia demais entre modelos (faixa
+    # de tensão + faixa de potência, às vezes com marca "PTC") pra estruturar
+    # em campos numéricos sem perder informação, e nenhum Card lê isso hoje.
+    capacitor_marcha_especificacao: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    resistencia_carter_especificacao: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tanque_liquido_l: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+
     categoria: Mapped["Categoria"] = relationship(back_populates="equipamentos")
     fabricante: Mapped["Fabricante"] = relationship(back_populates="equipamentos")
     unidade_medida: Mapped["UnidadeMedida"] = relationship(back_populates="equipamentos")
@@ -154,6 +168,16 @@ class EquipamentoVarianteEletrica(Base):
     vazao_ar_m3h: Mapped[int | None] = mapped_column(Integer, nullable=True)
     potencia_w: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
     corrente_a: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+
+    # Achado no catálogo Bitzer: aqui a "variante elétrica" é o compressor da
+    # unidade condensadora, não um motor de ventilador — código de fabricante
+    # muda por tensão (SKU próprio pra 220V vs 380V do mesmo modelo físico,
+    # 1ª vez que o catálogo técnico precisa disso pra qualquer fabricante) e
+    # LRA (corrente de partida/rotor bloqueado) fica ao lado do corrente_a
+    # (FLA) já existente. vazao_ar_m3h/potencia_w ficam NULL nessas linhas —
+    # são do ventilador, não do compressor.
+    codigo_fabricante: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    corrente_partida_a: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
 
     equipamento: Mapped["Equipamento"] = relationship(back_populates="variantes_eletricas")
 

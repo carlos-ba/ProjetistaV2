@@ -76,6 +76,13 @@ class EquipamentoOut(BaseModel):
     peso_liquido_kg: Decimal | None
     ruido_dba: int | None
     carga_refrigerante_kg: Decimal | None
+    volume_deslocado_m3h: Decimal | None
+    potencia_nominal_hp: Decimal | None
+    motor_ventilador_corrente_a: Decimal | None
+    motor_ventilador_potencia_w: Decimal | None
+    capacitor_marcha_especificacao: str | None
+    resistencia_carter_especificacao: str | None
+    tanque_liquido_l: Decimal | None
 
     model_config = {"from_attributes": True}
 
