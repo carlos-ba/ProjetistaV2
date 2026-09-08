@@ -29,3 +29,8 @@ class EquipamentoSelecionado(BaseModel):
     # card do frontend já saber exibir assim que o cadastro/importador ganhar essa
     # coluna e o service passar a preenchê-la.
     corrente_a: float | None = None
+    qtde_ventiladores: int | None = None
+    # None pra fabricante que ainda não teve esse dado digitado no catálogo
+    # (ex: Mipal Hd/Hdl400 Pro, 2026-09) — o frontend mostra "não informado"
+    # em vez de esconder o campo, pronto pra quando o cadastro for completado.
+    diametro_ventilador_mm: int | None = None

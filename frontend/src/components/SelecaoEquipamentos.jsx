@@ -372,6 +372,19 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                         </div>
                       )}
 
+                      {/* Ventiladores — só na aba Evaporadora, pedido do usuário. Diâmetro
+                          mostra "não informado" em vez de sumir quando o cadastro não tem
+                          o dado ainda (ex: Mipal Hd/Hdl400 Pro) — fica pronto pro catálogo
+                          ser completado depois, sem mudança de código. */}
+                      {abaAtiva === 'Evaporadora' && item.qtde_ventiladores != null && (
+                        <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
+                          <span className="flex items-center gap-1">
+                            🌀 {item.qtde_ventiladores}× {item.diametro_ventilador_mm ? `Ø${item.diametro_ventilador_mm}mm` : 'Ø não informado'}
+                          </span>
+                          <span className="flex items-center gap-1">💨 {fmtQtd(item.vazao_ar, 0)} m³/h</span>
+                        </div>
+                      )}
+
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Quantidade de Unidades</label>
                         <div className="flex items-center gap-2">
