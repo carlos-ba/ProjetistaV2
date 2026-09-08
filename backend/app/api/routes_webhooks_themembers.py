@@ -20,17 +20,22 @@ logger = logging.getLogger(__name__)
 # esse artigo, o "Token de segurança" normalmente "é informado ao destino e
 # enviado no payload do webhook". Nome exato do campo não documentado
 # publicamente em nenhum dos dois — checa os candidatos mais plausíveis dado
-# o texto da doc, tanto na raiz do payload quanto dentro do envelope
-# `payload` (formato "Envelope com payload" da spec). Usuário pediu pra
-# tratar esse artigo como fonte de verdade e configurar assim.
+# o texto da doc, na raiz do payload, dentro do envelope `payload` (formato
+# "Envelope com payload" da spec) e dentro de `data` (formato "Evento direto"
+# — achado numa entrega real em 2026-09-08: chaves_topo eram só
+# ['created_at','data','event','object'], nenhum candidato batia na raiz,
+# então o token — se existir nesse formato — só pode estar 1 nível mais
+# fundo, dentro de `data`). Usuário pediu pra tratar esse artigo como fonte
+# de verdade e configurar assim.
 _CAMPOS_TOKEN_CANDIDATOS = ["token", "security_token", "webhook_token", "secret", "signature_token"]
 
 
 def _extrair_token_do_payload(body: dict) -> str | None:
     fontes = [body]
-    envelope = body.get("payload")
-    if isinstance(envelope, dict):
-        fontes.append(envelope)
+    for chave_aninhada in ("payload", "data"):
+        aninhado = body.get(chave_aninhada)
+        if isinstance(aninhado, dict):
+            fontes.append(aninhado)
     for fonte in fontes:
         for campo in _CAMPOS_TOKEN_CANDIDATOS:
             valor = fonte.get(campo)
@@ -98,9 +103,12 @@ async def receber_webhook_checkout(
         chaves_envelope = None
         if body_parseado and isinstance(body_parseado.get("payload"), dict):
             chaves_envelope = sorted(body_parseado["payload"].keys())
+        chaves_data = None
+        if body_parseado and isinstance(body_parseado.get("data"), dict):
+            chaves_data = sorted(body_parseado["data"].keys())
         logger.warning(
-            "themembers_webhook_401 hmac_ok=%s tem_x_signature=%s chaves_topo=%s chaves_envelope=%s",
-            hmac_ok, bool(x_signature), chaves_topo, chaves_envelope,
+            "themembers_webhook_401 hmac_ok=%s tem_x_signature=%s chaves_topo=%s chaves_envelope=%s chaves_data=%s",
+            hmac_ok, bool(x_signature), chaves_topo, chaves_envelope, chaves_data,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida.")
 

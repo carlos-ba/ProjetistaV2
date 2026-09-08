@@ -113,6 +113,22 @@ async def test_2e_rejeita_token_errado_no_payload(client, token_themembers):
     assert r.status_code == 401
 
 
+async def test_2f_aceita_token_dentro_de_data_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
+    """Achado numa entrega real em 2026-09-08 (formato 'evento direto',
+    chaves_topo=['created_at','data','event','object']) — nenhum candidato
+    batia na raiz nem no envelope `payload`, então o token (se existir nesse
+    formato) só pode estar dentro de `data`. Estende a checagem pra esse
+    nível."""
+    empresa = await empresa_factory()
+    await usuario_factory(empresa, email="compra2f@teste.local")
+    body = payload_direto("release.access", {
+        "customer": {"email": "compra2f@teste.local"}, "product": {"id": "prod-mensal-001"},
+    })
+    body["data"]["token"] = token_themembers
+    r = await client.post(URL, json=body)
+    assert r.status_code == 200
+
+
 async def test_3_aceita_token_correto(client, token_themembers, empresa_factory, usuario_factory):
     empresa = await empresa_factory()
     await usuario_factory(empresa, email="compra3@teste.local")
