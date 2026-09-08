@@ -5,13 +5,19 @@ from sqlalchemy.orm import selectinload
 
 from app.models.catalogo import Categoria
 from app.models.componente import ComponenteTecnico, PerformanceComponente
-from app.schemas.componente import ComponenteFluxoRequest, ComponenteSelecionado
+from app.schemas.componente import ComponenteFluxoRequest, ComponenteSelecionado, ComponentesFluxoResponse
 
-# Categorias selecionadas por faixa de capacidade + temperatura de evaporação
+# Categorias selecionadas por faixa de capacidade + temperatura de evaporação.
+# Filtro Secador e Válvula Solenoide NÃO entram aqui — catálogo dessas 2
+# categorias em `componente_tecnico` está sempre vazio (0 linhas, conferido
+# em produção): são selecionadas por algoritmo próprio (Kv pra solenoide,
+# diâmetro de linha pro filtro — ver acessorios.py/solenoide.py), nunca por
+# busca direta no banco. Tinham ficado nessa lista por engano — toda busca
+# aqui retornava None e o motivo de aviso (abaixo) ia gerar alarme falso
+# permanente pras duas, já que o catálogo delas nunca vai ter linha nenhuma
+# por design.
 _CATEGORIAS_POR_TEMP_EVAP = [
     "Válvula de Expansão Termostática",
-    "Filtro Secador",
-    "Válvula Solenoide",
 ]
 
 # Categorias selecionadas apenas por capacidade (temperatura é referência, não filtro rígido)
@@ -145,10 +151,39 @@ async def _buscar_por_capacidade_interpolado(
     return None, 0.0, 0.0
 
 
+async def _maior_capacidade_cadastrada(db: AsyncSession, cat_nome: str, fluido: str) -> float | None:
+    """Maior capacidade_kcalh cadastrada pra essa categoria+fluido, sem
+    filtro de T.Evap — usado só pra compor uma mensagem de aviso mais útil
+    (quanto falta pro maior modelo do catálogo), não pra seleção em si."""
+    stmt = (
+        select(PerformanceComponente.capacidade_kcalh)
+        .join(PerformanceComponente.componente)
+        .join(ComponenteTecnico.categoria)
+        .where(Categoria.nome == cat_nome, PerformanceComponente.fluido == fluido)
+        .order_by(PerformanceComponente.capacidade_kcalh.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    valor = result.scalar_one_or_none()
+    return float(valor) if valor is not None else None
+
+
+async def _aviso_sem_match(db: AsyncSession, cat_nome: str, req: ComponenteFluxoRequest) -> str:
+    maior = await _maior_capacidade_cadastrada(db, cat_nome, req.fluido)
+    base = (
+        f"{cat_nome}: nenhum modelo do catálogo cobre {req.capacidade_kcalh:.0f} kcal/h "
+        f"em {req.fluido} a {req.temp_evap:.0f}°C."
+    )
+    if maior is not None:
+        return base + f" Maior capacidade cadastrada nesse fluido: {maior:.0f} kcal/h."
+    return base + " Nenhum modelo cadastrado nesse fluido."
+
+
 async def selecionar_componentes_fluxo(
     req: ComponenteFluxoRequest, db: AsyncSession
-) -> list[ComponenteSelecionado]:
+) -> ComponentesFluxoResponse:
     selecionados: list[ComponenteSelecionado] = []
+    avisos: list[str] = []
 
     for cat_nome in _CATEGORIAS_POR_TEMP_EVAP:
         melhor = await _buscar_por_temp_e_capacidade(
@@ -165,6 +200,8 @@ async def selecionar_componentes_fluxo(
                 custo=float(comp.custo),
                 faixa_operacao=f"{melhor.capacidade_min_kcalh:.0f} a {melhor.capacidade_kcalh:.0f} kcal/h",
             ))
+        else:
+            avisos.append(await _aviso_sem_match(db, cat_nome, req))
 
     for cat_nome in _CATEGORIAS_POR_CAPACIDADE:
         comp, cap_max_i, cap_min_i = await _buscar_por_capacidade_interpolado(
@@ -183,5 +220,7 @@ async def selecionar_componentes_fluxo(
                     f"@ {req.temp_evap:.0f}°C (interpolado)"
                 ),
             ))
+        else:
+            avisos.append(await _aviso_sem_match(db, cat_nome, req))
 
-    return selecionados
+    return ComponentesFluxoResponse(selecionados=selecionados, avisos=avisos)

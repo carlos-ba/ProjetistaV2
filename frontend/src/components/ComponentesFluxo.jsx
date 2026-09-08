@@ -71,6 +71,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
   // ── Modo Automático — componentes do banco ────────────────────────────
   const [componentes,  setComponentes]  = useState([]);
+  const [avisosComponentes, setAvisosComponentes] = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [erro,         setErro]         = useState('');
   const [selecionados, setSelecionados] = useState({});
@@ -129,7 +130,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
     if (!cargaAlvo || cargaAlvo <= 0) return;
     const cfgAtual = configuracoesMontagem || {}; // captura no momento da chamada (já garantido não-null pelo useEffect)
     setLoading(true); setErro('');
-    setSolenoidResult(null); setAcessorioResult(null);
+    setSolenoidResult(null); setAcessorioResult(null); setAvisosComponentes([]);
 
     const tcCond = parseFloat(tempAmb) + 10;
 
@@ -149,9 +150,11 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       if (canceladoRef && canceladoRef.current) return;
 
       if (resComp.status === 'fulfilled') {
-        setComponentes(resComp.value.data);
+        const lista = resComp.value.data.selecionados || [];
+        setComponentes(lista);
+        setAvisosComponentes(resComp.value.data.avisos || []);
         const initial = {};
-        resComp.value.data.forEach(c => { initial[c.categoria] = true; });
+        lista.forEach(c => { initial[c.categoria] = true; });
         setSelecionados(initial);
       } else {
         setErro('Erro ao buscar componentes de fluxo.');
@@ -572,6 +575,13 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
 
             {loading && <div className="p-8 text-center text-slate-500 animate-pulse">⚙️ Selecionando componentes...</div>}
             {erro    && <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 mb-4">{erro}</div>}
+            {!loading && avisosComponentes.length > 0 && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 space-y-1">
+                {avisosComponentes.map((aviso, idx) => (
+                  <p key={idx} className="text-xs text-red-600">⚠ {aviso}</p>
+                ))}
+              </div>
+            )}
 
             {/* Grid de cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -640,6 +650,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   titulo={acessorioResult.visor_liquido.modelo}
                   detalhe={`Danfoss | ${acessorioResult.diametro_liquido} | ${acessorioResult.visor_liquido.tipo}`}
                   nota={`📍 ${acessorioResult.visor_liquido.posicao}`}
+                  aviso={acessorioResult.visor_liquido.aviso}
                   corBorda="teal"
                 />
               )}

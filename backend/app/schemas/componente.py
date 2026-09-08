@@ -15,3 +15,12 @@ class ComponenteSelecionado(BaseModel):
     conexao_entrada: str
     custo: float
     faixa_operacao: str
+
+
+class ComponentesFluxoResponse(BaseModel):
+    selecionados: list[ComponenteSelecionado]
+    # Categoria sem nenhum componente no catálogo que cubra a capacidade
+    # pedida — achado testando com UC grande (Bitzer): sem isso, o item
+    # some da lista em silêncio, sem indicar ao técnico que faltou cadastro
+    # (mesmo padrão de avisos_kit_montagem do Card 1).
+    avisos: list[str] = []

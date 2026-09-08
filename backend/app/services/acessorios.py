@@ -52,6 +52,18 @@ _VISOR_SGN: dict[str, str] = {
     '1.3/8"': "SGN 22s",
 }
 
+# Conexão real de cada modelo SGN — usado só pra saber quando a linha de
+# líquido calculada é maior que a conexão do próprio visor (nenhum modelo
+# SGN passa de 7/8"), pra montar o aviso de tubo paralelo. Achado no Card 4
+# suportando bitola até 2.1/8" (sistemas grandes, ex: catálogo Bitzer) —
+# _VISOR_SGN.get(diam_liquido, "SGN 22s") sempre devolvia SGN 22s pra
+# qualquer bitola acima de 7/8" sem nenhum sinal de que o visor ficou menor
+# que a linha.
+_VISOR_SGN_CONEXAO_REAL: dict[str, str] = {
+    "SGN 6s": '1/4"', "SGN 10s": '3/8"', "SGN 12s": '1/2"',
+    "SGN 16s": '5/8"', "SGN 19s": '3/4"', "SGN 22s": '7/8"',
+}
+
 # Fluidos com tabela própria de líquido (lista de calculos_tubulacao)
 _FLUIDOS_LIQUIDO = {"R22", "R404A"}
 
@@ -104,6 +116,16 @@ def selecionar_acessorios(
     if filtro_info is None:
         filtro_info = {"modelo": "Consultar Engenharia", "volume_in3": None,
                        "conexao": diam_liquido, "tipo": tipo_filtro}
+        # Achado testando com sistema grande (linha acima de 1.3/8" — maior
+        # bitola da tabela DML): esse caminho não gerava aviso nenhum, só o
+        # da troca DMC→DML acima gerava. Card mostrava "Consultar Engenharia"
+        # como se fosse um modelo de verdade, sem nenhum destaque de alerta.
+        if aviso_filtro is None:
+            aviso_filtro = (
+                f"Nenhum {tipo_filtro} cadastrado para a linha {diam_liquido} "
+                "(maior bitola disponível: 1.3/8\") — consultar engenharia pra "
+                "dimensionar o filtro secador."
+            )
 
     filtro_resultado = {
         "modelo":       filtro_info["modelo"],
@@ -118,10 +140,27 @@ def selecionar_acessorios(
     # ── Visor de líquido ──────────────────────────────────────────────────────
     modelo_visor = _VISOR_SGN.get(diam_liquido, "SGN 22s")
 
+    # Nenhum modelo SGN passa de 7/8" de conexão — pra linha maior que isso,
+    # o visor entra menor que a linha de propósito (não existe modelo maior
+    # pra vender) e precisa ser montado num tubo paralelo de bitola igual à
+    # conexão do próprio visor, não soldado direto na linha principal. Achado
+    # testando sistema grande: antes disso ficava em silêncio total (nem
+    # "Consultar Engenharia" — reaproveitava o maior modelo sem avisar nada).
+    conexao_real_visor = _VISOR_SGN_CONEXAO_REAL.get(modelo_visor)
+    aviso_visor = None
+    if conexao_real_visor and conexao_real_visor != diam_liquido:
+        aviso_visor = (
+            f"Linha de líquido {diam_liquido} maior que o maior visor disponível "
+            f"({modelo_visor}, conexão {conexao_real_visor}) — montar em tubo "
+            f"paralelo de bitola {conexao_real_visor} (igual à conexão do visor), "
+            "não soldar direto na linha principal."
+        )
+
     visor_resultado = {
         "modelo":     modelo_visor,
         "fabricante": "Danfoss",
         "conexao":    diam_liquido,
+        "aviso":      aviso_visor,
         "tipo":       "Com indicador de umidade (verde→amarelo)",
         "posicao":    "Após filtro secador, antes da VET",
     }
