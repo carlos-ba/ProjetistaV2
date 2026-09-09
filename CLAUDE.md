@@ -781,15 +781,22 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 
 ## Webhook do Checkout TheMembers (⚠️ QUEBRADO em produção desde 2026-09-04)
 
-**Status real (atualizado 2026-09-09):** endpoint segue quebrado; a
-documentação oficial da TheMembers se contradiz entre si (página
-"Segurança" confirma HMAC pro Checkout, página "Estrutura dos webhooks"
-mostra o header configurado como `"x-signature": "{token}"`, sugerindo
-token puro na implementação real). Verificação empírica (log Render com o
-valor cru recebido) ficou pendente — busca do painel do Render não filtra
-de forma confiável via automação. Documento novo enviado pro chamado.
-Nenhuma mudança de código feita — ver `project_jornada_assinatura_saas`
-na memória pro detalhe completo.
+**Status real (atualizado 2026-09-09, diagnóstico com dado real):**
+endpoint segue quebrado. Log de diagnóstico temporário (commits `48f50f0`,
+`d54a774` — não expõe segredo, só formato/booleanos) testado contra 2
+entregas reais confirma o **formato** do `x-signature` recebido como
+HMAC-SHA256 de verdade (64 caracteres hex, exatamente um digest SHA-256) —
+bate com a doc oficial. Mas **4 mecanismos diferentes testados contra
+entrega real, nenhum autoriza**: HMAC com o token como string literal
+(o documentado), HMAC com o token decodificado de base64, token puro
+comparado direto no header, token embutido no payload. A chave/
+transformação exata que a TheMembers usa continua desconhecida.
+**Pausado por decisão consciente** até a resposta do chamado (documento
+consolidado já reenviado, pedindo um exemplo real de `x-signature`
+gerado por eles) — não vale gastar mais testes de compra reais em
+tentativa e erro. Código de diagnóstico ficou no repo (inofensivo, só
+loga em 401). Ver `project_jornada_assinatura_saas` na memória pro
+detalhe completo de cada tentativa.
 
 **Status anterior (2026-09-08):** o endpoint está habilitado
 (`THEMEMBERS_WEBHOOK_ENABLED=true`) mas **toda entrega real vinda dos
