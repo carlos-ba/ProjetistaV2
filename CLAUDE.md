@@ -299,7 +299,7 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
 |-----------|----------|-----------|
 | Separador de Líquido | `POST /api/v1/componentes` | banco de dados |
 | Separador de Óleo | `POST /api/v1/componentes` | banco de dados |
-| Válvula de Expansão Termostática (VET) | `POST /api/v1/componentes` | banco de dados; corpo Danfoss T2 fixo, modelo cadastrado como `"T2 - N"` (N = 0 a 6, ou X = menor orifício da linha) |
+| Válvula de Expansão Termostática (VET) | `POST /api/v1/componentes` | banco de dados; corpos Danfoss T2 (`"T2 - N"`, N = 0 a 6, ou X = menor orifício) até ~17,7 mil kcal/h R22, e TE5/TE12/TE20/TE55 (`"TE5 - 0.5"` etc., 14 modelos) pra capacidades maiores, desde 2026-09-09 |
 | Válvula Solenoide | `POST /api/v1/solenoide/selecionar` | motor Kv interno (R404A/R22) |
 | Filtro Secador (DML/DMC) | `POST /api/v1/acessorios/selecionar` | DML com tanque / DMC sem tanque |
 | Visor de Líquido (SGN) | `POST /api/v1/acessorios/selecionar` | pelo diâmetro da linha de líquido |
@@ -384,10 +384,17 @@ Commit `7f342c7`.
   pro caso VET (categoria inteira sem card nenhum); a prop `aviso` que já
   existia no `CardAuto` (banner âmbar inline) reaproveitada pro filtro/visor
   (card renderiza normal, só precisa de atenção).
-- **Pendente, fora deste fix**: catálogo de VET (corpo T2) ainda não cobre as
-  capacidades maiores dos UCs Bitzer novos — usuário vai providenciar as
-  linhas novas separadamente; este fix só resolve o silêncio, não o gap de
-  catálogo em si.
+- **Gap de catálogo (VET) resolvido em 2026-09-09**: catálogo Danfoss
+  TE5-TE55 (migration 0039, 14 modelos, 7 fluidos) complementa o T2 pras
+  capacidades maiores dos UCs Bitzer — ver seção própria acima ("Motor de
+  seleção de solenoide" e tabela de endpoints). Pendências que sobraram
+  dessa leva, não bloqueantes: T.Cond fixo em 45°C por simplicidade (temos
+  os pontos reais 25/35/45/55°C extraídos, mas não cadastrados —
+  interpolar por T.Cond na VET, igual ao Card 3 já faz pra UC/Evaporadora,
+  fica pra uma revisão futura); orifício TE55-9B (só cobre faixa
+  ultra-baixa -60 a -25°C) fora desta leva; R290/R402B/R452A/R513A sem
+  tabela de capacidade publicada encontrada pra essa linha, em nenhuma
+  fonte.
 
 ---
 
@@ -628,7 +635,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0038)
+## Banco de Dados — Migrations (0001→0039)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -670,6 +677,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0036 | Campo `empresa.oferta_comercial` (nullable) + tabelas `webhook_checkout_evento` e `assinatura_gateway` — webhook do Checkout TheMembers (Etapa 1, endpoint desabilitado) |
 | 0037 | Evolução de `Equipamento`/`PerformanceEquipamento` pra catálogos mais ricos (AC/EC como identidade, dimensões, peso, ruído, carga de refrigerante publicada, `FatorCorrecaoFluido`, `EquipamentoVarianteEletrica`, `EquipamentoResistenciaDegelo`, biblioteca técnica) — motivada pelo catálogo Mipal Hd/Hdl400 Pro |
 | 0038 | Campos de compressor de UC em `Equipamento` (volume deslocado, potência nominal, corrente/potência do motor do ventilador, capacitor, resistência de cárter) + `codigo_fabricante`/`corrente_partida_a` em `EquipamentoVarianteEletrica` — motivada pelo catálogo Bitzer Combat/Combat+/BIG CDU |
+| 0039 | Seed do catálogo VET Danfoss TE5-TE55 (14 `componente_tecnico` + 938 `performance_componente`, 7 fluidos, T.Cond fixo 45°C) — cobre a capacidade que o corpo T2 (até ~17,7 mil kcal/h) não alcançava mais pros UCs Bitzer grandes |
 
 ---
 
@@ -773,7 +781,17 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 
 ## Webhook do Checkout TheMembers (⚠️ QUEBRADO em produção desde 2026-09-04)
 
-**Status real (atualizado 2026-09-08):** o endpoint está habilitado
+**Status real (atualizado 2026-09-09):** endpoint segue quebrado; a
+documentação oficial da TheMembers se contradiz entre si (página
+"Segurança" confirma HMAC pro Checkout, página "Estrutura dos webhooks"
+mostra o header configurado como `"x-signature": "{token}"`, sugerindo
+token puro na implementação real). Verificação empírica (log Render com o
+valor cru recebido) ficou pendente — busca do painel do Render não filtra
+de forma confiável via automação. Documento novo enviado pro chamado.
+Nenhuma mudança de código feita — ver `project_jornada_assinatura_saas`
+na memória pro detalhe completo.
+
+**Status anterior (2026-09-08):** o endpoint está habilitado
 (`THEMEMBERS_WEBHOOK_ENABLED=true`) mas **toda entrega real vinda dos
 servidores da TheMembers retorna 401** — a assinatura HMAC-SHA256 em
 `x-signature` nunca bate com `THEMEMBERS_WEBHOOK_TOKEN`, mesmo com o token
@@ -1134,7 +1152,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
-| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08 |
+| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 (capacidades maiores, complementa o T2) desde 2026-09-09 |
 | Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |
 | Card 5 — Filtro secador automático (DML/DMC) | ✅ avisa quando cai em "Consultar Engenharia" (linha > 1.3/8") desde 2026-09-08 |
 | Card 5 — Visor de líquido automático (SGN) | ✅ avisa pra montar em tubo paralelo quando linha > 7/8" (maior SGN) desde 2026-09-08 |
