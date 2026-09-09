@@ -92,6 +92,15 @@ async def receber_webhook_checkout(
         token_do_payload = _extrair_token_do_payload(body_parseado)
         token_payload_ok = bool(token_do_payload and hmac.compare_digest(token_do_payload, secret_configurado))
 
+    # Diagnóstico temporário (2026-09-09) — testa a 3ª hipótese: x-signature
+    # é o próprio token, comparado direto (não um HMAC, não embutido no
+    # payload). Só LOGA por enquanto — não autoriza a requisição ainda,
+    # de propósito, até confirmar contra uma entrega real. Remover (junto
+    # com o log abaixo) depois de decidir qual mecanismo é o real.
+    token_direto_no_header_ok = bool(
+        x_signature and secret_configurado and hmac.compare_digest(x_signature, secret_configurado)
+    )
+
     if not (hmac_ok or token_payload_ok):
         # Debug temporário (mesmo padrão já usado e removido em 2026-09-04,
         # commit adcfb85/ddc233d) — só loga as CHAVES de topo do payload
@@ -99,6 +108,13 @@ async def receber_webhook_checkout(
         # exigência da própria spec) pra confirmar contra uma entrega real
         # se algum dos campos candidatos aparece, e com qual nome. Remover
         # depois de confirmar.
+        #
+        # 2026-09-09: acrescenta diagnóstico de FORMATO do x-signature
+        # recebido (tamanho, se é hex, se é charset base64, se tem cara de
+        # PEM) — nunca o valor em si — pra decidir entre 3 hipóteses:
+        # HMAC-SHA256 (hex, 64 chars), token puro (mesmo tamanho do secret
+        # configurado) ou chave/assinatura pública (bem mais longo, ou com
+        # marcador PEM tipo "-----BEGIN").
         chaves_topo = sorted(body_parseado.keys()) if body_parseado else None
         chaves_envelope = None
         if body_parseado and isinstance(body_parseado.get("payload"), dict):
@@ -106,9 +122,22 @@ async def receber_webhook_checkout(
         chaves_data = None
         if body_parseado and isinstance(body_parseado.get("data"), dict):
             chaves_data = sorted(body_parseado["data"].keys())
+
+        assinatura_len = len(x_signature) if x_signature else None
+        secret_len = len(secret_configurado) if secret_configurado else None
+        assinatura_eh_hex = bool(x_signature) and all(c in "0123456789abcdefABCDEF" for c in x_signature)
+        assinatura_eh_base64_charset = bool(x_signature) and all(
+            c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=" for c in x_signature
+        )
+        assinatura_parece_pem = bool(x_signature) and ("BEGIN" in x_signature or "-----" in x_signature)
+
         logger.warning(
-            "themembers_webhook_401 hmac_ok=%s tem_x_signature=%s chaves_topo=%s chaves_envelope=%s chaves_data=%s",
+            "themembers_webhook_401 hmac_ok=%s tem_x_signature=%s chaves_topo=%s chaves_envelope=%s chaves_data=%s "
+            "token_direto_no_header_ok=%s assinatura_len=%s secret_len=%s assinatura_eh_hex=%s "
+            "assinatura_eh_base64_charset=%s assinatura_parece_pem=%s",
             hmac_ok, bool(x_signature), chaves_topo, chaves_envelope, chaves_data,
+            token_direto_no_header_ok, assinatura_len, secret_len, assinatura_eh_hex,
+            assinatura_eh_base64_charset, assinatura_parece_pem,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida.")
 
