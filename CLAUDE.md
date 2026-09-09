@@ -272,6 +272,20 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
 - Piso do catálogo hoje: **32°C** pra todo fluido/categoria de Unidade
   Condensadora — dado real dos fabricantes (Danfoss/Elgin não publicam tabela
   abaixo disso), não lacuna de cadastro.
+- **Fator de correção de fluido (fix 2026-09-08):** pedir um fluido sem
+  medição direta (ex: catálogo Mipal, medido só em R-22) retornava zero
+  resultados — a leitura de `usa_fator_correcao`/`FatorCorrecaoFluido`
+  (schema já existia) tinha ficado fora do serviço. Corrigido: sem medição
+  direta, busca a curva de referência com `usa_fator_correcao=true` e aplica
+  o fator do fabricante antes de interpolar; `consumo_kw` fica em branco
+  quando a correção é aplicada (não há fator publicado pra consumo).
+- **Ventiladores no card do evaporador (em produção desde 2026-09-08):**
+  card da Evaporadora mostra nº de ventiladores, diâmetro e vazão total
+  (`qtde_ventiladores`/`diametro_ventilador_mm`/`vazao_ar` em
+  `EquipamentoSelecionado`) — só nessa aba, não entra no orçamento/Card 6.
+  Catálogo Mipal Hd/Hdl400 Pro ainda não tem `diametro_ventilador_mm`
+  digitado (Elgin tem) — o card mostra "Ø não informado" em vez de esconder
+  o campo, pronto pra quando o catálogo for completado.
 
 ---
 
@@ -614,7 +628,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0036)
+## Banco de Dados — Migrations (0001→0038)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -654,6 +668,8 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0034 | Campo `usuario.telefone` (nullable) — captura celular/WhatsApp no cadastro público, vira lead pro time de vendas |
 | 0035 | Campos `empresa.proposta_nome`/`proposta_logo_base64`/`proposta_contato_nome`/`proposta_contato_telefone` (todos nullable) — identidade da proposta ao cliente |
 | 0036 | Campo `empresa.oferta_comercial` (nullable) + tabelas `webhook_checkout_evento` e `assinatura_gateway` — webhook do Checkout TheMembers (Etapa 1, endpoint desabilitado) |
+| 0037 | Evolução de `Equipamento`/`PerformanceEquipamento` pra catálogos mais ricos (AC/EC como identidade, dimensões, peso, ruído, carga de refrigerante publicada, `FatorCorrecaoFluido`, `EquipamentoVarianteEletrica`, `EquipamentoResistenciaDegelo`, biblioteca técnica) — motivada pelo catálogo Mipal Hd/Hdl400 Pro |
+| 0038 | Campos de compressor de UC em `Equipamento` (volume deslocado, potência nominal, corrente/potência do motor do ventilador, capacitor, resistência de cárter) + `codigo_fabricante`/`corrente_partida_a` em `EquipamentoVarianteEletrica` — motivada pelo catálogo Bitzer Combat/Combat+/BIG CDU |
 
 ---
 
@@ -755,22 +771,41 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 
 ---
 
-## Webhook do Checkout TheMembers (EM PRODUÇÃO desde 2026-09-04)
+## Webhook do Checkout TheMembers (⚠️ QUEBRADO em produção desde 2026-09-04)
 
-**Etapa 2 concluída e habilitada de verdade em produção em 2026-09-04** —
-`THEMEMBERS_WEBHOOK_ENABLED=true` no Render, webhook real cadastrado no
-painel da TheMembers (`Checkout → Ferramentas → Webhooks`, nome "IceNexus
-SaaS - Produção", apontando pra
+**Status real (atualizado 2026-09-08):** o endpoint está habilitado
+(`THEMEMBERS_WEBHOOK_ENABLED=true`) mas **toda entrega real vinda dos
+servidores da TheMembers retorna 401** — a assinatura HMAC-SHA256 em
+`x-signature` nunca bate com `THEMEMBERS_WEBHOOK_TOKEN`, mesmo com o token
+confirmado idêntico nos dois lados (Render e painel deles) e testado com
+evento 100% novo depois de regenerar o token. Causa raiz é do lado da
+TheMembers (bug confirmado, fora do nosso controle) — chamado aberto desde
+2026-09-04, aguardando resposta; 2026-09-08 testou-se um mecanismo
+alternativo (token embutido no payload, sugerido por outro doc oficial
+deles) em paralelo ao HMAC — também não bateu em nenhuma entrega real
+capturada. **Uma cliente real pagou (Profissional Mensal, Pix) e ficou sem
+ativação** — conta presa em `status=trial`; correção manual pontual
+(reenviar o evento assinado com nosso próprio token) está planejada mas não
+executada, por pedido do usuário (focar na causa raiz primeiro). Detalhe
+completo, evidências e histórico: `project_jornada_assinatura_saas` na
+memória.
+
+**Etapa 2 foi concluída e habilitada em produção em 2026-09-04** —
+webhook real cadastrado no painel da TheMembers (`Checkout → Ferramentas →
+Webhooks`, nome "IceNexus SaaS - Produção", apontando pra
 `https://projetista-v2-api-alt.onrender.com/api/webhooks/themembers/checkout`),
-token e os 3 IDs reais de oferta configurados. Jornada completa validada
-com uma compra real (Mensal, R$159, Pix): pagamento → webhook →
-`pendente_usuario` → cadastro na plataforma → verificação de e-mail →
-reconciliação automática → `status_assinatura=ativa`. Mais 2 fixes que
-saíram dessa validação (precedência em `subscription.date_changed`, limpar
-`gateway.proxima_cobranca_em` no cancelamento — ver `project_jornada_assinatura_saas`
-na memória pro detalhe). 39 testes automatizados, todos passando.
+token e os 3 IDs reais de oferta configurados. A jornada completa **foi**
+validada com uma compra de teste no mesmo dia (Mensal, R$159, Pix):
+pagamento → webhook → `pendente_usuario` → cadastro na plataforma →
+verificação de e-mail → reconciliação automática → `status_assinatura=ativa`
+— mas isso não se repetiu nas entregas reais de produção horas depois (ver
+status acima). Mais 2 fixes que saíram dessa validação (precedência em
+`subscription.date_changed`, limpar `gateway.proxima_cobranca_em` no
+cancelamento). 39 testes automatizados, todos passando (a suíte testa a
+lógica de negócio, não a entrega HMAC real da TheMembers).
 
-**Pendências reais, não bloqueantes:**
+**Pendências reais, não bloqueantes** (além do bug de HMAC acima, que é
+bloqueante):
 - Landing page (`icenexus.com.br/projeto-camara-fria`) ainda não linka pro
   checkout real — botões "Solicitar contratação" apontam pra
   `mailto:financeiro@icenexus.com.br` (placeholder). Handoff registrado pro
@@ -1044,7 +1079,7 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 ## Catálogo Técnico
 
 Painéis, unidades condensadoras, evaporadoras e portas frigoríficas vêm de
-múltiplos fabricantes (Elgin, Danfoss Optyma, Mipal, Isoeste/MBP). Novo
+múltiplos fabricantes (Elgin, Danfoss Optyma, Mipal, Bitzer, Isoeste/MBP). Novo
 fornecedor = preencher um dos templates na raiz (`template_paineis_frigorificos.xlsx`,
 `template_unidades_condensadoras.xlsx`, `template_evaporadoras.xlsx`,
 `template_portas_frigorificas.xlsx`) e rodar o importador correspondente em
@@ -1084,7 +1119,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-03)
+## Estado atual do código (auditado em 2026-09-09)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -1094,7 +1129,9 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
-| Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31 |
+| Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |
+| Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |
+| Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
 | Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08 |
@@ -1115,7 +1152,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
-| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ✅ EM PRODUÇÃO desde 2026-09-04, validado com compra real ponta a ponta |
+| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ⚠️ QUEBRADO em produção desde 2026-09-04 — HMAC nunca bate em entregas reais (bug confirmado do lado da TheMembers), chamado aberto aguardando resposta; 1 cliente real pagou e ficou sem ativação |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |
