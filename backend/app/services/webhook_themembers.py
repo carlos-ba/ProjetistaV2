@@ -206,6 +206,30 @@ async def buscar_usuario_por_email(db: AsyncSession, email_normalizado: str) -> 
     return result.scalars().first()
 
 
+# ── Checagem pública pra tela de cadastro (sem autenticação) ────────────────
+
+async def verificar_status_pagamento_email(db: AsyncSession, email: str) -> tuple[bool, bool]:
+    """Usado pela tela de cadastro (Card de login) pra reconhecer quem acabou
+    de pagar no TheBank antes mesmo de terminar o cadastro. Devolve só
+    (ja_tem_conta, pagamento_identificado) — nunca produto/valor/payload, é
+    endpoint público, sem autenticação (a pessoa ainda não tem login)."""
+    email_normalizado = email.strip().lower()
+    usuario = await buscar_usuario_por_email(db, email_normalizado)
+    if usuario is not None:
+        return True, False
+
+    result = await db.execute(
+        select(WebhookCheckoutEvento.id)
+        .where(
+            WebhookCheckoutEvento.email_comprador_normalizado == email_normalizado,
+            WebhookCheckoutEvento.status_processamento == STATUS_PENDENTE_USUARIO,
+        )
+        .limit(1)
+    )
+    pagamento_identificado = result.scalar_one_or_none() is not None
+    return False, pagamento_identificado
+
+
 # ── Processamento principal ──────────────────────────────────────────────────
 
 async def processar_webhook(

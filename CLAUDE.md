@@ -713,6 +713,51 @@ o e-mail real recebido durante o teste desta correção.
 
 ---
 
+## Reconhecimento de pagamento na tela de cadastro (em produção desde 2026-09-10)
+
+Motivação: jornada pós-compra no TheBank — a pessoa paga, é redirecionada
+de volta pro site (link de redirecionamento configurável por oferta no
+painel da TheMembers, `Produto → Ofertas → editar oferta → Estratégias →
+"Página de obrigado"`, hoje desligado/sem link configurado), e cai na
+tela de cadastro sem nenhum reconhecimento de que o pagamento já chegou.
+Ideia nasceu de uma conversa (sem código) sobre como fechar esse ciclo.
+
+- **Checagem silenciosa no campo E-mail** (`LoginPage.jsx`, aba "Criar
+  Conta") — dispara no `onBlur`, chama `POST
+  /api/auth/status-pagamento-email/` (novo, público, sem autenticação —
+  a pessoa ainda não tem login nessa hora). Só reage quando encontra
+  algo; no caso mais comum (trial normal, nunca comprou nada) a tela
+  fica idêntica a hoje, sem nenhum aviso.
+- **3 estados**: (1) e-mail já tem conta (`Usuario` existente, checado
+  via `buscar_usuario_por_email`, mesmo helper que o webhook já usa) →
+  aviso azul, "Entrar" clicável troca de aba na hora, sem tentar
+  pré-preencher usuário (login é por username, não e-mail — não dava pra
+  expor esse dado por essa via); (2) pagamento identificado, sem conta
+  (achou linha `pendente_usuario` em `webhook_checkout_evento` pra esse
+  e-mail) → aviso verde reforçando **confirmar o e-mail**, não só
+  cadastrar (a ativação de verdade só acontece na confirmação, não no
+  cadastro em si — ver seção "Verificação de E-mail" acima); (3) nada
+  encontrado → silêncio total.
+- **Resposta do endpoint é só 2 booleanos** (`ja_tem_conta`,
+  `pagamento_identificado`) — nunca produto, valor ou payload. Decisão
+  consciente sobre o único risco de privacidade real: alguém podia varrer
+  e-mails pra descobrir quem pagou (sem rate-limiting no projeto, adiado
+  de propósito — ver `project-auditoria-20260708` na memória); mitigado
+  por nunca vazar mais que presença/ausência. Vale notar que
+  `POST /api/auth/register/` já permite esse mesmo tipo de enumeração há
+  muito tempo (erro "Este e-mail já está cadastrado.") — não é um vetor
+  novo, só reaproveitado.
+- `verificar_status_pagamento_email()` novo em `webhook_themembers.py` —
+  reusa `buscar_usuario_por_email` já existente; rota em `routes_auth.py`
+  (`status_pagamento_email`), import local do serviço pra evitar ciclo,
+  mesmo padrão já usado em `verify_email`/`reconciliar_pendencias_email`.
+- Testado local nos 3 estados (conta existente, pagamento pendente via
+  registro sintético em `webhook_checkout_evento`, e-mail neutro) — banner
+  certo em cada caso, link "Entrar" funcional, falha de rede/validação
+  tratada em silêncio (`catch` genérico no `handleEmailBlur`).
+
+---
+
 ## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
 
 Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
@@ -1446,6 +1491,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
 | Recursos avançados por empresa (Classificação/Catálogo de Preços) | ✅ em produção desde 2026-09-02, só trava no frontend (sem gate no backend, de propósito) |
 | Verificação de e-mail — página de confirmação do link | ✅ fix em produção desde 2026-09-10 — bug de origem (frontend sem router, link nunca funcionou pra ninguém), corrigido |
+| Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |

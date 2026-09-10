@@ -11,7 +11,7 @@ from app.models.usuario import Usuario
 from app.schemas.auth import (
     UserCreate, UserLogin, TokenResponse, TokenRefreshRequest, TokenRefreshResponse,
     MessageResponse, ForgotPasswordRequest, ResetPasswordRequest, UserOut, PreferenciasUpdate,
-    EncerrarSessaoLoginRequest,
+    EncerrarSessaoLoginRequest, StatusPagamentoEmailRequest, StatusPagamentoEmailResponse,
 )
 from app.services.auth import (
     registrar_usuario, autenticar_usuario, renovar_token,
@@ -57,6 +57,22 @@ async def atualizar_preferencias(
 async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> MessageResponse:
     await registrar_usuario(payload, db)
     return MessageResponse(detail="Usuário criado. Verifique seu email para ativar a conta.")
+
+
+@router.post("/status-pagamento-email/", response_model=StatusPagamentoEmailResponse)
+async def status_pagamento_email(
+    payload: StatusPagamentoEmailRequest, db: AsyncSession = Depends(get_db)
+) -> StatusPagamentoEmailResponse:
+    """Checagem pública, chamada pela tela de cadastro ao sair do campo de
+    e-mail — reconhece quem acabou de pagar no TheBank antes de terminar o
+    cadastro. Import local pra evitar ciclo de import no módulo, mesmo
+    padrão já usado em verify_email/reconciliar_pendencias_email."""
+    from app.services.webhook_themembers import verificar_status_pagamento_email
+
+    ja_tem_conta, pagamento_identificado = await verificar_status_pagamento_email(db, payload.email)
+    return StatusPagamentoEmailResponse(
+        ja_tem_conta=ja_tem_conta, pagamento_identificado=pagamento_identificado,
+    )
 
 
 @router.post("/token/", response_model=TokenResponse)

@@ -25,8 +25,33 @@ export default function LoginPage() {
   const [sessoesConflito, setSessoesConflito] = useState(null); // lista devolvida pelo 403 de limite
   const [encerrandoId, setEncerrandoId] = useState(null);
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  // null = nada checado ainda · 'verificando' · { jaTemConta, pagamentoIdentificado }
+  const [statusPagamento, setStatusPagamento] = useState(null);
 
-  const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const handleChange = e => {
+    const { name, value } = e.target;
+    setForm(f => ({ ...f, [name]: value }));
+    if (name === 'email') setStatusPagamento(null); // e-mail mudou, checagem anterior não vale mais
+  };
+
+  const handleEmailBlur = async () => {
+    const email = form.email.trim();
+    // Checagem best-effort, silenciosa — só reconhece quem acabou de pagar no
+    // TheBank; nunca bloqueia nem avisa erro se a chamada falhar ou o e-mail
+    // não tiver nada associado (é o caso normal de quem só quer testar o trial).
+    if (aba !== 'cadastro' || !email.includes('@') || !email.includes('.')) return;
+    setStatusPagamento('verificando');
+    try {
+      const { data } = await api.post('/api/auth/status-pagamento-email/', { email });
+      if (!data.ja_tem_conta && !data.pagamento_identificado) {
+        setStatusPagamento(null);
+      } else {
+        setStatusPagamento({ jaTemConta: data.ja_tem_conta, pagamentoIdentificado: data.pagamento_identificado });
+      }
+    } catch {
+      setStatusPagamento(null);
+    }
+  };
 
   const handleLogin = async e => {
     e.preventDefault();
@@ -74,6 +99,7 @@ export default function LoginPage() {
       });
       setSucesso('Conta criada! Faça login.');
       setAba('entrar');
+      setStatusPagamento(null);
       setForm(f => ({ ...f, password: '' }));
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -110,13 +136,13 @@ export default function LoginPage() {
           {/* Abas */}
           <div className="flex">
             <button
-              onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); setSessoesConflito(null); }}
+              onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); setSessoesConflito(null); setStatusPagamento(null); }}
               className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'entrar' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               Entrar
             </button>
             <button
-              onClick={() => { setAba('cadastro'); setErro(''); setSucesso(''); setSessoesConflito(null); }}
+              onClick={() => { setAba('cadastro'); setErro(''); setSucesso(''); setSessoesConflito(null); setStatusPagamento(null); }}
               className={`flex-1 py-4 text-sm font-bold transition-colors ${aba === 'cadastro' ? 'bg-[#7B2D8B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               Criar Conta
@@ -181,9 +207,32 @@ export default function LoginPage() {
                     name="email"
                     value={form.email}
                     onChange={handleChange}
+                    onBlur={handleEmailBlur}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
                     placeholder="voce@email.com"
                   />
+                  {statusPagamento === 'verificando' && (
+                    <p className="mt-1.5 text-xs text-slate-400">Verificando...</p>
+                  )}
+                  {statusPagamento && statusPagamento !== 'verificando' && statusPagamento.jaTemConta && (
+                    <div className="mt-1.5 p-2.5 bg-sky-50 border border-sky-200 rounded-lg text-sky-700 text-xs">
+                      ℹ️ Este e-mail já tem uma conta. Clique em{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); }}
+                        className="font-bold underline"
+                      >
+                        Entrar
+                      </button>{' '}
+                      acima e faça login normalmente.
+                    </div>
+                  )}
+                  {statusPagamento && statusPagamento !== 'verificando' && !statusPagamento.jaTemConta && statusPagamento.pagamentoIdentificado && (
+                    <div className="mt-1.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs">
+                      ✅ Pagamento identificado para este e-mail. Finalize seu cadastro e confirme o
+                      e-mail que vamos te enviar — o acesso libera automaticamente assim que você confirmar.
+                    </div>
+                  )}
                 </div>
               )}
 

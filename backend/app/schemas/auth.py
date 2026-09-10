@@ -98,6 +98,15 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class StatusPagamentoEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class StatusPagamentoEmailResponse(BaseModel):
+    ja_tem_conta: bool
+    pagamento_identificado: bool
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
     nova_senha: str
