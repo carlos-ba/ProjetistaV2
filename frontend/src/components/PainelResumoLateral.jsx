@@ -132,19 +132,9 @@ const DetalheEtapa = ({ passoExpandido, dadosGabinete, cargaCalculada, itensOrca
 
     return (
       <div className="space-y-2">
-        {/* Cards dos equipamentos */}
-        {equips.map((e, i) => (
-          <div key={i} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-            <p className="text-xs font-bold text-slate-700 truncate">{e.nome}</p>
-            <div className="flex justify-between mt-1">
-              <span className="text-[10px] text-slate-500">{e.qtde}× {e.capacidade_real.toLocaleString('pt-BR')} kcal/h</span>
-              <span className="text-[10px] font-bold text-blue-600">{e.fluido}</span>
-            </div>
-          </div>
-        ))}
-
-        {/* Capacidade nominal (média) */}
-        <div className="pt-2 border-t border-slate-100 space-y-2">
+        {/* Capacidade nominal (média) — lista de equipamentos agora fica fixa
+            em "Equipamentos Selecionados" (visível em qualquer etapa) */}
+        <div className="space-y-2">
           <Chip label="Capacidade nominal" valor={`${capNominal.toLocaleString('pt-BR')} kcal/h`} destaque />
         </div>
 
@@ -358,6 +348,28 @@ const PainelResumoLateral = ({
             </div>
           )}
         </div>
+
+        {/* ── EQUIPAMENTOS SELECIONADOS (Card 3) — fixo, visível em qualquer
+            etapa depois de selecionados. Ajuda a preencher equipamentos
+            extras manualmente no Card 6 sem precisar voltar pro Card 3. ── */}
+        {itensOrcamento.equipamentos.length > 0 && (
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">
+              Equipamentos Selecionados
+            </label>
+            <div className="space-y-2">
+              {itensOrcamento.equipamentos.map((e, i) => (
+                <div key={i} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-700 truncate">{e.nome}</p>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-slate-500">{e.qtde}× {e.capacidade_real.toLocaleString('pt-BR')} kcal/h</span>
+                    <span className="text-[10px] font-bold text-blue-600">{e.fluido}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── VOLUME E TROCAS DE AR ── */}
         {dadosGabinete && (

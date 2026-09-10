@@ -323,6 +323,17 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
   Catálogo Mipal Hd/Hdl400 Pro ainda não tem `diametro_ventilador_mm`
   digitado (Elgin tem) — o card mostra "Ø não informado" em vez de esconder
   o campo, pronto pra quando o catálogo for completado.
+- **"Equipamentos Selecionados" fixo no painel da direita (em produção desde
+  2026-09-10):** UC + Evaporadora escolhidas no Card 3 agora aparecem numa
+  seção própria em `PainelResumoLateral.jsx` — visível em **qualquer** card
+  a partir do momento em que "Finalizar Seleção" é confirmado, não só
+  enquanto o Card 3 está expandido (antes a informação só existia dentro do
+  "Detalhe da Etapa Ativa", que troca de conteúdo por card, e sumia ao
+  avançar). Pedido do usuário: ajuda a lembrar os modelos já escolhidos na
+  hora de preencher equipamento extra manualmente no Card 6. A listagem de
+  equipamentos foi tirada do detalhe específico do Card 3 (que ficou só com
+  capacidade nominal + parâmetros de seleção) pra não duplicar quando o
+  Card 3 está aberto.
 
 ---
 
@@ -1187,6 +1198,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 |---------------|--------|
 | Wizard 6 cards | ✅ funcional |
 | Navegação entre cards — scroll automático até o cabeçalho | ✅ em produção desde 2026-09-10 — fix do scroll que ficava preso escondendo o cabeçalho do card novo ao avançar/editar/recolher |
+| Painel lateral — "Equipamentos Selecionados" fixo | ✅ em produção desde 2026-09-10 — UC/Evaporadora do Card 3 visíveis em qualquer card, não só enquanto o Card 3 está aberto |
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
