@@ -207,6 +207,7 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
             consumo_kw=round(consumo_kw, 2) if consumo_kw is not None else None,
             qtde_ventiladores=eq.qtde_ventiladores or None,
             diametro_ventilador_mm=eq.diametro_ventilador_mm or None,
+            tipo_motor=eq.tipo_motor,
         ))
 
     candidatos.sort(key=lambda x: abs(x.diferenca))

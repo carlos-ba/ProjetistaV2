@@ -395,6 +395,22 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
   Catálogo Mipal Hd/Hdl400 Pro ainda não tem `diametro_ventilador_mm`
   digitado (Elgin tem) — o card mostra "Ø não informado" em vez de esconder
   o campo, pronto pra quando o catálogo for completado.
+- **Fix — seleção visual ambígua em modelo com variante AC/EC (2026-09-10):**
+  achado testando em produção — o catálogo Mipal Hd/Hdl400 Pro tem `Equipamento.tipo_motor`
+  (AC/EC, migration 0037) fazendo o mesmo `modelo` físico virar 2 linhas
+  reais no banco com capacidade/vazão diferentes (ex: Hd0318 AC = 28.488
+  kcal/h, Hd0318 EC = 31.337 kcal/h — o próprio `tipo_motor` entra na
+  `UniqueConstraint` da tabela por causa disso). O card de busca (`SelecaoEquipamentos.jsx`)
+  nunca expunha esse campo, e pior: `jaAdicionado()` marcava "Selecionado"
+  comparando `id === id **ou** modelo === modelo` — ao escolher uma das 2
+  variantes, a outra também virava verde, mesmo sem ter sido clicada (a
+  seleção gravada em si sempre esteve correta, só o feedback visual
+  mentia). Corrigido: `jaAdicionado` compara só por `id`;
+  `tipo_motor` exposto em `EquipamentoSelecionado` (schema `selecao.py` +
+  `selecao_equipamentos.py`) e mostrado como selo "MOTOR AC"/"MOTOR EC" no
+  card; o `nome` do item selecionado passa a incluir o motor
+  (`"Hd0318 EC (Mipal)"`) — sem isso, o orçamento/cotação também ficariam
+  ambíguos entre as 2 variantes.
 - **"Equipamentos Selecionados" fixo no painel da direita (em produção desde
   2026-09-10):** UC + Evaporadora escolhidas no Card 3 agora aparecem numa
   seção própria em `PainelResumoLateral.jsx` — visível em **qualquer** card
@@ -1284,6 +1300,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |
 | Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |
 | Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
+| Card 3 — Selo AC/EC + fix de seleção visual ambígua | ✅ em produção desde 2026-09-10 — `jaAdicionado` comparava por modelo (não só id), marcando as 2 variantes de motor como selecionadas |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
 | Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 (capacidades maiores, complementa o T2) desde 2026-09-09 |

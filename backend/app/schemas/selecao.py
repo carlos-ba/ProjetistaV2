@@ -34,3 +34,12 @@ class EquipamentoSelecionado(BaseModel):
     # (ex: Mipal Hd/Hdl400 Pro, 2026-09) — o frontend mostra "não informado"
     # em vez de esconder o campo, pronto pra quando o cadastro for completado.
     diametro_ventilador_mm: int | None = None
+    # AC/EC — mesmo modelo físico pode ter 2 variantes de motor com capacidade/
+    # vazão diferentes (catálogo Mipal Hd/Hdl400 Pro, migration 0037; entra na
+    # UniqueConstraint de Equipamento por causa disso). None quando o fabricante
+    # só publica 1 tipo de motor (não se aplica a distinção). Exposto pro
+    # frontend conseguir diferenciar visualmente 2 cards com o mesmo `modelo`
+    # (fix 2026-09-10 — sem isso, o card não tinha como indicar qual variante
+    # era qual, e a checagem de "já selecionado" comparava por modelo, marcando
+    # as duas variantes como selecionadas ao clicar em uma só).
+    tipo_motor: str | None = None

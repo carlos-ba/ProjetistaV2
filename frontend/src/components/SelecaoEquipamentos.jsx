@@ -154,7 +154,10 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     // Ao escolher uma UC, os evaporadores passam a ser dimensionados pela capacidade dela
     if (abaAtiva === 'Unidade Condensadora') recalcularEvaporadores(item.capacidade_real);
     setSelecionados(prev => [...prev, {
-      nome:              `${item.modelo} (${item.fabricante})`,
+      // AC/EC no nome quando o cadastro distingue (ex: "Hd0318 EC (Mipal)") —
+      // sem isso, 2 variantes do mesmo modelo físico viravam a mesma linha
+      // ambígua na lista de equipamentos, no orçamento e na cotação.
+      nome:              `${item.modelo}${item.tipo_motor ? ' ' + item.tipo_motor : ''} (${item.fabricante})`,
       preco:             item.preco,
       qtde:              qtd,
       detalhe:           `${fmtQtd(item.capacidade_real)} kcal/h`,
@@ -164,6 +167,7 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
       temp_evap:         evap,
       temp_cond:         cond,
       modelo:            item.modelo,
+      tipo_motor:        item.tipo_motor ?? null,
       id:                item.id,
       categoria:         abaAtiva,
       tipo_item:         abaAtiva === 'Unidade Condensadora' ? 'unidade_condensadora' : 'evaporadora',
@@ -188,7 +192,10 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     if (aoFinalizar) aoFinalizar(selecionados);
   };
 
-  const jaAdicionado = (item) => selecionados.some(s => s.id === item.id || s.modelo === item.modelo);
+  // Só por id — comparar por modelo também marcava as duas variantes AC/EC do
+  // mesmo modelo físico (ex: Hd0318 AC + Hd0318 EC, catálogo Mipal) como
+  // selecionadas ao clicar em uma só, mesmo id sendo diferente (fix 2026-09-10).
+  const jaAdicionado = (item) => selecionados.some(s => s.id === item.id);
 
   const temResultados = resultadosUC.length > 0 || resultadosEvap.length > 0;
 
@@ -349,7 +356,17 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
                       }`}>
                         {label}
                       </span>
-                      <h4 className="text-lg font-bold text-slate-800 mt-2 line-clamp-1">{item.modelo}</h4>
+                      <h4 className="text-lg font-bold text-slate-800 mt-2 line-clamp-1 flex items-center gap-1.5">
+                        {item.modelo}
+                        {/* Mesmo modelo físico pode ter variante AC/EC de motor, com
+                            capacidade/vazão diferentes (catálogo Mipal Hd/Hdl400 Pro) —
+                            sem esse selo, os 2 cards pareciam duplicados (fix 2026-09-10). */}
+                        {item.tipo_motor && (
+                          <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700 text-white">
+                            Motor {item.tipo_motor}
+                          </span>
+                        )}
+                      </h4>
                       <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">{item.fabricante}</p>
                     </div>
 
