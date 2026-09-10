@@ -673,7 +673,23 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   {cargaFluido && (
                     <div className="text-right">
                       <div className="text-2xl font-black text-indigo-700">{fmtQtd(cargaFluido.carga_total_kg)} kg</div>
-                      <div className="text-[10px] text-indigo-400 font-bold">CARGA TOTAL</div>
+                      {/* Achado testando em produção (2026-09-10): "CARGA TOTAL" sozinho
+                          confundia com >1 circuito — esse valor é só de 1 circuito, o
+                          real total (enviado ao orçamento) só aparece depois de
+                          multiplicado por numCircuitos em escalarPorCircuitos(). */}
+                      <div className="text-[10px] text-indigo-400 font-bold">
+                        {(parseInt(numCircuitos) || 1) > 1 ? 'CARGA POR CIRCUITO' : 'CARGA TOTAL'}
+                      </div>
+                      {(parseInt(numCircuitos) || 1) > 1 && (
+                        <div className="mt-1.5 pt-1.5 border-t border-indigo-200">
+                          <div className="text-lg font-black text-indigo-900">
+                            {fmtQtd(cargaFluido.carga_total_kg * (parseInt(numCircuitos) || 1))} kg
+                          </div>
+                          <div className="text-[10px] text-indigo-500 font-bold">
+                            CARGA TOTAL ({numCircuitos} circuitos)
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

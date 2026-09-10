@@ -459,6 +459,26 @@ via helper compartilhado `desmembrarItem()` em `ComponentesFluxo.jsx`:
   (genérica, sem tensão — modelagem de tensão por bobina fica pra uma revisão
   futura, decisão consciente pra não atrasar o lançamento).
 
+**Multiplicação por circuitos (`numCircuitos`, do Card 3):** cada circuito é
+uma cópia da mesma UC, então todo componente de fluxo do Card 5 é 1 por
+circuito. `escalarPorCircuitos()` (`ComponentesFluxo.jsx`) multiplica a
+`quantidade` de **todo item** da lista (VET, separadores, solenoide, tanque,
+cavalete, **carga de fluido** — sem exceção) por `numCircuitos` no momento
+de finalizar, antes de mandar pro orçamento — os cards do Card 5 sempre
+mostram o valor de **1 circuito só**, com aviso explícito no topo
+("🔁 N circuitos... os cards abaixo mostram o valor por circuito").
+- **Confirmado com dado real (2026-09-10)**, checando fim a fim até o
+  Card 6: usuário desconfiou que a carga de fluido não estava sendo
+  multiplicada (o card mostrava só "17,76 kg" pra um projeto de 3
+  circuitos) — na real a multiplicação sempre funcionou certo (verificado:
+  valor por circuito × N bate exatamente com o que chega no Card 6), o
+  problema era só o **rótulo** "CARGA TOTAL" no card de Estimativa de
+  Carga de Fluido, que não deixava claro ser só de 1 circuito. Corrigido:
+  rótulo vira **"CARGA POR CIRCUITO"** quando há mais de 1 circuito, com
+  uma segunda linha abaixo mostrando o total real (**"CARGA TOTAL (N
+  circuitos)"** = valor do card × N). Com 1 circuito só, comportamento
+  inalterado ("CARGA TOTAL" simples, sem linha extra).
+
 **Modo Engenharia**:
 - Abre CoolSelector®2 Online (Danfoss) para seleção manual
 - Mostra parâmetros do projeto (fluido, T.Evap, T.Cond, capacidade em kW)
