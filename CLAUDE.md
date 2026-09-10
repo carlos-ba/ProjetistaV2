@@ -284,6 +284,39 @@ Em produção desde 2026-09-02. Decisão combinada com o usuário em 2026-08-17
 
 ---
 
+## Card 1 — Painéis de Teto/Piso divididos pela auto-portância (em produção desde 2026-09-10)
+
+Achado do usuário: quando a **largura** da câmara excede a **auto-portância**
+do painel (`auto_portancia_mm`, campo do catálogo — vão máximo sem apoio,
+já exibido no card de especificação do painel, mas até então não usado em
+nenhum cálculo), uma peça única cobrindo a largura inteira não é
+estruturalmente válida — precisa dividir em pedaços iguais dentro do limite.
+
+- **Regra**: `N = ceil(largura / auto_portância)`, cada pedaço mede
+  `largura / N` (pedaços **iguais**, não "auto_portância + sobra"). Exemplos
+  confirmados com o usuário: largura 10m / auto-portância 7m → 2 peças de
+  5,00m; largura 20m / auto-portância 6m, 5 fileiras no comprimento → 5×4 =
+  20 painéis de 5,00m.
+- **Aplica em Teto e Piso em painel** — mesma estrutura de cálculo nos dois
+  (`qtde = fileiras_no_comprimento × N`, `comprimento_peça = largura / N`),
+  por pedido explícito do usuário (mesma orientação do Teto).
+- Helper `_dividir_por_autoportancia()` em `calculos_gabinete.py` — sem
+  `auto_portancia_mm` (campo opcional) ou com largura já dentro do limite,
+  mantém 1 peça só (comportamento anterior a esta regra, sem quebrar nada).
+- `auto_portancia_mm` novo em `GabineteRequest` — frontend já tinha o dado
+  (`painelSelecionado.auto_portancia_mm`, usado só pra exibição até então),
+  só precisou entrar no payload de `POST /api/v1/gabinete`
+  (`CalculadoraGabinete.jsx`).
+- **Catálogo já 100% completo pra essa regra** — checado no banco antes de
+  implementar: os 37 painéis cadastrados (16 Kingspan Isoeste + 21 MBP
+  Isoblock) têm `auto_portancia_mm` preenchido, nenhum fallback de "dado
+  faltando" foi necessário.
+- Testado via API direta (os 2 exemplos acima, mais o caso sem divisão) e
+  pela tela real (MBP Isoblock PIR 150mm, largura 10m → 10 painéis de teto
+  e 10 de piso, 5,00m cada).
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
@@ -1205,6 +1238,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
+| Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |
 | Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |

@@ -14,6 +14,7 @@ class GabineteRequest(BaseModel):
     largura: float
     altura: float
     largura_painel: float
+    auto_portancia_mm: float | None = None  # vão máximo sem apoio (catálogo do painel) — divide teto/piso quando a largura excede
     espessura_mm: float = 100.0
     nucleo: str = "PUR"
     tipo_piso: str = "nenhum"

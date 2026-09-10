@@ -424,6 +424,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         altura:      parseFloat(altura),
         temperatura_interna:  parseFloat(temperaturaInterna),
         largura_painel:       painelSelecionado.largura_mm / 1000.0,
+        auto_portancia_mm:    painelSelecionado.auto_portancia_mm ?? null,
         espessura_mm:         painelSelecionado.espessura_mm,
         nucleo:               painelSelecionado.nucleo,
         tipo_piso:            tipoPiso,

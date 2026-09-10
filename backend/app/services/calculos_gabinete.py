@@ -3,6 +3,23 @@ import math
 from app.schemas.gabinete import GabineteRequest, GabineteResponse, ItemCorte, MaterialExtra
 
 
+def _dividir_por_autoportancia(vao: float, auto_portancia_mm: float | None) -> tuple[int, float]:
+    """Divide um vão (largura do teto/piso) em pedaços iguais dentro da
+    auto-portância do painel (vão máximo sem apoio, catálogo) — sem isso, uma
+    câmara larga pediria uma peça única maior do que o painel suporta
+    estruturalmente. Pedaços iguais, não pedaços do tamanho máximo da
+    auto-portância + sobra (ex: vão 10m / auto-portância 7m → 2 peças de 5m,
+    não 7m + 3m). Sem auto_portancia cadastrada, mantém 1 peça (comportamento
+    anterior à esta regra)."""
+    if not auto_portancia_mm:
+        return 1, vao
+    auto_portancia_m = auto_portancia_mm / 1000.0
+    if vao <= auto_portancia_m:
+        return 1, vao
+    num_pecas = math.ceil(vao / auto_portancia_m)
+    return num_pecas, round(vao / num_pecas, 3)
+
+
 def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
     esp_m = req.espessura_mm / 1000.0             # espessura do painel (teto/piso)
     concreto_m = req.espessura_concreto_cm / 100.0
@@ -40,15 +57,21 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
     ))
 
     # Teto
-    qtde_teto = math.ceil(req.comprimento / req.largura_painel)
-    area_teto = qtde_teto * req.largura * req.largura_painel
+    fileiras_teto = math.ceil(req.comprimento / req.largura_painel)
+    num_pecas_teto, comp_peca_teto = _dividir_por_autoportancia(req.largura, req.auto_portancia_mm)
+    qtde_teto = fileiras_teto * num_pecas_teto
+    area_teto = qtde_teto * comp_peca_teto * req.largura_painel
     area_total_paineis += area_teto
+    descricao_teto = (
+        f"Peças de {comp_peca_teto}m (Largura)" if num_pecas_teto == 1
+        else f"Peças de {comp_peca_teto}m ({num_pecas_teto}x por fileira — largura dividida pela auto-portância do painel)"
+    )
     lista_corte.append(ItemCorte(
         item="Painéis de Teto",
         quantidade=int(qtde_teto),
-        comprimento=req.largura,
+        comprimento=comp_peca_teto,
         area_total=round(area_teto, 2),
-        descricao=f"Peças de {req.largura}m (Largura)",
+        descricao=descricao_teto,
         tipo_item="painel_teto",
     ))
 
@@ -57,15 +80,21 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
     area_piso = 0.0        # só "convencional" usa — alimenta a barreira de vapor (resolvida à parte, depende do banco)
     volume_concreto = 0.0  # idem — só informativo no Card 1, não é MaterialExtra (obra civil, não é peça de refrigeração)
     if req.tipo_piso == "painel":
-        qtde_piso = math.ceil(req.comprimento / req.largura_painel)
-        area_piso_painel = qtde_piso * req.largura * req.largura_painel
+        fileiras_piso = math.ceil(req.comprimento / req.largura_painel)
+        num_pecas_piso, comp_peca_piso = _dividir_por_autoportancia(req.largura, req.auto_portancia_mm)
+        qtde_piso = fileiras_piso * num_pecas_piso
+        area_piso_painel = qtde_piso * comp_peca_piso * req.largura_painel
         area_total_paineis += area_piso_painel
+        descricao_piso = (
+            f"Peças de {comp_peca_piso}m (Largura)" if num_pecas_piso == 1
+            else f"Peças de {comp_peca_piso}m ({num_pecas_piso}x por fileira — largura dividida pela auto-portância do painel)"
+        )
         lista_corte.append(ItemCorte(
             item="Painéis de Piso",
             quantidade=int(qtde_piso),
-            comprimento=req.largura,
+            comprimento=comp_peca_piso,
             area_total=round(area_piso_painel, 2),
-            descricao=f"Peças de {req.largura}m (Largura)",
+            descricao=descricao_piso,
             tipo_item="painel_piso",
         ))
         altura_util -= esp_m
