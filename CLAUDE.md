@@ -973,6 +973,16 @@ autenticação de origem).
   verdade assim que a TheMembers responder com o mecanismo real (ou migrar
   pra outra estratégia, tipo checar IP de origem deles, se a documentação
   publicar uma faixa).
+- **Cliente real (`projetos@jetfrio.com.br`, empresa TESTEFINAL) ativada
+  manualmente em 2026-09-10** — validado primeiro com um teste sintético
+  ponta a ponta numa conta descartável (`release.access` direto no endpoint
+  aberto, confirmado via `/me` que `empresa_status` vira `ativa`), depois
+  replicado pra ela de verdade: `release.access` (produto Mensal) +
+  `subscription.date_changed` (`next_billing_at` = +30 dias, já que o
+  payload real de `release.access` não carrega isso — mesmo achado de
+  2026-09-04) reenviados manualmente contra o endpoint em produção.
+  Confirmado no painel Administração: badge trocou de TRIAL pra ATIVA,
+  validade 2026-10-10. Pendência do "cliente sem ativação" **resolvida**.
 
 **Status anterior (2026-09-09, diagnóstico com dado real) — histórico:**
 endpoint seguia quebrado com autenticação ligada. Log de diagnóstico temporário (commits `48f50f0`,
