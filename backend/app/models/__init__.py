@@ -23,7 +23,7 @@ from app.models.peso_tubo_cobre import PesoTuboCobre
 from app.models.classificacao import BlocoOrcamento, ClassificacaoItem, ItemClassificacao
 from app.models.embalagem_fluido import EmbalagemFluido
 from app.models.perfil_metalico import PerfilMetalico
-from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
+from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha, BarraRoscadaPerfilT
 from app.models.apelido_fornecedor_item import ApelidoFornecedorItem
 from app.models.catalogo_generico import CatalogoGenerico
 from app.models.webhook_checkout_evento import WebhookCheckoutEvento
@@ -62,6 +62,7 @@ __all__ = [
     "SelanteMontagem",
     "Rebite",
     "ParafusoBucha",
+    "BarraRoscadaPerfilT",
     "ApelidoFornecedorItem",
     "CatalogoGenerico",
     "WebhookCheckoutEvento",

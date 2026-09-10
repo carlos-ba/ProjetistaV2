@@ -41,3 +41,18 @@ class ParafusoBucha(Base):
     descricao: Mapped[str] = mapped_column(String(200), nullable=False)
 
     fabricante: Mapped["Fabricante"] = relationship()
+
+
+class BarraRoscadaPerfilT(Base):
+    """Conjunto barra roscada 3/8 + suporte/trava do Perfil T — sustenta as
+    linhas de Perfil T que seguram o teto dividido pela auto-portância.
+    Rastreado como 1 item só (kit), mesmo padrão de ParafusoBucha."""
+
+    __tablename__ = "barra_roscada_perfil_t"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    fabricante_id: Mapped[int] = mapped_column(ForeignKey("fabricante.id"), nullable=False)
+    codigo_fabricante: Mapped[str] = mapped_column(String(50), nullable=False)
+    descricao: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    fabricante: Mapped["Fabricante"] = relationship()

@@ -75,3 +75,9 @@ class GabineteResponse(BaseModel):
     # Avisos de catálogo faltando — agrega tanto o kit de montagem quanto a
     # barreira de vapor (mesmo mecanismo, mesmo banner no Card 1; ver CLAUDE.md).
     avisos_kit_montagem: list[str] = []
+    # Nº de linhas de Perfil T (sustentação do teto dividido pela auto-portância) —
+    # num_pecas_teto - 1 (as 2 pontas da largura apoiam na parede, só as juntas
+    # internas precisam de sustentação). 0 quando o teto não foi dividido.
+    # Alimenta o kit de montagem (feito à parte, depende do banco), sem duplicar
+    # a geometria aqui — mesmo padrão de comp_parede_m/area_total_paineis_m2.
+    linhas_sustentacao_perfil_t: int = 0

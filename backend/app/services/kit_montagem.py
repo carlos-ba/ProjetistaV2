@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.perfil_metalico import PerfilMetalico
-from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha
+from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha, BarraRoscadaPerfilT
 from app.schemas.gabinete import MaterialExtra, PerfilManualItem
 
 
@@ -65,6 +65,8 @@ async def calcular_kit_montagem(
     rendimento_selante_m_por_embalagem: float,
     fator_seguranca_selante: float,
     perfis_manuais: list[PerfilManualItem],
+    largura_painel: float,
+    linhas_sustentacao_perfil_t: int = 0,
 ) -> tuple[list[MaterialExtra], list[str]]:
     itens: list[MaterialExtra] = []
     avisos: list[str] = []
@@ -219,6 +221,66 @@ async def calcular_kit_montagem(
             unidade="un",
             detalhe=f"{parafuso.descricao} ({parafuso.codigo_fabricante}) — 1 linha a cada 500mm no perfil U, {metros_perfil_u:.1f}m",
             tipo_item="parafuso_bucha",
+        ))
+
+    # Perfil T: sustenta o teto dividido pela auto-portância (2026-09-10) — 1
+    # linha de Perfil T por junta interna entre pedaços de teto ao longo de
+    # todo o comprimento da câmara (as 2 pontas da largura apoiam direto na
+    # parede, só as juntas internas precisam). linhas_sustentacao_perfil_t
+    # já vem calculado (num_pecas_teto - 1) de calculos_gabinete.py — 0
+    # quando o teto não foi dividido (largura já cabe na auto-portância).
+    metros_perfil_t_real = 0.0
+    if linhas_sustentacao_perfil_t > 0:
+        necessario_perfil_t = comprimento * linhas_sustentacao_perfil_t
+        perfil_t = (await db.execute(
+            select(PerfilMetalico)
+            .where(PerfilMetalico.tipo == "T")
+            .order_by(PerfilMetalico.comprimento_mm.desc())
+            .limit(1)
+        )).scalars().first()
+        if not perfil_t:
+            avisos.append(
+                "Nenhum Perfil T cadastrado no catálogo — item não incluído na lista. "
+                "Cadastre o perfil ou adicione manualmente."
+            )
+        if perfil_t:
+            compr_m = perfil_t.comprimento_mm / 1000.0
+            barras_t = math.ceil(necessario_perfil_t / compr_m)
+            metros_perfil_t_real = barras_t * compr_m
+            itens.append(MaterialExtra(
+                item="Perfil T",
+                qtd=f"{barras_t} barra(s)",
+                quantidade=float(barras_t),
+                unidade="barra",
+                detalhe=(
+                    f"{perfil_t.medida_1_mm}x{perfil_t.medida_2_mm}x{perfil_t.medida_3_mm}x{perfil_t.comprimento_mm}mm — "
+                    f"{necessario_perfil_t:.2f}m necessários, {linhas_sustentacao_perfil_t} linha(s) de sustentação "
+                    f"({perfil_t.codigo_fabricante})"
+                ),
+                tipo_item="perfil_t",
+            ))
+
+    # Barra Roscada 3/8 (sustentação do Perfil T): 1 kit a cada largura de
+    # painel de parede, ao longo do metro REAL de Perfil T comprado (barras
+    # já arredondadas pra cima) — mesmo critério do Rebite/Parafuso+Bucha,
+    # que também contam em cima do metro real de perfil, não do teórico.
+    barras_roscadas = math.ceil(metros_perfil_t_real / largura_painel) if metros_perfil_t_real > 0 else 0
+    barra_roscada = (await db.execute(
+        select(BarraRoscadaPerfilT).order_by(BarraRoscadaPerfilT.id).limit(1)
+    )).scalars().first()
+    if not barra_roscada and barras_roscadas > 0:
+        avisos.append("Nenhum Conjunto Barra Roscada + Suporte Perfil T cadastrado no catálogo — item não incluído na lista.")
+    if barra_roscada and barras_roscadas > 0:
+        itens.append(MaterialExtra(
+            item="Barra Roscada (Perfil T)",
+            qtd=f"{barras_roscadas} un.",
+            quantidade=float(barras_roscadas),
+            unidade="un",
+            detalhe=(
+                f"{barra_roscada.descricao} ({barra_roscada.codigo_fabricante}) — "
+                f"1 a cada {largura_painel:.2f}m de perfil T, {metros_perfil_t_real:.1f}m"
+            ),
+            tipo_item="barra_roscada_perfil_t",
         ))
 
     return itens, avisos

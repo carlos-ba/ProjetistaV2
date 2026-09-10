@@ -127,4 +127,5 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         area_total_paineis_m2=round(area_total_paineis, 2),
         area_piso_m2=round(area_piso, 2),
         volume_concreto_m3=volume_concreto,
+        linhas_sustentacao_perfil_t=max(num_pecas_teto - 1, 0),
     )

@@ -315,6 +315,45 @@ estruturalmente válida — precisa dividir em pedaços iguais dentro do limite.
   pela tela real (MBP Isoblock PIR 150mm, largura 10m → 10 painéis de teto
   e 10 de piso, 5,00m cada).
 
+### Acessórios de sustentação do teto dividido — Perfil T + Barra Roscada (migration 0040)
+
+O teto dividido em N pedaços por fileira tem `N-1` juntas internas por
+fileira (as 2 pontas da largura continuam apoiadas na parede) — cada junta
+se repete em todas as fileiras ao longo do comprimento, formando uma linha
+contínua de sustentação. Só teto, não piso (piso se apoia no chão).
+
+- **Perfil T** (`PERFIL T ALUMINIO BRANCO 3X80X40X6000MM`, MBP Isoblock):
+  `metros_necessários = comprimento_câmara × (N-1)`; barras de 6m,
+  arredondado pra cima (`math.ceil`) — se sobrar, entra 1 barra a mais
+  (pedido explícito do usuário). Zero quando `N=1` (teto não dividido).
+- **Barra Roscada 3/8** (`CJ BARRA ROSCADA 3/8 + SUPORTE TRAVA PERFIL T
+  1000MM`): 1 kit a cada `largura_painel` (o mesmo painel de parede do
+  projeto) — calculado sobre o metro **real** de Perfil T comprado (barras
+  já arredondadas pra 6m), não sobre o metro teórico necessário — mesmo
+  critério que Rebite/Parafuso+Bucha já usam em `kit_montagem.py`.
+- **Catálogo**: Perfil T entra na tabela `perfil_metalico` já existente
+  (`tipo="T"`, genérica o suficiente: medida_1=espessura da alma/3mm,
+  medida_2=base/80mm, medida_3=alma/40mm, comprimento=6000mm) — busca
+  simples por `tipo`, sem "aba padrão" configurável (só 1 spec cadastrada,
+  diferente de Ângulo/U). Barra Roscada é tabela nova, `barra_roscada_
+  perfil_t`, mesmo molde de Rebite/ParafusoBucha (cadastro simples,
+  fabricante + código + descrição). Os 2 novos `tipo_item` (`perfil_t`,
+  `barra_roscada_perfil_t`) entram na mesma classificação "Acessórios de
+  Montagem" (id=5) dos outros itens do kit.
+- **Código de fabricante pendente**: nenhum código MBP real foi informado
+  pra nenhum dos 2 itens — cadastrados com código placeholder
+  (`PLACEHOLDER-PERFIL-T-...`/`PLACEHOLDER-BARRA-ROSCADA-...`, formato
+  propositalmente diferente de um código MBP real pra não confundir).
+  Trocar por migration pequena assim que o usuário confirmar o código.
+- `linhas_sustentacao_perfil_t` (= N-1) exposto em `GabineteResponse`,
+  calculado em `calculos_gabinete.py`, alimenta `kit_montagem.py` (que
+  depende do banco) sem duplicar a geometria — mesmo padrão de
+  `comp_parede_m`/`area_total_paineis_m2`.
+- Testado via API direta (linhas de sustentação 1 e 3, batendo com os 2
+  exemplos da regra de divisão acima) e pela tela real — sem mudança
+  nenhuma no frontend, os itens já aparecem na lista de materiais porque
+  `MaterialExtra` já é renderizado de forma genérica.
+
 ---
 
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
@@ -718,7 +757,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0039)
+## Banco de Dados — Migrations (0001→0040)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -761,6 +800,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0037 | Evolução de `Equipamento`/`PerformanceEquipamento` pra catálogos mais ricos (AC/EC como identidade, dimensões, peso, ruído, carga de refrigerante publicada, `FatorCorrecaoFluido`, `EquipamentoVarianteEletrica`, `EquipamentoResistenciaDegelo`, biblioteca técnica) — motivada pelo catálogo Mipal Hd/Hdl400 Pro |
 | 0038 | Campos de compressor de UC em `Equipamento` (volume deslocado, potência nominal, corrente/potência do motor do ventilador, capacitor, resistência de cárter) + `codigo_fabricante`/`corrente_partida_a` em `EquipamentoVarianteEletrica` — motivada pelo catálogo Bitzer Combat/Combat+/BIG CDU |
 | 0039 | Seed do catálogo VET Danfoss TE5-TE55 (14 `componente_tecnico` + 938 `performance_componente`, 7 fluidos, T.Cond fixo 45°C) — cobre a capacidade que o corpo T2 (até ~17,7 mil kcal/h) não alcançava mais pros UCs Bitzer grandes |
+| 0040 | Perfil T (novo `tipo` em `perfil_metalico`) + tabela `barra_roscada_perfil_t` — sustentação do teto dividido pela auto-portância (ver seção própria acima); código de fabricante ainda placeholder, pendente confirmação |
 
 ---
 
@@ -1239,6 +1279,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
+| Card 1 — Perfil T + Barra Roscada (sustentação do teto dividido) | ✅ em produção desde 2026-09-10 (migration 0040) — código de fabricante MBP ainda placeholder, pendente confirmação |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |
 | Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |
