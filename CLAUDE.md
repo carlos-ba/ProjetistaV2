@@ -333,7 +333,9 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
   hora de preencher equipamento extra manualmente no Card 6. A listagem de
   equipamentos foi tirada do detalhe específico do Card 3 (que ficou só com
   capacidade nominal + parâmetros de seleção) pra não duplicar quando o
-  Card 3 está aberto.
+  Card 3 está aberto. Fundo dos cards de equipamento em azul mais escuro
+  (`bg-blue-100`/`border-blue-200`, pedido do usuário) — se destaca dos
+  demais chips cinza (`bg-slate-50`) do painel.
 
 ---
 

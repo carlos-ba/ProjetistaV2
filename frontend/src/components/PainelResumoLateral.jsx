@@ -359,11 +359,11 @@ const PainelResumoLateral = ({
             </label>
             <div className="space-y-2">
               {itensOrcamento.equipamentos.map((e, i) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                <div key={i} className="bg-blue-100 rounded-lg p-3 border border-blue-200">
                   <p className="text-xs font-bold text-slate-700 truncate">{e.nome}</p>
                   <div className="flex justify-between mt-1">
                     <span className="text-[10px] text-slate-500">{e.qtde}× {e.capacidade_real.toLocaleString('pt-BR')} kcal/h</span>
-                    <span className="text-[10px] font-bold text-blue-600">{e.fluido}</span>
+                    <span className="text-[10px] font-bold text-blue-700">{e.fluido}</span>
                   </div>
                 </div>
               ))}
