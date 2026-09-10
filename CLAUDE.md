@@ -864,11 +864,20 @@ pagamento troca `status_assinatura` pra `"ativa"`, nunca o `plano`.
 - `UserOut`/`Usuario` expõem `empresa_assinatura_fim` (date) e
   `empresa_trial_expirado` (bool) — o frontend lê o boolean pronto, não
   recalcula data.
-- Frontend (`App.jsx`): aviso de assinatura com três ramos explícitos
-  (suspensa / cancelada / trial — antes um `!== 'ativa'` genérico conflava
-  os três, o que quebraria a UI de todo trial novo). Trial mostra contagem
+- Frontend (`App.jsx`): aviso de assinatura com quatro ramos explícitos
+  (suspensa / cancelada / trial / **ativa**, este último em produção desde
+  2026-09-10 — antes um `!== 'ativa'` genérico conflava os três primeiros,
+  o que quebraria a UI de todo trial novo). Trial mostra contagem
   regressiva real; vencido, mostra aviso vermelho e desabilita
-  "Salvar"/"Salvar Como".
+  "Salvar"/"Salvar Como". **Ativa** mostra "Válido até DD/MM/AAAA"
+  (`toLocaleDateString('pt-BR')`, mesmo padrão já usado alhures no
+  arquivo) só quando `empresa_assinatura_fim` existe — achado pelo
+  usuário testando a conta real que acabou de virar `ativa` (seção
+  "Reconhecimento de pagamento" acima): cliente pagante não tinha
+  nenhuma visibilidade de quando a assinatura renova. Contas Semestral/
+  Premium sem `expires_in` real da TheMembers ficam sem essa data (ver
+  pendência documentada na seção do webhook) — nesse caso o texto
+  simplesmente não aparece, sem inventar prazo.
 - **Trava de edição nos Cards 1-5 (em produção desde 2026-08-31):** o backend
   só bloqueia `POST`/`PATCH /api/v1/projetos` — todo o resto (cálculos de
   cada card, geração de orçamento, export Excel/PDF) roda sem nenhuma

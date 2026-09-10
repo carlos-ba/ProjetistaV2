@@ -601,6 +601,11 @@ function AppContent({ catalogo }) {
                   </span>
                 </div>
               )}
+              {user.empresa_status === 'ativa' && user.empresa_assinatura_fim && (
+                <p className="mt-1 text-[9px] text-muted-foreground">
+                  Válido até {new Date(`${user.empresa_assinatura_fim}T00:00:00`).toLocaleDateString('pt-BR')}
+                </p>
+              )}
             </div>
           )}
         </div>
