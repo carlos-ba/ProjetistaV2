@@ -127,6 +127,43 @@ O fluxo é um wizard linear. Cada card passa dados para o próximo via callbacks
 
 ---
 
+## Navegação entre Cards — Scroll automático (em produção desde 2026-09-10)
+
+Achado testando em telas de resolução menor: ao avançar de card (ex: clicar
+"Avançar" no Card 1 → Card 2), o scroll ficava parado no mesmo `scrollTop`
+em pixels de antes, e a página escondia o cabeçalho do card novo — usuário
+tinha que rolar pra cima manualmente pra achar onde estava. Causa raiz: os 6
+`EtapaCard` ficam **sempre montados no DOM**, só alternando `hidden`/`block`
+via CSS (`EtapaCard.jsx`) — ao colapsar um card grande (ex: form do Card 1
+inteiro) e expandir o próximo, a altura acima do card novo muda
+drasticamente, mas nada recompensava o scroll. Nenhum código de scroll
+existia antes disso — o `window.scrollTo` do botão "Novo" (`App.jsx`) já
+era código morto, porque a área que realmente rola é o `<main
+overflow-y-auto>` interno (raiz do app é `h-screen overflow-hidden`), não a
+`window`.
+
+- **Fix**: `EtapaCard.jsx` virou `forwardRef`, expondo o elemento raiz do
+  card. `App.jsx` guarda 1 ref por card (`cardRefs`, numero→elemento) e tem
+  **um único `useEffect`** observando `passoExpandido` — sempre que muda,
+  rola até o card certo (`scrollIntoView({block:'start'})`, dentro do
+  `<main>`). Cobre os 5 "Avançar" (todos passam por `confirmarAvanco`),
+  "Editar" (pular pra qualquer card concluído), carregar projeto salvo
+  (pula direto pro card mais avançado com dados) e o atalho "ver orçamento"
+  — todos só mudam esse mesmo state, então um efeito só resolve tudo, sem
+  duplicar lógica em cada handler.
+- **"Recolher" sem expandir outro** (fecha o card, `passoExpandido` vira
+  `null`) também tratado — uma ref guarda o card anterior, e o efeito rola
+  até o cabeçalho dele (senão a viewport ficava largada num ponto qualquer
+  depois de colapsar).
+- Testado manualmente a jornada inteira Card 1→6 (todos os 5 "Avançar" +
+  "Editar" + "Recolher") — cabeçalho sempre visível no topo em cada
+  transição, sem regressão. `carregarProjeto`/`irParaOrcamento` não foram
+  re-testados manualmente (usam o mesmo `setPassoExpandido` observado pelo
+  mesmo efeito — coberto pelo mesmo caminho de código, não por ser um caso
+  especial).
+
+---
+
 ## Card 1 — Kit de Montagem (perfis, selante, rebite, parafuso+bucha)
 
 Em produção desde 2026-09-01. Arquivos: `backend/app/services/kit_montagem.py`
@@ -1144,11 +1181,12 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-09)
+## Estado atual do código (auditado em 2026-09-10)
 
 | Funcionalidade | Status |
 |---------------|--------|
 | Wizard 6 cards | ✅ funcional |
+| Navegação entre cards — scroll automático até o cabeçalho | ✅ em produção desde 2026-09-10 — fix do scroll que ficava preso escondendo o cabeçalho do card novo ao avançar/editar/recolher |
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |

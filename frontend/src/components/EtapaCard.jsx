@@ -1,9 +1,10 @@
+import { forwardRef } from "react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, Lock, Pencil, ChevronDown, ChevronUp, ChevronRight, AlertTriangle } from "lucide-react"
 
-const EtapaCard = ({
+const EtapaCard = forwardRef(({
   numero,
   titulo,
   icone,
@@ -21,7 +22,7 @@ const EtapaCard = ({
   onConfirmar,        // () => void — avança para próxima etapa
   onRecusar,          // () => void — fica na etapa atual
   children,
-}) => {
+}, ref) => {
 
   // Com trial vencido, o card nunca renderiza expandido — mesmo que já tivesse
   // aberto por padrão (ex: Card 1 de um projeto novo/incompleto, sem precisar
@@ -43,7 +44,7 @@ const EtapaCard = ({
   }
 
   return (
-    <div className={cn(
+    <div ref={ref} className={cn(
       "rounded-xl border bg-card text-card-foreground shadow-sm transition-all duration-300",
       expandido     && "border-primary shadow-md shadow-primary/10",
       selecionado   && !expandido && "border-primary/30",
@@ -199,6 +200,8 @@ const EtapaCard = ({
       )}
     </div>
   )
-}
+})
+
+EtapaCard.displayName = "EtapaCard"
 
 export default EtapaCard

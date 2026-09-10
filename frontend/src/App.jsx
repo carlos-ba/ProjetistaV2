@@ -74,6 +74,14 @@ function AppContent({ catalogo }) {
   const [passoExpandido, setPassoExpandido] = useState(1);
   const [passoSelecionado, setPassoSelecionado] = useState(1);
   const [proximaEtapa, setProximaEtapa] = useState(null); // {numero, label} — aguardando confirmação do usuário
+  // Refs dos 6 EtapaCard (numero → elemento DOM) — usados para rolar até o
+  // card certo sempre que passoExpandido muda (avançar, editar, carregar
+  // projeto, recolher). Sem isso, o card anterior colapsa/expande via
+  // display:none↔block e o navegador não recompensa o scroll: a viewport
+  // fica presa no mesmo scrollTop em pixels, que aponta pro meio do card
+  // novo em vez do cabeçalho dele.
+  const cardRefs = useRef({});
+  const passoExpandidoAnteriorRef = useRef(1);
   const [salvando, setSalvando] = useState(false);
   const [projetoAtual, setProjetoAtual] = useState(null); // { id, nome, cliente } ou null se novo
   const [listaProjetos, setListaProjetos] = useState([]);
@@ -118,6 +126,19 @@ function AppContent({ catalogo }) {
 
   // Carrega perfil de montagem ativo no boot
   useEffect(() => { carregarPerfilAtivo(); }, [carregarPerfilAtivo]);
+
+  // Rola até o card que ficou expandido (ou, ao recolher sem expandir outro,
+  // até o card que acabou de colapsar) sempre que passoExpandido muda —
+  // cobre avançar etapa, editar, recolher, carregar projeto salvo e o atalho
+  // "ver orçamento", já que todos só mudam esse mesmo state.
+  useEffect(() => {
+    const alvo = passoExpandido ?? passoExpandidoAnteriorRef.current;
+    const el = alvo != null ? cardRefs.current[alvo] : null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    passoExpandidoAnteriorRef.current = passoExpandido;
+  }, [passoExpandido]);
 
   // Reconstrói materiais do orçamento sempre que qualquer fonte muda.
   // Ordem: gabinete (painéis) → acessórios (VET, separador) → tubulação (tubos, isolamento)
@@ -351,7 +372,9 @@ function AppContent({ catalogo }) {
     // projetoKey incrementado remonta TODOS os cards (key propagada)
     setProjetoKey(k => k + 1);
     setPassoExpandido(1); setPassoSelecionado(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Scroll até o Card 1 é tratado pelo useEffect de passoExpandido — window.scrollTo
+    // não tinha efeito aqui: a área que rola de verdade é o <main overflow-y-auto>,
+    // não o window (o container raiz é h-screen overflow-hidden).
   };
 
   const _montarPayload = (nome, cliente) => ({
@@ -872,6 +895,7 @@ function AppContent({ catalogo }) {
 
             {/* 1. Gabinete */}
             <EtapaCard
+              ref={el => (cardRefs.current[1] = el)}
               numero={1} titulo="Configuração do Gabinete" icone="📏"
               status={statusEtapa(1)} resumo={resumoEtapa(1)}
               bloqueadoTrial={!!user?.empresa_trial_expirado}
@@ -899,6 +923,7 @@ function AppContent({ catalogo }) {
 
             {/* 2. Carga Térmica */}
             <EtapaCard
+              ref={el => (cardRefs.current[2] = el)}
               numero={2} titulo="Cálculo de Carga Térmica" icone="❄️"
               status={statusEtapa(2)} resumo={resumoEtapa(2)}
               bloqueadoTrial={!!user?.empresa_trial_expirado}
@@ -915,6 +940,7 @@ function AppContent({ catalogo }) {
 
             {/* 3. Seleção de Equipamentos */}
             <EtapaCard
+              ref={el => (cardRefs.current[3] = el)}
               numero={3} titulo="Seleção de Equipamentos" icone="⚙️"
               status={statusEtapa(3)} resumo={resumoEtapa(3)}
               bloqueadoTrial={!!user?.empresa_trial_expirado}
@@ -942,6 +968,7 @@ function AppContent({ catalogo }) {
 
             {/* 4. Tubulação */}
             <EtapaCard
+              ref={el => (cardRefs.current[4] = el)}
               numero={4} titulo="Dimensionamento de Tubulação" icone="🔩"
               status={statusEtapa(4)} resumo={resumoEtapa(4)}
               bloqueadoTrial={!!user?.empresa_trial_expirado}
@@ -958,6 +985,7 @@ function AppContent({ catalogo }) {
 
             {/* 5. Componentes e Acessórios */}
             <EtapaCard
+              ref={el => (cardRefs.current[5] = el)}
               numero={5} titulo="Componentes e Acessórios" icone="🔧"
               status={statusEtapa(5)} resumo={resumoEtapa(5)}
               bloqueadoTrial={!!user?.empresa_trial_expirado}
@@ -991,6 +1019,7 @@ function AppContent({ catalogo }) {
 
             {/* 6. Orçamento (ou Lista de Engenharia, conforme preferência do usuário) */}
             <EtapaCard
+              ref={el => (cardRefs.current[6] = el)}
               numero={6}
               titulo={user?.modo_engenharia ? 'Lista de Engenharia' : 'Gerador de Orçamento'}
               icone={user?.modo_engenharia ? '📋' : '💰'}
