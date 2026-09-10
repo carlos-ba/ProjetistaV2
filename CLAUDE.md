@@ -718,9 +718,9 @@ o e-mail real recebido durante o teste desta correção.
 Motivação: jornada pós-compra no TheBank — a pessoa paga, é redirecionada
 de volta pro site (link de redirecionamento configurável por oferta no
 painel da TheMembers, `Produto → Ofertas → editar oferta → Estratégias →
-"Página de obrigado"`, hoje desligado/sem link configurado), e cai na
-tela de cadastro sem nenhum reconhecimento de que o pagamento já chegou.
-Ideia nasceu de uma conversa (sem código) sobre como fechar esse ciclo.
+"Página de obrigado"`), e cai na tela de cadastro sem nenhum
+reconhecimento de que o pagamento já chegou. Ideia nasceu de uma conversa
+(sem código) sobre como fechar esse ciclo.
 
 - **Checagem silenciosa no campo E-mail** (`LoginPage.jsx`, aba "Criar
   Conta") — dispara no `onBlur`, chama `POST
@@ -755,6 +755,24 @@ Ideia nasceu de uma conversa (sem código) sobre como fechar esse ciclo.
   registro sintético em `webhook_checkout_evento`, e-mail neutro) — banner
   certo em cada caso, link "Entrar" funcional, falha de rede/validação
   tratada em silêncio (`catch` genérico no `handleEmailBlur`).
+- **"Página de obrigado" ligada nas 3 ofertas** (`OFERTA BASE`,
+  `Profissional Mensal`, `Profissional Semestral`), painel TheMembers —
+  todas apontando pra `https://camara-fria.icenexus.com.br`. Não é
+  configuração global do produto, é por oferta; "aplicar personalização a
+  todas as outras" (dentro do modal "Salvar template personalizado" que
+  aparece ao salvar) propagou certo pra 2 das 3 na prática — a 3ª
+  (Semestral) precisou de edição manual à parte, checar sempre as 3
+  individualmente depois de qualquer mudança nesse painel, não confiar
+  cegamente no "aplicar a todas".
+- **Validado com compra real de verdade** (2026-09-10, mesmo dia): e-mail
+  `comercial@rcriar.com.br` (conta de teste anterior removida antes via
+  `remover_contas.py` pra liberar o e-mail) comprou de verdade no
+  checkout, webhook chegou (`pendente_usuario`), tela de cadastro mostrou
+  o aviso verde, cadastro + confirmação de e-mail completados, assinatura
+  virou `Ativa` automaticamente — **primeira vez que a jornada inteira
+  fecha sozinha em produção**, sem nenhuma intervenção manual nossa (ao
+  contrário da correção manual que foi necessária pra `projetos@jetfrio.com.br`,
+  seção do webhook acima).
 
 ---
 
