@@ -44,7 +44,7 @@ async def enviar_verificacao_email(destinatario: str, token: str) -> None:
     link = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
     corpo = f"""
     <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2 style="color:#6d28d9">Projetista 360 — Confirme seu email</h2>
+      <h2 style="color:#6d28d9">IceNexus — Confirme seu email</h2>
       <p>Olá! Clique no botão abaixo para ativar sua conta:</p>
       <a href="{link}"
          style="display:inline-block;background:#6d28d9;color:#fff;padding:12px 28px;
@@ -56,14 +56,14 @@ async def enviar_verificacao_email(destinatario: str, token: str) -> None:
       </p>
     </body></html>
     """
-    await _enviar_email(destinatario, "Projetista 360 — Confirme seu email", corpo)
+    await _enviar_email(destinatario, "IceNexus — Confirme seu email", corpo)
 
 
 async def enviar_reset_senha(destinatario: str, token: str) -> None:
     link = f"{settings.FRONTEND_URL}/redefinir-senha?token={token}"
     corpo = f"""
     <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2 style="color:#6d28d9">Projetista 360 — Redefinição de senha</h2>
+      <h2 style="color:#6d28d9">IceNexus — Redefinição de senha</h2>
       <p>Recebemos uma solicitação para redefinir sua senha. Clique abaixo:</p>
       <a href="{link}"
          style="display:inline-block;background:#6d28d9;color:#fff;padding:12px 28px;
@@ -75,4 +75,4 @@ async def enviar_reset_senha(destinatario: str, token: str) -> None:
       </p>
     </body></html>
     """
-    await _enviar_email(destinatario, "Projetista 360 — Redefinição de senha", corpo)
+    await _enviar_email(destinatario, "IceNexus — Redefinição de senha", corpo)

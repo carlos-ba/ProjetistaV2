@@ -662,6 +662,57 @@ que já converteu).
 
 ---
 
+## Verificação de E-mail — página de confirmação (fix em produção desde 2026-09-10)
+
+**Bug de origem, descoberto e corrigido em 2026-09-10**: o link "Verificar
+Email" mandado no e-mail transacional (`.../verificar-email?token=...`)
+**nunca funcionou pra ninguém**, desde que a feature existe — não é
+regressão recente. Causa raiz: o frontend não tem nenhum router
+(`react-router` nem está instalado) — `App.jsx` decide a tela só olhando
+se tem usuário logado, ignorando completamente `window.location.pathname`
+e a query string. Clicar no link só abria o app normal (tela de login,
+pra quem não estava logado), o token nunca chegava a ser mandado pro
+backend. A rota do backend (`GET /api/auth/verify-email/`) sempre esteve
+certa e funcional — faltava só quem a chamasse.
+
+- **Impacto real**: além de ninguém nunca ter confirmado o próprio e-mail
+  clicando no link, isso também é a causa raiz de por que a
+  reconciliação automática do webhook TheMembers (`pendente_usuario` →
+  `ativa`, disparada dentro de `verificar_email()` em `services/auth.py`)
+  nunca rodou sozinha em produção — o gatilho dela (confirmação de
+  e-mail) nunca tinha acontecido de verdade. A correção manual da cliente
+  `projetos@jetfrio.com.br` (seção do webhook, acima) contornou isso
+  reenviando o webhook direto, sem depender desse passo.
+- **Fix**: `frontend/src/pages/VerificarEmailPage.jsx` (novo) — lê `token`
+  da query string, chama `GET /api/auth/verify-email/`, mostra
+  sucesso/erro com o texto que já vem do backend, botão "Ir para o
+  login". `App.jsx` intercepta `pathname === '/verificar-email'` antes de
+  qualquer outra decisão de tela (`if loading` / `if !user` / etc.) — sem
+  adicionar router nenhum, só mais um `if` no mesmo padrão que já existe.
+- **Achado testando local**: o StrictMode do React (dev) chama `useEffect`
+  2x — como o token é de uso único (backend invalida após verificar), a
+  2ª chamada reusava um token já consumido e sobrescrevia "sucesso" com
+  "erro" na tela. Corrigido com uma trava `useRef` (`jaTentouRef`) — só a
+  1ª chamada de fato dispara a requisição.
+  Testado local ponta a ponta: token inválido → erro claro; token real →
+  `email_verified` vira `true` no banco, token é limpo, tela mostra
+  sucesso; botão "Ir para o login" volta pro app normal.
+- Mesmo problema (link de e-mail não roteado) existe também em
+  `/redefinir-senha?token=...` (reset de senha) — **não corrigido nesta
+  leva**, escopo era só verificação de e-mail. A funcionalidade de reset
+  de senha em si tem uma pendência mais ampla documentada em
+  `project-pendencia-autosservico-senha` na memória (datada de
+  2026-08-21 — pode estar desatualizada quanto a este achado específico
+  do roteamento).
+
+Branding corrigido no mesmo commit: "Projetista 360" (nome antigo do
+produto) → "IceNexus" nos 2 e-mails transacionais
+(`backend/app/services/email.py`) e no rodapé da planilha de cotação
+(`backend/app/services/cotacao.py`) — achado incidentalmente ao inspecionar
+o e-mail real recebido durante o teste desta correção.
+
+---
+
 ## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
 
 Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
@@ -1394,6 +1445,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Diagrama SVG do cavalete (flutuante) | ✅ |
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
 | Recursos avançados por empresa (Classificação/Catálogo de Preços) | ✅ em produção desde 2026-09-02, só trava no frontend (sem gate no backend, de propósito) |
+| Verificação de e-mail — página de confirmação do link | ✅ fix em produção desde 2026-09-10 — bug de origem (frontend sem router, link nunca funcionou pra ninguém), corrigido |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |

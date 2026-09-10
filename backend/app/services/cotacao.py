@@ -199,7 +199,7 @@ def gerar_planilha_cotacao(
     lin += 2
     ws.merge_cells(f"A{lin}:I{lin}")
     rod = ws.cell(row=lin, column=1,
-        value="* Proposta gerada automaticamente pelo sistema Projetista 360 — IceNexus IAR. "
+        value="* Proposta gerada automaticamente pelo sistema IceNexus. "
               "Os preços desta planilha são de responsabilidade do fornecedor.")
     rod.font      = Font(name="Arial", size=7, color="999999", italic=True)
     rod.fill      = PatternFill("solid", fgColor=COR_RODAPE)
