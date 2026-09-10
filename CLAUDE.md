@@ -868,7 +868,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/cotacoes/*` | GET/POST/PATCH | Geração/importação planilha Excel + importação de PDF via IA (ver seção própria abaixo) |
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
-| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, HMAC-SHA256 em `x-signature`; EM PRODUÇÃO desde 2026-09-04 (`THEMEMBERS_WEBHOOK_ENABLED=true`) |
+| `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, **sem validação de assinatura/token** (decisão consciente do usuário desde 2026-09-10); único gate é `THEMEMBERS_WEBHOOK_ENABLED` |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -938,10 +938,44 @@ Permite o técnico personalizar a proposta que entrega ao próprio cliente
 
 ---
 
-## Webhook do Checkout TheMembers (⚠️ QUEBRADO em produção desde 2026-09-04)
+## Webhook do Checkout TheMembers (⚠️ ABERTO SEM AUTENTICAÇÃO desde 2026-09-10)
 
-**Status real (atualizado 2026-09-09, diagnóstico com dado real):**
-endpoint segue quebrado. Log de diagnóstico temporário (commits `48f50f0`,
+**Status real (atualizado 2026-09-10) — decisão consciente do usuário:**
+depois de 5 mecanismos de autenticação testados contra entregas reais sem
+nenhum bater (histórico completo abaixo), o usuário decidiu **desligar toda
+validação de assinatura/token** pra desbloquear o cliente pago parado
+enquanto a causa raiz não é resolvida do lado da TheMembers — "isso será
+revisado depois". `routes_webhooks_themembers.py` foi reescrito do zero:
+sem `x-signature`, sem token, sem `Header` nenhum — só valida que o corpo é
+JSON válido e processa. O único gate que sobrou é
+`THEMEMBERS_WEBHOOK_ENABLED` (kill-switch operacional via env var, não é
+autenticação de origem).
+
+- **Implicação de segurança, consciente e aceita**: qualquer requisição POST
+  pra `/api/webhooks/themembers/checkout`, de qualquer origem, com qualquer
+  payload que se pareça com um evento válido (`release.access` etc.) e um
+  e-mail de cliente real cadastrado, **ativa uma assinatura de graça** —
+  não tem como o servidor diferenciar uma entrega legítima da TheMembers de
+  alguém forjando a requisição. Aceitável temporariamente dado o volume
+  baixo de clientes e a urgência de desbloquear quem já pagou; **não é
+  aceitável como estado permanente**.
+- **Painel TheMembers**: webhook antigo "IceNexus SaaS - Produção" e o de
+  teste "Teste HMAC - evento unico" foram **desativados** (painel não tem
+  botão de excluir, só ativar/desativar) — substituídos por um novo,
+  "IceNexus SaaS - Producao (aberto, sem token)", mesma URL, Produtos/
+  Eventos = Todos, ativo. Token de segurança do painel deles ficou
+  irrelevante — nosso lado não lê mais esse header.
+- **Suíte de testes** (`tests/test_webhook_themembers.py`) ajustada: os 6
+  testes que verificavam rejeição de assinatura/token foram removidos
+  (comportamento que não existe mais); 2 novos confirmam o endpoint aceito
+  sem assinatura e com assinatura incorreta. 36 testes passando.
+- **Pendente pra quando isso for revisado**: reimplementar autenticação de
+  verdade assim que a TheMembers responder com o mecanismo real (ou migrar
+  pra outra estratégia, tipo checar IP de origem deles, se a documentação
+  publicar uma faixa).
+
+**Status anterior (2026-09-09, diagnóstico com dado real) — histórico:**
+endpoint seguia quebrado com autenticação ligada. Log de diagnóstico temporário (commits `48f50f0`,
 `d54a774` — não expõe segredo, só formato/booleanos) testado contra 2
 entregas reais confirma o **formato** do `x-signature` recebido como
 HMAC-SHA256 de verdade (64 caracteres hex, exatamente um digest SHA-256) —
@@ -1341,7 +1375,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
-| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ⚠️ QUEBRADO em produção desde 2026-09-04 — HMAC nunca bate em entregas reais (bug confirmado do lado da TheMembers), chamado aberto aguardando resposta; 1 cliente real pagou e ficou sem ativação |
+| Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ⚠️ ABERTO SEM AUTENTICAÇÃO desde 2026-09-10 — decisão consciente do usuário (5 mecanismos testados, nenhum bateu); qualquer POST com payload válido ativa assinatura, revisar quando a causa raiz for resolvida |
 | Modal resumo ao carregar projeto | ✅ |
 | Aviso "pode estar desatualizado" nos cards | ✅ |
 | Salvar/Carregar projeto (dados_completos) | ✅ |

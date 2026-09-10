@@ -1,6 +1,14 @@
 """22 testes obrigatórios da spec (docs/handoffs/especificacao-webhook-checkout-
 themembers-2026-09-03.md §16) — numerados igual à lista da spec pra
 rastreabilidade.
+
+2026-09-10: rota parou de validar assinatura/token (decisão consciente do
+usuário, ver docstring de `receber_webhook_checkout` em
+routes_webhooks_themembers.py) — os testes 1-2f, que cobriam os vários
+mecanismos de autenticação testados e descartados, foram substituídos pelos
+testes 1-2 atuais (confirmam o endpoint aceitando payload sem assinatura
+nenhuma e com assinatura incorreta). Numeração dos demais mantida igual à
+spec original, mesmo com o gap.
 """
 import asyncio
 import hashlib
@@ -48,84 +56,33 @@ async def post_assinado(client, body: dict, token: str):
     )
 
 
-# ── 1-3: autenticação ────────────────────────────────────────────────────────
+# ── 1-3: endpoint aberto, sem validação de assinatura/token ──────────────────
+# Removida em 2026-09-10 (decisão consciente do usuário, ver docstring da
+# rota) — 5 mecanismos de autenticação testados contra entregas reais, nenhum
+# bateu; endpoint aceita qualquer payload POST agora, sem checar
+# x-signature/token nenhum. Os testes antigos que afirmavam 401 pra
+# assinatura ausente/incorreta, e os que testavam o mecanismo alternativo de
+# "token embutido no payload" (já removido do código), saíram — substituídos
+# pelos 2 abaixo, que confirmam o endpoint aberto de verdade.
 
-async def test_1_rejeita_token_ausente(client, token_themembers):
-    r = await client.post(URL, json=payload_direto("release.access", {}))
-    assert r.status_code == 401
-
-
-async def test_2_rejeita_token_incorreto(client, token_themembers):
-    r = await post_assinado(client, payload_direto("release.access", {}), "token-errado")
-    assert r.status_code == 401
-
-
-async def test_2b_rejeita_esquema_antigo_de_token_estatico(client, token_themembers):
-    """Achado verificando o dashboard/documentação real da TheMembers em
-    2026-09-03: o Checkout assina com HMAC-SHA256 do corpo bruto, não com
-    token estático comparado direto em x-signature (era a suposição inicial
-    da spec, atribuída erroneamente só à Área de Membros). Manda o token em
-    texto puro no header, exatamente como o esquema antigo fazia — precisa
-    ser rejeitado agora."""
-    body = payload_direto("release.access", {})
-    r = await client.post(URL, json=body, headers={"x-signature": token_themembers})
-    assert r.status_code == 401
-
-
-async def test_2c_aceita_token_no_payload_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
-    """Achado em 2026-09-08: artigo de ajuda oficial da TheMembers
-    (ajuda.themembers.com.br) descreve um mecanismo diferente do HMAC
-    documentado em documentation.themembers.dev.br — token embutido no
-    próprio payload. Usuário pediu pra tratar esse artigo como fonte de
-    verdade e aceitar esse mecanismo como alternativa (OR), já que o HMAC
-    segue confirmadamente incompatível com entregas reais (chamado aberto).
-    Sem x-signature nenhum — só o campo "token" no corpo."""
+async def test_1_aceita_sem_assinatura_nenhuma(client, token_themembers, empresa_factory, usuario_factory):
     empresa = await empresa_factory()
-    await usuario_factory(empresa, email="compra2c@teste.local")
+    await usuario_factory(empresa, email="semassinatura1@teste.local")
     body = payload_direto("release.access", {
-        "customer": {"email": "compra2c@teste.local"}, "product": {"id": "prod-mensal-001"},
+        "customer": {"email": "semassinatura1@teste.local"}, "product": {"id": "prod-mensal-001"},
     })
-    body["token"] = token_themembers
     r = await client.post(URL, json=body)
     assert r.status_code == 200
 
 
-async def test_2d_aceita_token_no_envelope_payload_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
-    """Mesmo mecanismo do test_2c, mas no formato de envelope
-    ({"payload": {...}}) — o token pode vir dentro do envelope, não só na
-    raiz do corpo."""
+async def test_2_aceita_com_assinatura_incorreta(client, token_themembers, empresa_factory, usuario_factory):
+    """Assinatura errada não bloqueia mais — endpoint não checa nenhuma."""
     empresa = await empresa_factory()
-    await usuario_factory(empresa, email="compra2d@teste.local")
-    body = payload_envelope("release.access", {
-        "customer": {"email": "compra2d@teste.local"}, "product": {"id": "prod-mensal-001"},
-    })
-    body["payload"]["token"] = token_themembers
-    r = await client.post(URL, json=body)
-    assert r.status_code == 200
-
-
-async def test_2e_rejeita_token_errado_no_payload(client, token_themembers):
-    """Token errado embutido no payload não deve autorizar — mesma exigência
-    de correspondência exata do mecanismo HMAC."""
-    body = payload_direto("release.access", {"customer": {"email": "nao-importa@teste.local"}})
-    body["token"] = "token-errado-no-payload"
-    r = await client.post(URL, json=body)
-    assert r.status_code == 401
-
-
-async def test_2f_aceita_token_dentro_de_data_quando_hmac_ausente(client, token_themembers, empresa_factory, usuario_factory):
-    """Achado numa entrega real em 2026-09-08 (formato 'evento direto',
-    chaves_topo=['created_at','data','event','object']) — nenhum candidato
-    batia na raiz nem no envelope `payload`, então o token (se existir nesse
-    formato) só pode estar dentro de `data`. Estende a checagem pra esse
-    nível."""
-    empresa = await empresa_factory()
-    await usuario_factory(empresa, email="compra2f@teste.local")
+    await usuario_factory(empresa, email="assinaturaerrada2@teste.local")
     body = payload_direto("release.access", {
-        "customer": {"email": "compra2f@teste.local"}, "product": {"id": "prod-mensal-001"},
+        "customer": {"email": "assinaturaerrada2@teste.local"}, "product": {"id": "prod-mensal-001"},
     })
-    body["data"]["token"] = token_themembers
-    r = await client.post(URL, json=body)
+    r = await post_assinado(client, body, "token-errado")
     assert r.status_code == 200
 
 
