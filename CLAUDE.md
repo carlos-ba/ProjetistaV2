@@ -427,6 +427,65 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
 
 ---
 
+## Card 3 — Filtro de Fabricante/Modelo (em produção desde 2026-09-11)
+
+Achado do usuário: com o catálogo crescendo (hoje 104 modelos de UC em 3
+fabricantes, 61 linhas de Evaporadora), a lista de resultados do
+"🔍 BUSCAR NO CATÁLOGO" já renderiza tudo sem filtro nem ordenação — um
+problema real hoje, não hipotético. Pedido: filtro de fabricante e
+modelo/linha, **não-excludente** (checkbox, não radio) — ex: marcar Danfoss
+e Elgin ao mesmo tempo pra comparar.
+
+- **Análise feita antes do código** (pedido explícito do usuário: "não mexa
+  em código, apenas analise"): não existe coluna "família/linha" no banco —
+  `Equipamento.modelo` é texto livre (`"Hd0318"`, `"LHC114/4CES-6Y"`,
+  `"OP-HGM072"`, `"Mi BX 0013"`). O agrupamento por família é uma convenção
+  de nomenclatura (letras antes do primeiro dígito), confirmada consistente
+  nos 4 fabricantes cadastrados hoje via inspeção direta do banco. Duas
+  opções levantadas: (1) extrair a família por regex no frontend, sem
+  mudança de banco; (2) migration com coluna `familia`/`linha` estruturada.
+  **Usuário escolheu a opção 1 agora** — a 2ª fica como ideia pra uma
+  eventual migração futura, testada em paralelo antes de qualquer troca
+  (nada decidido, não é pendência ativa).
+- **`extrairFamilia(modelo)`** (`SelecaoEquipamentos.jsx`) — regex
+  `^[A-Za-zÀ-ÿ*\-\s]+` captura o prefixo de letras (inclui `*`/`-`/espaço,
+  pra cobrir `"FL*039"` e `"OP-HGM072"`); o que sobrar do match é a família.
+  Puramente de exibição/filtro — nunca é enviado ao backend nem persistido.
+- **Filtro por categoria, não global** — `filtroFabricante`/`filtroFamilia`
+  são objetos `{ 'Unidade Condensadora': [...], 'Evaporadora': [...] }`;
+  cada aba tem seu próprio estado (pedido explícito: um projeto pode usar
+  Bitzer na UC e Mipal no evaporador, filtros não devem se misturar).
+- **Cadeia de `useMemo`**: `resultadosBrutos` (aba ativa, sem filtro) →
+  `resultadosPosFabricante` (aplica fabricante) → `familiasDisponiveis`
+  (opções de família **calculadas sobre o subconjunto já filtrado por
+  fabricante** — evita mostrar uma família como "FL*" depois que a Elgin
+  foi desmarcada) → `resultadosAtivos` (aplica família por cima). Chips não-
+  excludentes via `toggleFiltro()` (array simples, inclui/remove o valor).
+- **Chips somem sozinhos quando não ajudam**: a linha inteira de filtro só
+  renderiza quando há mais de 1 fabricante OU mais de 1 família na busca; a
+  linha de família por si só some quando sobra só 1 opção dentro do
+  fabricante já selecionado (nada a filtrar) — evita UI vazia de utilidade
+  quando o filtro já não tem o que fazer.
+- **Reset automático**: nova busca (`buscarEquipamentos()`) limpa os
+  filtros das duas categorias — resultado antigo filtrado não devia se
+  aplicar a um catálogo novo (params de busca mudaram).
+- Mensagem de "vazio" diferenciada: sem filtro nenhum bate →
+  "Nenhum equipamento encontrado para este tipo."; com filtro ativo mas
+  zerando o resultado → "Nenhum equipamento bate com os filtros de
+  fabricante/modelo selecionados." (evita o técnico achar que o catálogo
+  não tem nada, quando na real é só o filtro que zerou).
+- **Testado local** carregando um projeto salvo real (cópia de projeto via
+  `copiar_projetos.py`) até o Card 3, com resultado de busca real
+  multi-fabricante nas duas abas (Elgin+Danfoss na UC, Elgin+Mipal na
+  Evaporadora): chips de fabricante/família narrowam corretamente, família
+  se recalcula ao trocar fabricante, "Limpar filtros" reseta, estado
+  independente confirmado trocando de aba (UC↔Evaporadora) sem vazamento,
+  nova busca reseta os filtros, item já "Selecionado" não regride durante
+  filtragem. Zero mudança de backend/schema — resolvido inteiro no
+  frontend, sobre o resultado que `POST /api/v1/selecao` já devolve.
+
+---
+
 ## Card 5 — ComponentesFluxo — Estado Atual (completo)
 
 ### Dois modos de seleção
@@ -1601,6 +1660,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |
 | Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
 | Card 3 — Selo AC/EC + fix de seleção visual ambígua | ✅ em produção desde 2026-09-10 — `jaAdicionado` comparava por modelo (não só id), marcando as 2 variantes de motor como selecionadas |
+| Card 3 — Filtro de Fabricante/Modelo (chips não-excludentes) | ✅ em produção desde 2026-09-11 — família extraída por convenção de nomenclatura (regex), não é coluna no banco; estado independente por categoria (UC/Evaporadora) |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
 | Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 (capacidades maiores, complementa o T2) desde 2026-09-09 |

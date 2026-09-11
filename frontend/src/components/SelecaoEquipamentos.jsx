@@ -1,8 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 
 // Vírgula decimal (padrão BR) em vez do "." padrão de JS.
 const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+
+// Família/linha do modelo (ex: "Hd" de "Hd0042", "LHC" de "LHC114/4CES-6Y",
+// "OP-HGM" de "OP-HGM072", "Mi BX" de "Mi BX 0013") — extraída do texto do
+// campo `modelo`, não é um campo próprio no banco (todos os fabricantes
+// cadastrados hoje seguem letras antes de números; ver CLAUDE.md, seção
+// "Filtro de Fabricante/Modelo — Card 3").
+const extrairFamilia = (modelo) => {
+  const m = (modelo || '').match(/^[A-Za-zÀ-ÿ*\-\s]+/);
+  return m ? m[0].trim() : modelo;
+};
 
 const TIPOS = [
   { id: 'Unidade Condensadora', label: 'U. Condensadora', icone: '🧊' },
@@ -26,6 +36,12 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
   // Capacidade da UC escolhida que passa a dimensionar os evaporadores (null = ainda pela carga térmica)
   const [cargaEvapRef,   setCargaEvapRef]   = useState(initialValues?.cargaEvapRef ?? null);
 
+  // Filtro de fabricante/família — por categoria (UC e Evaporadora são
+  // independentes; um projeto pode usar Bitzer na UC e Mipal no evaporador).
+  // Array vazio = sem filtro aplicado, mostra tudo.
+  const [filtroFabricante, setFiltroFabricante] = useState({ 'Unidade Condensadora': [], 'Evaporadora': [] });
+  const [filtroFamilia,    setFiltroFamilia]    = useState({ 'Unidade Condensadora': [], 'Evaporadora': [] });
+
   useEffect(() => {
     if (onValoresChange) onValoresChange({ cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados, cargaEvapRef });
   }, [cargaTotal, numMaquinas, deltaT, evap, cond, fluido, abaAtiva, quantidades, selecionados, cargaEvapRef]);
@@ -35,7 +51,44 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
   const cargaReferencia = Math.round(cargaTotal / numMaquinas);
   // Evaporadores: se já há uma UC escolhida, dimensiona pela capacidade dela; senão pela carga térmica
   const refEvap = cargaEvapRef ?? cargaReferencia;
-  const resultadosAtivos = abaAtiva === 'Unidade Condensadora' ? resultadosUC : resultadosEvap;
+  const resultadosBrutos = abaAtiva === 'Unidade Condensadora' ? resultadosUC : resultadosEvap;
+
+  const fabricantesSelecionados = filtroFabricante[abaAtiva] || [];
+  const familiasSelecionadas    = filtroFamilia[abaAtiva] || [];
+
+  const fabricantesDisponiveis = useMemo(
+    () => [...new Set(resultadosBrutos.map(i => i.fabricante))].sort(),
+    [resultadosBrutos]
+  );
+
+  // Família depende do fabricante já filtrado — evita mostrar uma família
+  // (ex: "FL*", só da Elgin) quando a Elgin já foi desmarcada no filtro acima.
+  const resultadosPosFabricante = useMemo(
+    () => fabricantesSelecionados.length === 0
+      ? resultadosBrutos
+      : resultadosBrutos.filter(i => fabricantesSelecionados.includes(i.fabricante)),
+    [resultadosBrutos, fabricantesSelecionados]
+  );
+
+  const familiasDisponiveis = useMemo(
+    () => [...new Set(resultadosPosFabricante.map(i => extrairFamilia(i.modelo)))].sort(),
+    [resultadosPosFabricante]
+  );
+
+  const resultadosAtivos = useMemo(
+    () => familiasSelecionadas.length === 0
+      ? resultadosPosFabricante
+      : resultadosPosFabricante.filter(i => familiasSelecionadas.includes(extrairFamilia(i.modelo))),
+    [resultadosPosFabricante, familiasSelecionadas]
+  );
+
+  const toggleFiltro = (setState, valor) => {
+    setState(prev => {
+      const atual = prev[abaAtiva] || [];
+      const novo = atual.includes(valor) ? atual.filter(v => v !== valor) : [...atual, valor];
+      return { ...prev, [abaAtiva]: novo };
+    });
+  };
 
   useEffect(() => {
     if (cargaInicial && cargaInicial > 0) setCargaTotal(Math.round(cargaInicial));
@@ -90,6 +143,10 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
     setResultadosEvap([]);
     setQuantidades({});
     setCargaEvapRef(null);   // nova busca volta a dimensionar evaporadores pela carga térmica
+    // Filtros da busca anterior não fazem sentido pro catálogo novo (fabricante/
+    // família podem nem aparecer mais).
+    setFiltroFabricante({ 'Unidade Condensadora': [], 'Evaporadora': [] });
+    setFiltroFamilia({ 'Unidade Condensadora': [], 'Evaporadora': [] });
 
     const params = {
       carga_termica_total: cargaReferencia,
@@ -309,6 +366,55 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
               })}
             </div>
 
+            {/* Filtro de fabricante/família — não-excludente, só pra aba ativa */}
+            {(fabricantesDisponiveis.length > 1 || familiasDisponiveis.length > 1) && (
+              <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200 flex flex-wrap items-start gap-5">
+                {fabricantesDisponiveis.length > 1 && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Fabricante</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {fabricantesDisponiveis.map(f => {
+                        const ativo = fabricantesSelecionados.includes(f);
+                        return (
+                          <button key={f} type="button" onClick={() => toggleFiltro(setFiltroFabricante, f)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                              ativo ? 'bg-[#7B2D8B] border-[#7B2D8B] text-white' : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                            }`}>
+                            {f}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {familiasDisponiveis.length > 1 && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Modelo / linha</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {familiasDisponiveis.map(fam => {
+                        const ativo = familiasSelecionadas.includes(fam);
+                        return (
+                          <button key={fam} type="button" onClick={() => toggleFiltro(setFiltroFamilia, fam)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                              ativo ? 'bg-[#6BBF3F] border-[#6BBF3F] text-white' : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                            }`}>
+                            {fam}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {(fabricantesSelecionados.length > 0 || familiasSelecionadas.length > 0) && (
+                  <button type="button"
+                    onClick={() => { setFiltroFabricante(p => ({ ...p, [abaAtiva]: [] })); setFiltroFamilia(p => ({ ...p, [abaAtiva]: [] })); }}
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 self-end underline">
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Aviso de base do evaporador */}
             {abaAtiva === 'Evaporadora' && (
               <div className={`mb-4 px-4 py-2.5 rounded-lg text-xs font-medium border ${
@@ -326,7 +432,9 @@ const SelecaoEquipamentos = ({ cargaInicial, tempInterna, tempAmb = 35, onDeltaT
             <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               {resultadosAtivos.length === 0 ? (
                 <div className="w-full py-8 text-center text-slate-400 text-sm">
-                  Nenhum equipamento encontrado para este tipo.
+                  {resultadosBrutos.length > 0
+                    ? 'Nenhum equipamento bate com os filtros de fabricante/modelo selecionados.'
+                    : 'Nenhum equipamento encontrado para este tipo.'}
                 </div>
               ) : resultadosAtivos.map((item, idx) => {
                 const refPerc = abaAtiva === 'Evaporadora' ? refEvap : cargaReferencia;
