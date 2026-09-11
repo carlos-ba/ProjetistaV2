@@ -82,7 +82,7 @@ export default function ColdRoomProject() {
               <p className="plan-name">Avaliação gratuita</p>
               <div className="price"><strong>R$ 0</strong><span>15 dias • 1 projeto</span></div>
               <ul><li>Crie seu primeiro projeto de câmara fria</li><li>Conheça a jornada completa da plataforma</li><li>Suporte básico</li></ul>
-              <a className="button ghost full" href="https://camara-fria.icenexus.com.br">Começar minha avaliação</a>
+              <a className="button ghost full" href="https://camara-fria.icenexus.com.br/?cadastro=1">Começar minha avaliação</a>
             </article>
             <article className="price-card">
               <p className="plan-name">Profissional Mensal</p>
