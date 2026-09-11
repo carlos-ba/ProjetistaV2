@@ -7,55 +7,30 @@ from app.models.catalogo import Categoria
 from app.models.componente import ComponenteTecnico, PerformanceComponente
 from app.schemas.componente import ComponenteFluxoRequest, ComponenteSelecionado, ComponentesFluxoResponse
 
-# Categorias selecionadas por faixa de capacidade + temperatura de evaporação.
-# Filtro Secador e Válvula Solenoide NÃO entram aqui — catálogo dessas 2
-# categorias em `componente_tecnico` está sempre vazio (0 linhas, conferido
-# em produção): são selecionadas por algoritmo próprio (Kv pra solenoide,
-# diâmetro de linha pro filtro — ver acessorios.py/solenoide.py), nunca por
-# busca direta no banco. Tinham ficado nessa lista por engano — toda busca
-# aqui retornava None e o motivo de aviso (abaixo) ia gerar alarme falso
-# permanente pras duas, já que o catálogo delas nunca vai ter linha nenhuma
-# por design.
-_CATEGORIAS_POR_TEMP_EVAP = [
-    "Válvula de Expansão Termostática",
-]
-
-# Categorias selecionadas apenas por capacidade (temperatura é referência, não filtro rígido)
+# Categorias selecionadas por interpolação linear em T.Evap (busca o ponto
+# exato ou interpola entre os 2 pontos mais próximos do catálogo) + faixa de
+# capacidade. Filtro Secador e Válvula Solenoide NÃO entram aqui — catálogo
+# dessas 2 categorias em `componente_tecnico` está sempre vazio (0 linhas,
+# conferido em produção): são selecionadas por algoritmo próprio (Kv pra
+# solenoide, diâmetro de linha pro filtro — ver acessorios.py/solenoide.py),
+# nunca por busca direta no banco. Tinham ficado nessa lista por engano —
+# toda busca aqui retornava None e o motivo de aviso (abaixo) ia gerar
+# alarme falso permanente pras duas, já que o catálogo delas nunca vai ter
+# linha nenhuma por design.
+#
+# VET entrou aqui em 2026-09-11 (achado testando produção, cliente WEM
+# Refrigeração): a versão antiga (`_buscar_por_temp_e_capacidade`, removida)
+# só filtrava `temp_evaporacao <= T.Evap do projeto` sem interpolar — ou
+# seja, "arredondava pra baixo" pro ponto de 5°C mais frio disponível no
+# catálogo, subestimando a capacidade real de qualquer modelo sempre que o
+# T.Evap do projeto não caía exatamente num múltiplo de 5°C. Isso podia
+# excluir um corpo/orifício menor que na realidade cobriria a capacidade
+# pedida, empurrando a seleção pra um modelo maior que o necessário.
 _CATEGORIAS_POR_CAPACIDADE = [
     "Separador de Líquido",
     "Separador de Óleo",
+    "Válvula de Expansão Termostática",
 ]
-
-
-async def _buscar_por_temp_e_capacidade(
-    db: AsyncSession,
-    cat_nome: str,
-    fluido: str,
-    temp_evap: float,
-    capacidade: float,
-) -> PerformanceComponente | None:
-    """Busca componente filtrando por fluido, T.Evap ≤ T.Projeto e faixa de capacidade."""
-    stmt = (
-        select(PerformanceComponente)
-        .join(PerformanceComponente.componente)
-        .join(ComponenteTecnico.categoria)
-        .join(ComponenteTecnico.fabricante)
-        .where(
-            Categoria.nome == cat_nome,
-            PerformanceComponente.fluido == fluido,
-            PerformanceComponente.temp_evaporacao <= temp_evap,
-            PerformanceComponente.capacidade_kcalh >= capacidade,
-            PerformanceComponente.capacidade_min_kcalh <= capacidade,
-        )
-        .options(
-            selectinload(PerformanceComponente.componente).selectinload(ComponenteTecnico.categoria),
-            selectinload(PerformanceComponente.componente).selectinload(ComponenteTecnico.fabricante),
-        )
-        .order_by(PerformanceComponente.capacidade_kcalh)
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 def _interpolar(t: float, t1: float, v1: float, t2: float, v2: float) -> float:
@@ -80,6 +55,13 @@ async def _buscar_por_capacidade_interpolado(
       2. Interpola cap_max e cap_min na T.Evap exata
       3. Verifica se capacidade_projeto está dentro da faixa interpolada
 
+    Avalia TODOS os modelos da categoria (não para no primeiro que atender)
+    e retorna o de menor cap_max_interp entre os que atendem — "menor
+    equipamento que cobre a capacidade pedida" sem depender de
+    `ComponenteTecnico.capacidade_nominal` estar preenchido/ordenado direito
+    (nem todo catálogo populou esse campo — ex: VET, onde vale 0 em todos os
+    22 modelos cadastrados).
+
     Retorna (componente, cap_max_interp, cap_min_interp) do menor modelo adequado.
     """
     # Carregar todos os pontos da categoria agrupados por componente
@@ -93,10 +75,13 @@ async def _buscar_por_capacidade_interpolado(
             selectinload(ComponenteTecnico.categoria),
             selectinload(ComponenteTecnico.fabricante),
         )
-        .order_by(ComponenteTecnico.capacidade_nominal)   # menor primeiro
     )
     result = await db.execute(stmt)
     componentes = result.scalars().unique().all()
+
+    melhor: ComponenteTecnico | None = None
+    melhor_cap_max: float | None = None
+    melhor_cap_min = 0.0
 
     for comp in componentes:
         # Filtrar pontos do fluido solicitado, ordenados por T.Evap decrescente
@@ -144,11 +129,13 @@ async def _buscar_por_capacidade_interpolado(
         else:
             continue
 
-        # Verificar se a capacidade do projeto está na faixa
+        # Verificar se a capacidade do projeto está na faixa, e se é o menor
+        # equipamento adequado encontrado até agora entre todos os modelos
         if cap_min_i <= capacidade <= cap_max_i:
-            return comp, cap_max_i, cap_min_i
+            if melhor_cap_max is None or cap_max_i < melhor_cap_max:
+                melhor, melhor_cap_max, melhor_cap_min = comp, cap_max_i, cap_min_i
 
-    return None, 0.0, 0.0
+    return melhor, (melhor_cap_max or 0.0), melhor_cap_min
 
 
 async def _maior_capacidade_cadastrada(db: AsyncSession, cat_nome: str, fluido: str) -> float | None:
@@ -184,24 +171,6 @@ async def selecionar_componentes_fluxo(
 ) -> ComponentesFluxoResponse:
     selecionados: list[ComponenteSelecionado] = []
     avisos: list[str] = []
-
-    for cat_nome in _CATEGORIAS_POR_TEMP_EVAP:
-        melhor = await _buscar_por_temp_e_capacidade(
-            db, cat_nome, req.fluido, req.temp_evap, req.capacidade_kcalh
-        )
-        if melhor:
-            comp = melhor.componente
-            selecionados.append(ComponenteSelecionado(
-                categoria=cat_nome,
-                modelo=comp.modelo,
-                codigo_fabricante=comp.codigo_fabricante,
-                fabricante=comp.fabricante.nome,
-                conexao_entrada=comp.conexao_entrada,
-                custo=float(comp.custo),
-                faixa_operacao=f"{melhor.capacidade_min_kcalh:.0f} a {melhor.capacidade_kcalh:.0f} kcal/h",
-            ))
-        else:
-            avisos.append(await _aviso_sem_match(db, cat_nome, req))
 
     for cat_nome in _CATEGORIAS_POR_CAPACIDADE:
         comp, cap_max_i, cap_min_i = await _buscar_por_capacidade_interpolado(

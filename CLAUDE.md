@@ -615,6 +615,61 @@ Commit `7f342c7`.
 
 ---
 
+### VET — Interpolação em T.Evap (fix em produção desde 2026-09-11)
+
+Achado do usuário: no projeto ativo da WEM Refrigeração, a VET selecionada
+foi uma TE5-3, enquanto o CoolSelector (com os mesmos parâmetros reais —
+R404A, -6°C Evap., 45°C Cond., 9.220 kcal/h) indicava T2-6 como válida, ou
+TE5-1 se fosse pra ficar na família TE5. Investigado com o usuário antes de
+codar (ver seção de decisão abaixo).
+
+- **Causa raiz**: a seleção de VET (`_buscar_por_temp_e_capacidade`, função
+  removida) nunca interpolava em T.Evap — só filtrava
+  `temp_evaporacao <= T.Evap do projeto` e pegava o ponto de 5 em 5°C mais
+  frio disponível no catálogo, ignorando o ponto mais quente logo acima
+  (que o filtro `<=` descarta). Isso subestimava a capacidade real de
+  qualquer modelo sempre que o T.Evap do projeto não caía num múltiplo
+  exato de 5°C — no caso da WEM, -6°C usava o ponto de -10°C (T2-6 a
+  7.962 kcal/h) em vez de interpolar entre -10°C e -5°C (que dá ≈9.073
+  kcal/h, mais perto do que o CoolSelector considera válido).
+- **Fix**: generalizada `_buscar_por_capacidade_interpolado` (já usada
+  pelos Separadores) pra não depender mais de
+  `ComponenteTecnico.capacidade_nominal` como critério de ordenação —
+  campo que está **zerado em todos os 22 modelos de VET** cadastrados
+  (T2, TE5, TE12, TE20, TE55; migration 0039 grava `0` explicitamente). Em
+  vez de parar no primeiro modelo que atender (assumindo que a ordem por
+  nominal já é a certa), a função agora avalia **todos** os modelos da
+  categoria, interpola cada um no T.Evap do projeto, e fica com o de menor
+  capacidade máxima interpolada entre os que atendem — mesma semântica de
+  "menor equipamento que cobre a capacidade pedida", só que garantida
+  matematicamente em vez de depender de um campo não populado.
+- VET saiu de `_CATEGORIAS_POR_TEMP_EVAP` (lista removida, só tinha ela) e
+  entrou em `_CATEGORIAS_POR_CAPACIDADE`, junto com os Separadores — mesmo
+  caminho de código pras 3 categorias agora. A VET passa a mostrar o selo
+  "(interpolado)" na `faixa_operacao`, que os Separadores já tinham e ela
+  não.
+- **T.Cond continua fora do escopo desta correção** — pendência separada,
+  já documentada acima ("Motor de seleção de solenoide"/tabela de
+  endpoints): T2 é medido a 40°C, TE5+ a 45°C, nenhum dos dois ajusta pro
+  T.Cond real do projeto. No caso da WEM o T.Cond real (45°C) bate exato
+  com a referência do TE5, então não foi o gatilho dessa vez — mas seguiria
+  sendo um gap real se o T.Cond do projeto fosse outro.
+- **Resultado com os parâmetros reais da WEM** (R404A, -6°C, 9.220 kcal/h):
+  passa a selecionar **TE5-01** (antes: TE5-03) — bate com o que o
+  CoolSelector indica pra família TE5. T2-6, mesmo interpolado, fica em
+  ≈9.073 kcal/h nesse ponto exato (um pouco abaixo dos 9.220 pedidos) — a
+  malha de 5 em 5°C do catálogo tem esse limite de precisão; o valor exato
+  que o CoolSelector mostra pra T2-6 nesse caso específico não foi
+  totalmente reproduzido localmente, mas o salto errado de família
+  (T2→TE5) e o orifício errado dentro da TE5 (3 em vez de 1) — os dois
+  problemas que geraram a investigação — estão corrigidos.
+- Testado via API direta (caso exato da WEM, e um ponto exato de 5°C pra
+  confirmar zero regressão) e pela tela real (projeto de teste, selo
+  "(interpolado)" aparecendo certo na VET). 36/36 testes automatizados
+  passando (nenhum cobria VET especificamente até agora).
+
+---
+
 ## Card 2 — Cálculo de Carga Térmica
 
 Em produção desde 2026-08-31. Arquivo: `frontend/src/components/CalculadoraCargaTermica.jsx`.
@@ -1663,7 +1718,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 3 — Filtro de Fabricante/Modelo (chips não-excludentes) | ✅ em produção desde 2026-09-11 — família extraída por convenção de nomenclatura (regex), não é coluna no banco; estado independente por categoria (UC/Evaporadora) |
 | Tubulação ASHRAE + isolamento Armacel | ✅ |
 | Card 5 — Separadores (banco de dados) | ✅ |
-| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 (capacidades maiores, complementa o T2) desde 2026-09-09 |
+| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 desde 2026-09-09; interpolação em T.Evap (fix, achado real da WEM Refrigeração) desde 2026-09-11 |
 | Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |
 | Card 5 — Filtro secador automático (DML/DMC) | ✅ avisa quando cai em "Consultar Engenharia" (linha > 1.3/8") desde 2026-09-08 |
 | Card 5 — Visor de líquido automático (SGN) | ✅ avisa pra montar em tubo paralelo quando linha > 7/8" (maior SGN) desde 2026-09-08 |
