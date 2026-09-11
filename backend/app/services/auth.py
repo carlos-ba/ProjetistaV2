@@ -122,7 +122,12 @@ async def verificar_email(token: str, db: AsyncSession) -> None:
 
 
 async def solicitar_reset_senha(email: str, db: AsyncSession) -> None:
-    result = await db.execute(select(Usuario).where(Usuario.email == email))
+    # Case-insensitive de propósito — mesmo achado já corrigido no casamento
+    # de e-mail do webhook TheMembers (buscar_usuario_por_email): o comprador/
+    # usuário pode digitar com capitalização diferente da cadastrada.
+    result = await db.execute(
+        select(Usuario).where(func.lower(Usuario.email) == email.strip().lower())
+    )
     usuario = result.scalar_one_or_none()
 
     # Resposta genérica: não revelar se o email existe ou não

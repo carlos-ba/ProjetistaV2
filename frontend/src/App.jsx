@@ -3,6 +3,7 @@ import api from './api';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
 import VerificarEmailPage from './pages/VerificarEmailPage';
+import RedefinirSenhaPage from './pages/RedefinirSenhaPage';
 import { version as APP_VERSION } from '../package.json';
 
 const BUILD_DATE_LABEL = new Date(__BUILD_DATE__).toLocaleDateString('pt-BR', {
@@ -1158,6 +1159,7 @@ function App() {
   // App.jsx não tem router nenhum, então essa rota precisa ser interceptada
   // aqui antes de qualquer outra decisão de tela).
   if (window.location.pathname === '/verificar-email') return <VerificarEmailPage />;
+  if (window.location.pathname === '/redefinir-senha') return <RedefinirSenhaPage />;
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a0d2e] to-[#2a1245]">

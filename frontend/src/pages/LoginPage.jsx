@@ -17,8 +17,9 @@ const formatarUsoRelativo = (iso) => {
 
 export default function LoginPage() {
   const { login, loginEncerrandoSessao } = useAuth();
-  const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro'
+  const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro' | 'recuperar'
   const [form, setForm] = useState({ username: '', email: '', password: '', telefone: '' });
+  const [emailRecuperacao, setEmailRecuperacao] = useState('');
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [loading, setLoading] = useState(false);
@@ -68,6 +69,23 @@ export default function LoginPage() {
       } else {
         setErro(err.response?.status === 403 ? 'Limite de sessões atingido.' : 'Usuário ou senha inválidos.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEsqueciSenha = async e => {
+    e.preventDefault();
+    setErro('');
+    setSucesso('');
+    setLoading(true);
+    try {
+      await api.post('/api/auth/forgot-password/', { email: emailRecuperacao.trim() });
+      // Resposta sempre genérica (o backend nunca revela se o e-mail existe).
+      setSucesso('Se o e-mail estiver cadastrado, você vai receber um link para redefinir a senha.');
+      setEmailRecuperacao('');
+    } catch {
+      setErro('Não foi possível enviar o link agora. Tente novamente em instantes.');
     } finally {
       setLoading(false);
     }
@@ -185,6 +203,38 @@ export default function LoginPage() {
               </div>
             )}
 
+            {aba === 'recuperar' ? (
+              <form onSubmit={handleEsqueciSenha} className="space-y-4">
+                <p className="text-sm text-slate-500">
+                  Informe o e-mail da sua conta — vamos mandar um link pra você criar uma senha nova.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    value={emailRecuperacao}
+                    onChange={e => setEmailRecuperacao(e.target.value)}
+                    required
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7B2D8B] focus:border-transparent"
+                    placeholder="voce@email.com"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#7B2D8B] hover:bg-purple-800 disabled:opacity-60 text-white font-bold py-3 rounded-lg text-sm transition-colors"
+                >
+                  {loading ? 'Aguarde...' : 'Enviar link de recuperação'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAba('entrar'); setErro(''); setSucesso(''); }}
+                  className="w-full text-center text-xs font-bold text-slate-500 hover:text-slate-700"
+                >
+                  Voltar para o login
+                </button>
+              </form>
+            ) : (
             <form onSubmit={aba === 'entrar' ? handleLogin : handleCadastro} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Usuário</label>
@@ -274,6 +324,15 @@ export default function LoginPage() {
                     {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {aba === 'entrar' && (
+                  <button
+                    type="button"
+                    onClick={() => { setAba('recuperar'); setErro(''); setSucesso(''); }}
+                    className="mt-1.5 text-xs font-bold text-[#7B2D8B] hover:underline"
+                  >
+                    Esqueci minha senha
+                  </button>
+                )}
               </div>
 
               <button
@@ -284,6 +343,7 @@ export default function LoginPage() {
                 {loading ? 'Aguarde...' : aba === 'entrar' ? 'Entrar' : 'Criar Conta'}
               </button>
             </form>
+            )}
           </div>
         </div>
       </div>

@@ -713,6 +713,45 @@ o e-mail real recebido durante o teste desta correção.
 
 ---
 
+## Recuperação de senha — "Esqueci minha senha" (fix em produção desde 2026-09-10)
+
+Achado atendendo um caso real (usuário "Thomaz",
+`thomaz_refrigeracaoadm@hotmail.com`, e-mail nunca verificado, zero
+sessões — se cadastrou e nunca mais conseguiu entrar): o backend **já
+tinha** o mecanismo de reset de senha inteiro pronto e funcional
+(`POST /forgot-password/` gera token + manda e-mail via Hostinger,
+`POST /reset-password/` troca a senha), mas **nunca dava pra usar**, por
+dois motivos:
+
+1. Não existia nenhum link "Esqueci minha senha" na tela de login pra
+   disparar o pedido.
+2. O link que o e-mail manda (`/redefinir-senha?token=...`) tinha
+   **exatamente o mesmo bug** que a verificação de e-mail tinha até a
+   correção acima — apontava pra uma rota de frontend que nunca existiu.
+   Era a pendência já sinalizada na seção anterior ("mesma correção
+   resolveria").
+
+- **`RedefinirSenhaPage.jsx`** (novo, mesmo padrão do `VerificarEmailPage.jsx`):
+  lê o token da URL, formulário de nova senha + confirmação (validação
+  no cliente: mínimo 6 caracteres, senhas coincidem), chama
+  `POST /api/auth/reset-password/`. `App.jsx` intercepta
+  `pathname === '/redefinir-senha'` do mesmo jeito que já faz pra
+  `/verificar-email`.
+- **Link "Esqueci minha senha"** na aba "Entrar" do `LoginPage.jsx` — abre
+  um mini-formulário (só e-mail) dentro do mesmo card, chama
+  `POST /api/auth/forgot-password/`, sempre mostra a mesma mensagem
+  genérica que o backend já devolve (nunca revela se o e-mail existe).
+- **Bug lateral corrigido no mesmo commit**: `solicitar_reset_senha()`
+  buscava o usuário por `Usuario.email == email` (case-sensitive) — único
+  ponto do projeto que ainda fazia isso assim, depois do fix já aplicado
+  em `buscar_usuario_por_email` (webhook) pro mesmo problema. Corrigido
+  pra `func.lower(...)`.
+- Testado local ponta a ponta: pedido de recuperação → token gerado →
+  formulário valida senha fraca/senhas diferentes → redefine → login com
+  a senha nova funciona, senha antiga rejeitada.
+
+---
+
 ## Reconhecimento de pagamento na tela de cadastro (em produção desde 2026-09-10)
 
 Motivação: jornada pós-compra no TheBank — a pessoa paga, é redirecionada
@@ -1518,6 +1557,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Multi-tenancy — empresa/papéis/isolamento (Fase A) | ✅ em produção desde 2026-08-05 |
 | Recursos avançados por empresa (Classificação/Catálogo de Preços) | ✅ em produção desde 2026-09-02, só trava no frontend (sem gate no backend, de propósito) |
 | Verificação de e-mail — página de confirmação do link | ✅ fix em produção desde 2026-09-10 — bug de origem (frontend sem router, link nunca funcionou pra ninguém), corrigido |
+| Recuperação de senha — "Esqueci minha senha" | ✅ fix em produção desde 2026-09-10 — backend já existia, faltava o link na tela e a página do link do e-mail (mesmo bug do item acima) |
 | Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
