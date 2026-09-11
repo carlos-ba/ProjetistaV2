@@ -832,11 +832,12 @@ caminho certo era "Criar Conta".
 - Banner "👋 Bem-vindo! Crie sua conta gratuita para começar." aparece só
   quando `veioDoCadastro && aba === 'cadastro'` — some sozinho se a pessoa
   trocar pra "Entrar" (não precisa de lógica extra pra escondê-lo).
-- **Metade da correção ainda pendente, do lado do Codex**: o link da
-  landing page (`site-ecosistema/`) ainda não foi atualizado pra
-  `.../?cadastro=1` — combinar com o Codex antes de considerar resolvido
-  de ponta a ponta (nosso lado já está pronto pra receber o parâmetro
-  assim que o link mudar).
+- **Handoff pro Codex resolvido no mesmo dia** (`docs/handoffs/landing-page-link-cadastro-2026-09-11.md`,
+  commit `de44844`): `site-ecosistema/app/projeto-camara-fria/page.tsx`
+  atualizado — botão "Começar minha avaliação" agora linka pra
+  `.../?cadastro=1`. Validado ponta a ponta em produção de verdade
+  (`icenexus.com.br/projeto-camara-fria` → clique real → app já abre em
+  "Criar Conta" com o banner).
 - Mesma arquitetura já usada pro "Página de obrigado" da TheMembers (seção
   acima) — link externo carrega contexto na URL, o app reage; nenhum
   router novo, só um parâmetro lido na montagem do componente.
@@ -1587,7 +1588,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Verificação de e-mail — página de confirmação do link | ✅ fix em produção desde 2026-09-10 — bug de origem (frontend sem router, link nunca funcionou pra ninguém), corrigido |
 | Recuperação de senha — "Esqueci minha senha" | ✅ fix em produção desde 2026-09-10 — backend já existia, faltava o link na tela e a página do link do e-mail (mesmo bug do item acima) |
 | Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
-| Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ⚠️ nosso lado pronto desde 2026-09-11, aguardando o Codex atualizar o link da landing page |
+| Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ✅ em produção desde 2026-09-11 — Codex atualizou o link no mesmo dia, validado ponta a ponta (landing page real → app) |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
