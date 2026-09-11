@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api';
 import CatalogoPrecosEmpresa from './CatalogoPrecosEmpresa';
+import AdminRelatorios from './AdminRelatorios';
 
 /**
  * Administração IceNexus — gestão de empresas (tenants) e seus usuários.
@@ -10,12 +11,12 @@ import CatalogoPrecosEmpresa from './CatalogoPrecosEmpresa';
  * de um cliente empresa é feita: cria-se a empresa e os usuários da equipe dela.
  */
 
-const PLANOS = [
+export const PLANOS = [
   { id: 'tecnico',  label: 'Técnico (individual)' },
   { id: 'empresa',  label: 'Empresa (multiusuário)' },
 ];
 
-const STATUS = [
+export const STATUS = [
   { id: 'trial',     label: 'Trial',     cor: 'bg-blue-100 text-blue-700' },
   { id: 'ativa',     label: 'Ativa',     cor: 'bg-emerald-100 text-emerald-700' },
   { id: 'suspensa',  label: 'Suspensa',  cor: 'bg-amber-100 text-amber-700' },
@@ -27,11 +28,12 @@ const PAPEIS = [
   { id: 'membro',        label: 'Membro' },
 ];
 
-const badgeStatus = (s) => (STATUS.find(x => x.id === s) || STATUS[0]).cor;
+export const badgeStatus = (s) => (STATUS.find(x => x.id === s) || STATUS[0]).cor;
 const empresaVazia = { nome: '', cnpj: '', plano: 'empresa', status_assinatura: 'ativa' };
 const usuarioVazio = { username: '', email: '', password: '', papel: 'membro' };
 
 export default function AdminEmpresas({ aberto, aoFechar }) {
+  const [aba, setAba]             = useState('empresas'); // 'empresas' | 'relatorios'
   const [empresas, setEmpresas]   = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro]           = useState('');
@@ -169,10 +171,27 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
           <button onClick={aoFechar} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
         </div>
 
+        {/* Abas */}
+        <div className="flex flex-shrink-0 bg-slate-100 border-b border-slate-200">
+          <button onClick={() => setAba('empresas')}
+            className={`px-5 py-2.5 text-xs font-bold transition-colors ${aba === 'empresas' ? 'bg-white text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+            Empresas
+          </button>
+          <button onClick={() => setAba('relatorios')}
+            className={`px-5 py-2.5 text-xs font-bold transition-colors ${aba === 'relatorios' ? 'bg-white text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+            Relatórios
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
           {erro && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-semibold">{erro}</div>}
           {ok   && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 font-semibold">✓ {ok}</div>}
+
+          {aba === 'relatorios' && <AdminRelatorios empresas={empresas} />}
+
+          {aba === 'empresas' && (
+          <>
 
           {/* Nova empresa */}
           {novaEmpresa ? (
@@ -448,6 +467,8 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
 
           {!carregando && empresas.length === 0 && !erro && (
             <p className="text-center text-sm text-slate-400 py-8">Nenhuma empresa cadastrada.</p>
+          )}
+          </>
           )}
         </div>
       </div>

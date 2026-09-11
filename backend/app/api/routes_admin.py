@@ -50,6 +50,18 @@ class EmpresaUpdate(BaseModel):
     recursos_avancados_habilitados: bool | None = None
 
 
+class CadastroPorDia(BaseModel):
+    periodo: date
+    total: int
+    por_plano: dict[str, int]
+    # Status ATUAL de cada empresa, não o status no dia do cadastro — versão
+    # simples do relatório (decisão consciente 2026-09-11): não rastreia
+    # funil de conversão ponto-a-ponto, só "quantos entraram nesse dia e em
+    # que pé estão hoje". Suficiente pra orientar marketing por ora; evoluir
+    # pra funil de verdade só se a diferença virar pergunta real do dia a dia.
+    por_status: dict[str, int]
+
+
 class EmpresaOut(BaseModel):
     id: UUID
     nome: str
@@ -142,6 +154,39 @@ async def listar_empresas(
         EmpresaOut(**{c.name: getattr(e, c.name) for c in Empresa.__table__.columns
                       if c.name in EmpresaOut.model_fields}, total_usuarios=n)
         for e, n in result.all()
+    ]
+
+
+@router.get("/relatorios/cadastros", response_model=list[CadastroPorDia])
+async def relatorio_cadastros(
+    desde: date | None = None,
+    ate: date | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    """Cadastros por dia — 1 empresa = 1 entrada de verdade no funil (um
+    usuário adicional criado depois pelo admin dentro de uma empresa
+    existente não conta, não é uma nova entrada de marketing). Agregação
+    feita em Python, não em SQL — volume do projeto ainda é baixo o
+    suficiente pra isso ser simples de auditar sem SQL condicional."""
+    query = select(Empresa.created_at, Empresa.plano, Empresa.status_assinatura)
+    if desde is not None:
+        query = query.where(Empresa.created_at >= desde)
+    if ate is not None:
+        query = query.where(Empresa.created_at < ate + timedelta(days=1))
+    rows = (await db.execute(query)).all()
+
+    por_dia: dict[date, dict] = {}
+    for created_at, plano, status_assinatura in rows:
+        dia = created_at.date()
+        bucket = por_dia.setdefault(dia, {"total": 0, "por_plano": {}, "por_status": {}})
+        bucket["total"] += 1
+        bucket["por_plano"][plano] = bucket["por_plano"].get(plano, 0) + 1
+        bucket["por_status"][status_assinatura] = bucket["por_status"].get(status_assinatura, 0) + 1
+
+    return [
+        CadastroPorDia(periodo=dia, **dados)
+        for dia, dados in sorted(por_dia.items())
     ]
 
 

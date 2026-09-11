@@ -907,6 +907,51 @@ na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
 
 ---
 
+## Administração — Relatórios (em produção desde 2026-09-11)
+
+Pedido do usuário: visibilidade sobre a base de empresas (quantas em cada
+status, quem vence quando) e sobre o ritmo de cadastros (quantos entram
+por dia, em qual plano) — pra orientar marketing/comercial. Desenhado em
+conversa antes do código; versão **simples** por decisão consciente.
+
+- **Nova aba "Relatórios"** dentro do próprio painel Administração
+  (`AdminEmpresas.jsx`, agora com abas "Empresas"/"Relatórios") —
+  `AdminRelatorios.jsx`, componente irmão novo, recebe a lista de
+  empresas já carregada pelo pai via prop (não refaz o fetch).
+- **Cards de resumo** (contagem por `status_assinatura`) e **tabela de
+  empresas filtrável/ordenável** (status × plano, ordenada por
+  `assinatura_fim` crescente — quem vence primeiro aparece primeiro; sem
+  validade vai pro fim, não é urgente) — tudo client-side, reaproveitando
+  o `GET /api/v1/admin/empresas` que já existia. Zero mudança de backend
+  pra essas duas partes.
+- **`GET /api/v1/admin/relatorios/cadastros`** (novo, só esse) — cadastros
+  agrupados por dia de `Empresa.created_at` (não `Usuario.created_at`: um
+  usuário adicional criado depois pelo admin dentro de empresa já
+  existente não é uma entrada nova no funil de marketing). Cada dia
+  devolve `total`, `por_plano` e `por_status` — agregação feita em Python
+  a partir de uma query simples, sem SQL condicional (volume do projeto
+  ainda baixo o bastante pra isso ser trivial de auditar). Aceita
+  `desde`/`ate` opcionais.
+- **Decisão consciente de simplicidade**: `por_status` reflete o status
+  **atual** de cada empresa, não o status no dia do cadastro — não é um
+  funil de conversão ponto-a-ponto (uma empresa pode ter nascido trial e
+  virado ativa semanas depois; o relatório mostra "entrou nesse dia, está
+  assim hoje", não "entrou trial, converteu no dia X"). Suficiente pra
+  orientar marketing por ora; evoluir pra funil de verdade só se a
+  diferença virar pergunta real do dia a dia.
+- `PLANOS`, `STATUS` e `badgeStatus` exportados de `AdminEmpresas.jsx` e
+  reaproveitados em `AdminRelatorios.jsx` — uma fonte só pra rótulos/cores
+  de status, sem duplicar a lista em dois arquivos.
+- Testado local com dados reais do banco (superadmin de teste descartável,
+  promovido e removido depois) — cards, tabela de cadastros por dia e
+  filtros da tabela de empresas todos confirmados na tela real, sem
+  regressão na aba "Empresas" original.
+- Primeiro pedaço real do "painel admin ampliado" que a Fase C (❌, tabela
+  de status abaixo) ainda cobre como pendência maior — isso aqui não é a
+  Fase C inteira (que é multiusuário/convites), só a parte de relatórios.
+
+---
+
 ## Trial de 15 Dias — Trava Real (em produção desde 2026-08-25)
 
 Cadastro novo (`registrar_usuario`) grava `plano="tecnico"` +
@@ -1589,6 +1634,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Recuperação de senha — "Esqueci minha senha" | ✅ fix em produção desde 2026-09-10 — backend já existia, faltava o link na tela e a página do link do e-mail (mesmo bug do item acima) |
 | Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
 | Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ✅ em produção desde 2026-09-11 — Codex atualizou o link no mesmo dia, validado ponta a ponta (landing page real → app) |
+| Administração — Relatórios (cadastros por dia, empresas por vencimento) | ✅ em produção desde 2026-09-11 — versão simples, status atual (não funil de conversão) |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
