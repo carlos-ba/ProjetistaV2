@@ -815,6 +815,34 @@ reconhecimento de que o pagamento já chegou. Ideia nasceu de uma conversa
 
 ---
 
+## Chegada pela landing page — abre direto em "Criar Conta" (em produção desde 2026-09-11)
+
+Achado do usuário: o botão "Começar minha avaliação" (site institucional,
+`site-ecosistema/app/projeto-camara-fria/page.tsx`) sempre linkou pra
+`https://camara-fria.icenexus.com.br` **nua, sem nenhum parâmetro** — quem
+clicava caía na aba "Entrar" (padrão do app), pedindo usuário/senha de uma
+conta que a pessoa ainda nem tinha criado. Nenhuma orientação de que o
+caminho certo era "Criar Conta".
+
+- **`LoginPage.jsx`** lê `?cadastro=1` da URL (`veioDoCadastro`, calculado
+  uma vez fora do componente) — se presente, a aba inicial já nasce
+  `'cadastro'` em vez de `'entrar'`. Sem o parâmetro, nada muda
+  (comportamento padrão intacto — a maioria dos acessos é gente que já tem
+  conta e quer logar).
+- Banner "👋 Bem-vindo! Crie sua conta gratuita para começar." aparece só
+  quando `veioDoCadastro && aba === 'cadastro'` — some sozinho se a pessoa
+  trocar pra "Entrar" (não precisa de lógica extra pra escondê-lo).
+- **Metade da correção ainda pendente, do lado do Codex**: o link da
+  landing page (`site-ecosistema/`) ainda não foi atualizado pra
+  `.../?cadastro=1` — combinar com o Codex antes de considerar resolvido
+  de ponta a ponta (nosso lado já está pronto pra receber o parâmetro
+  assim que o link mudar).
+- Mesma arquitetura já usada pro "Página de obrigado" da TheMembers (seção
+  acima) — link externo carrega contexto na URL, o app reage; nenhum
+  router novo, só um parâmetro lido na montagem do componente.
+
+---
+
 ## Limite de Sessões + Logout Real (em produção desde 2026-08-19)
 
 Anti-compartilhamento de conta: máximo de **2 sessões simultâneas** por usuário
@@ -1509,7 +1537,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-10)
+## Estado atual do código (auditado em 2026-09-11)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -1559,6 +1587,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Verificação de e-mail — página de confirmação do link | ✅ fix em produção desde 2026-09-10 — bug de origem (frontend sem router, link nunca funcionou pra ninguém), corrigido |
 | Recuperação de senha — "Esqueci minha senha" | ✅ fix em produção desde 2026-09-10 — backend já existia, faltava o link na tela e a página do link do e-mail (mesmo bug do item acima) |
 | Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
+| Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ⚠️ nosso lado pronto desde 2026-09-11, aguardando o Codex atualizar o link da landing page |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |

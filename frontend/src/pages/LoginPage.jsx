@@ -15,9 +15,14 @@ const formatarUsoRelativo = (iso) => {
   return `há ${Math.floor(diffH / 24)}d`;
 };
 
+// Link vindo da landing page ("Começar minha avaliação") pode chegar com
+// ?cadastro=1 pra já abrir na aba certa, em vez de cair na tela de login
+// pedindo uma conta que a pessoa ainda nem criou.
+const veioDoCadastro = new URLSearchParams(window.location.search).get('cadastro') === '1';
+
 export default function LoginPage() {
   const { login, loginEncerrandoSessao } = useAuth();
-  const [aba, setAba] = useState('entrar'); // 'entrar' | 'cadastro' | 'recuperar'
+  const [aba, setAba] = useState(veioDoCadastro ? 'cadastro' : 'entrar'); // 'entrar' | 'cadastro' | 'recuperar'
   const [form, setForm] = useState({ username: '', email: '', password: '', telefone: '' });
   const [emailRecuperacao, setEmailRecuperacao] = useState('');
   const [erro, setErro] = useState('');
@@ -169,6 +174,11 @@ export default function LoginPage() {
 
           {/* Formulário */}
           <div className="p-8">
+            {veioDoCadastro && aba === 'cadastro' && (
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg text-[#7B2D8B] text-sm">
+                👋 Bem-vindo! Crie sua conta gratuita para começar.
+              </div>
+            )}
             {sucesso && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
                 {sucesso}
