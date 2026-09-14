@@ -425,6 +425,33 @@ Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamen
   (`bg-blue-100`/`border-blue-200`, pedido do usuário) — se destaca dos
   demais chips cinza (`bg-slate-50`) do painel.
 
+### Peso + carga de refrigerante publicada — Evaporadores Elgin FL (migration 0041, 2026-09-14)
+
+Usuário pediu conferência: evaporadores da linha Elgin FL* (12 modelos)
+estavam com `volume_interno_kg` (usado hoje na Estimativa de Carga de
+Fluido, Card 5) preenchido, mas `peso_liquido_kg` e `carga_refrigerante_kg`
+(campo mais novo, preferido quando presente — ver
+`ComponentesFluxo.jsx:668`, `evaporador?.carga_refrigerante_kg ||
+volume_interno_kg`) vazios nos 12.
+
+- Usuário enviou o catálogo técnico oficial Elgin ("Evaporador FL",
+  julho/2021) — extraído via `pdfplumber` a tabela "Dados Físicos" da
+  página 4 (conexões, peso líquido/bruto, carga de refrigerante).
+- **Achado ao comparar**: os 12 valores de "Carga de refrigerante (kg)" do
+  catálogo batem **exatamente** com o que já estava em `volume_interno_kg`
+  — confirma que esse campo antigo já vinha sendo alimentado com o dado
+  certo desde antes de `carga_refrigerante_kg` existir como coluna própria
+  (migration 0037).
+- Migration 0041 preenche `carga_refrigerante_kg` (mesmo valor de
+  `volume_interno_kg`, agora na fonte de verdade correta pra esse campo) e
+  `peso_liquido_kg` (dado novo, nunca cadastrado) pros 12 modelos, por
+  `UPDATE` direto (mesmo padrão já usado na migration 0018 pra corrigir
+  capacidades R404A da VET). `downgrade()` volta os 2 campos pra `NULL`.
+- Testado: `upgrade`/`downgrade`/`upgrade` local confirmam reversibilidade
+  limpa; `POST /api/v1/selecao` (tipo Evaporadora, fluido R404A) confirma
+  `carga_refrigerante_kg` chegando preenchido nos resultados Elgin (antes
+  vinha `null`). 36/36 testes automatizados passando.
+
 ---
 
 ## Card 3 — Filtro de Fabricante/Modelo (em produção desde 2026-09-11)
@@ -1187,6 +1214,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0038 | Campos de compressor de UC em `Equipamento` (volume deslocado, potência nominal, corrente/potência do motor do ventilador, capacitor, resistência de cárter) + `codigo_fabricante`/`corrente_partida_a` em `EquipamentoVarianteEletrica` — motivada pelo catálogo Bitzer Combat/Combat+/BIG CDU |
 | 0039 | Seed do catálogo VET Danfoss TE5-TE55 (14 `componente_tecnico` + 938 `performance_componente`, 7 fluidos, T.Cond fixo 45°C) — cobre a capacidade que o corpo T2 (até ~17,7 mil kcal/h) não alcançava mais pros UCs Bitzer grandes |
 | 0040 | Perfil T (novo `tipo` em `perfil_metalico`) + tabela `barra_roscada_perfil_t` — sustentação do teto dividido pela auto-portância (ver seção própria acima); código de fabricante ainda placeholder, pendente confirmação |
+| 0041 | Preenche `peso_liquido_kg`/`carga_refrigerante_kg` dos 12 evaporadores Elgin FL* — dado extraído do catálogo técnico oficial (PDF), validado contra `volume_interno_kg` já cadastrado |
 
 ---
 
