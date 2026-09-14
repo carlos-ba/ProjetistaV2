@@ -447,10 +447,25 @@ volume_interno_kg`) vazios nos 12.
   `peso_liquido_kg` (dado novo, nunca cadastrado) pros 12 modelos, por
   `UPDATE` direto (mesmo padrão já usado na migration 0018 pra corrigir
   capacidades R404A da VET). `downgrade()` volta os 2 campos pra `NULL`.
+- **`peso_liquido_kg` NÃO tem nada a ver com fluido/refrigerante** —
+  apesar de "líquido" ser a mesma palavra usada em `conexao_liquido`/
+  `carga_refrigerante_kg` logo ao lado no modelo, aqui é terminologia de
+  peso comercial: "peso líquido/neto" (peso do próprio equipamento, sem
+  embalagem) vs. "peso bruto" (com embalagem) — exatamente a distinção que
+  o catálogo Elgin usa na coluna "Peso (kg): Líquido/Neto | Bruto".
+  Esclarecido pelo usuário depois da 1ª leva de documentação, pra não
+  confundir sessões futuras. Hoje não é consumido por nenhum Card ainda
+  (mesmo padrão do peso/ruído já cadastrados pro Mipal — ver seção "Card 3
+  — Seleção de Equipamentos").
 - Testado: `upgrade`/`downgrade`/`upgrade` local confirmam reversibilidade
   limpa; `POST /api/v1/selecao` (tipo Evaporadora, fluido R404A) confirma
   `carga_refrigerante_kg` chegando preenchido nos resultados Elgin (antes
-  vinha `null`). 36/36 testes automatizados passando.
+  vinha `null`), tanto local quanto **em produção real** (mesmo teste
+  contra `projetista-v2-api-alt.onrender.com` após o deploy). 36/36 testes
+  automatizados passando. `peso_liquido_kg` não é exposto por esse
+  endpoint (`EquipamentoSelecionado` só expõe os campos usados no cálculo
+  de carga de fluido) — confirmado indiretamente: mesma migration, mesmo
+  `UPDATE` por linha que já confirmou `carga_refrigerante_kg` em produção.
 
 ---
 
