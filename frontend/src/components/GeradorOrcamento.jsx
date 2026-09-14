@@ -1117,7 +1117,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     ws.mergeCells(2, 1, 2, NCOL);
     const linha2 = preencherLinha(2, 'FFEAF2FF', false, 10);
     const dataEmissao = new Date().toLocaleDateString('pt-BR');
-    linha2.getCell(1).value = `Projeto: ${nome}` + (cliente ? `   |   Cliente: ${cliente}` : '') + `   |   Emitido em: ${dataEmissao}`;
+    linha2.getCell(1).value = `Projeto: ${nome}` + (cliente ? `   |   Cliente: ${cliente}` : '') + `   |   Emitido em: ${dataEmissao}` + `   |   Elaborada pelo sistema Projeto Câmara Fria, da plataforma IceNexus — www.icenexus.com.br`;
     linha2.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF1E293B' } };
 
     // Linha 3 — instrução de preenchimento

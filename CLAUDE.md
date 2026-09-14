@@ -1570,6 +1570,60 @@ segundo — achados que mudaram o código:
 - **Fase 3:** Geração de proposta comercial em PDF com preços da cotação
 - Acessível via sidebar "Cotações" (`PainelCotacoes.jsx`) e `GeradorOrcamento.jsx`
 
+### Marca IceNexus no cabeçalho das planilhas (em produção desde 2026-09-14)
+
+Ideia do usuário: as planilhas que saem do sistema (cotação pro fornecedor,
+Lista de Engenharia de uso interno) não citavam o produto/plataforma em
+lugar nenhum do cabeçalho — oportunidade de divulgação gratuita, já que
+essas planilhas circulam fora do app (fornecedor externo, equipe do
+cliente). Pedido explícito: aproveitar uma linha **já existente** do
+cabeçalho em vez de inserir linha nova, pra não mexer em nenhuma referência
+de número de linha no código (merges, `freeze_panes`/`ySplit`, contadores
+de item).
+
+- **Achado ao comparar um arquivo real com o código**: existem **dois
+  geradores de "Planilha de Cotação"** no backend — `cotacao_excel.py`
+  (`gerar_planilha_cotacao_v2`, rota `POST /api/v1/cotacoes/{id}/gerar`) é
+  o que **de fato** gera o arquivo que o usuário baixa (confirmado
+  comparando um `.xlsx` real de produção com o código); `cotacao.py`
+  (`gerar_planilha_cotacao`, rota órfã `POST /api/v1/orcamento/cotacao`)
+  não tem nenhuma referência no frontend — parece código morto de uma
+  versão anterior. Ver pendência registrada logo abaixo.
+- **Texto acrescentado** (mesma frase nas duas planilhas, sem inserir linha
+  nova em nenhuma):
+  - Planilha de Cotação (`cotacao_excel.py`): linha 3 (`A3:{ULT_COL}3`), que
+    já continha `"Projeto: {nome}"` + opcionalmente `" | Cliente: {nome}"`
+    — ganhou mais um pedaço:
+    `" | Elaborada pelo sistema Projeto Câmara Fria, da plataforma IceNexus — www.icenexus.com.br"`.
+  - Lista de Engenharia (`GeradorOrcamento.jsx`): linha 2, que já continha
+    `"Projeto: X | Cliente: Y | Emitido em: Z"` — ganhou o mesmo texto no
+    final.
+- **Zero mudança estrutural** — só concatenação na variável de string que já
+  monta essas linhas; nenhum merge de célula, `freeze_panes`/`ySplit` ou
+  contador de linha (`LINHA_HDR`, `primeira_linha_item`, `primeiraLinhaItem`,
+  `rodapeIdx`) foi tocado.
+- Testado via geração direta da função (`gerar_planilha_cotacao_v2`, com e
+  sem `nome_cliente` preenchido — texto encadeia certo nos dois casos) e via
+  script isolado reproduzindo a linha do ExcelJS (Node, fora do browser, já
+  que a Lista de Engenharia é gerada 100% client-side). 36/36 testes
+  automatizados passando (mudança não tocou lógica testada).
+
+### Pendência — verificar/remover gerador de cotação órfão (`cotacao.py`)
+
+Achado incidentalmente comparando um `.xlsx` real com o código (seção
+acima). `backend/app/services/cotacao.py` (`gerar_planilha_cotacao`) e a
+rota que o usa, `POST /api/v1/orcamento/cotacao`
+(`backend/app/api/routes_orcamento.py`), não têm **nenhuma** referência no
+frontend (`grep` em `frontend/src` inteiro, zero resultado) — parecem
+órfãos de uma versão anterior à criação do fluxo real de Cotações
+(`cotacao_excel.py` + `routes_cotacao.py`, com código de cotação,
+fornecedor e validade). Diferente da rota real, essa não tem os campos
+extras (código da cotação, fornecedor, validade, coluna "Qtde (m)" de
+tubo). **Não confirmado 100% morto ainda** — só a checagem de frontend foi
+feita; antes de remover, verificar se algum script/integração externa ainda
+aponta pra `POST /api/v1/orcamento/cotacao`. Não bloqueante, não afeta o
+fluxo real do usuário.
+
 ### Importação de cotação em PDF via IA (em produção desde 2026-09-01)
 
 Caminho alternativo à Fase 2 (planilha Excel) para fornecedores que devolvem a
@@ -1697,7 +1751,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-11)
+## Estado atual do código (auditado em 2026-09-14)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -1734,6 +1788,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
 | Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos` |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
+| Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |
 | Webhook do Checkout TheMembers (ativação/cancelamento de assinatura) | ⚠️ ABERTO SEM AUTENTICAÇÃO desde 2026-09-10 — decisão consciente do usuário (5 mecanismos testados, nenhum bateu); qualquer POST com payload válido ativa assinatura, revisar quando a causa raiz for resolvida |

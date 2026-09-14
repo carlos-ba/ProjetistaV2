@@ -131,6 +131,7 @@ def gerar_planilha_cotacao_v2(
     info = f"Projeto: {nome_projeto}"
     if nome_cliente:
         info += f" | Cliente: {nome_cliente}"
+    info += " | Elaborada pelo sistema Projeto Câmara Fria, da plataforma IceNexus — www.icenexus.com.br"
     c3 = ws.cell(row=3, column=1, value=info)
     c3.font = Font(name="Arial", size=9, color="555555", italic=True)
     c3.fill = PatternFill("solid", fgColor="EBF2FF")
