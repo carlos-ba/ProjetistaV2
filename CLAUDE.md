@@ -467,6 +467,34 @@ volume_interno_kg`) vazios nos 12.
   de carga de fluido) — confirmado indiretamente: mesma migration, mesmo
   `UPDATE` por linha que já confirmou `carga_refrigerante_kg` em produção.
 
+### Carga de refrigerante publicada — Evaporadores Mipal Mi BX (migration 0042, 2026-09-14)
+
+Continuação direta da revisão da Elgin (seção acima): checando o catálogo
+completo de Evaporadora, dos 61 modelos Mipal, 48 (linha Hd/Hdl400 Pro)
+já tinham `carga_refrigerante_kg`; os outros 13 (linha antiga **Mi BX**)
+só tinham `volume_interno_kg` — mesmo padrão da Elgin antes da 0041.
+Conferido: nenhum modelo, de nenhum fabricante, está com os dois campos
+vazios ao mesmo tempo — o cálculo de carga de fluido nunca fica sem dado
+utilizável hoje (via fallback `carga_refrigerante_kg || volume_interno_kg`).
+
+- **Usuário confirmou diretamente** (papel de curador da informação, ver
+  `feedback_curadoria_importacao_catalogos` na memória): o valor gravado em
+  `volume_interno_kg` pra linha Mi BX **é** a carga de refrigerante
+  publicada, não um volume calculado — mesma nomenclatura antiga da Elgin.
+- Migration 0042 copia o valor direto de `volume_interno_kg` pra
+  `carga_refrigerante_kg` nos 13 modelos (`UPDATE ... SET
+  carga_refrigerante_kg = volume_interno_kg` — sem valores hardcoded, já
+  que o dado certo já estava no banco, só na coluna errada). `downgrade()`
+  volta pra `NULL`.
+- Testado: `upgrade`/`downgrade`/`upgrade` local reversível; confirmado
+  via `POST /api/v1/selecao` (Evaporadora, R404A) que os 13 Mi BX chegam
+  com `carga_refrigerante_kg` preenchido. 36/36 testes automatizados
+  passando.
+- **Processo novo, pra próximas importações de catálogo**: usuário vai
+  alinhar comigo a nomenclatura de cada fabricante antes de mapear campos
+  novos, em vez de eu presumir pelo nome da coluna — ver
+  `feedback_curadoria_importacao_catalogos` na memória.
+
 ---
 
 ## Card 3 — Filtro de Fabricante/Modelo (em produção desde 2026-09-11)
@@ -1230,6 +1258,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0039 | Seed do catálogo VET Danfoss TE5-TE55 (14 `componente_tecnico` + 938 `performance_componente`, 7 fluidos, T.Cond fixo 45°C) — cobre a capacidade que o corpo T2 (até ~17,7 mil kcal/h) não alcançava mais pros UCs Bitzer grandes |
 | 0040 | Perfil T (novo `tipo` em `perfil_metalico`) + tabela `barra_roscada_perfil_t` — sustentação do teto dividido pela auto-portância (ver seção própria acima); código de fabricante ainda placeholder, pendente confirmação |
 | 0041 | Preenche `peso_liquido_kg`/`carga_refrigerante_kg` dos 12 evaporadores Elgin FL* — dado extraído do catálogo técnico oficial (PDF), validado contra `volume_interno_kg` já cadastrado |
+| 0042 | Copia `volume_interno_kg` → `carga_refrigerante_kg` nos 13 evaporadores Mipal Mi BX (linha antiga) — nomenclatura antiga confirmada pelo usuário, mesmo padrão da Elgin (0041) |
 
 ---
 
