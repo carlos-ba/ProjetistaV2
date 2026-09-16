@@ -1728,8 +1728,9 @@ de item).
   o que **de fato** gera o arquivo que o usuário baixa (confirmado
   comparando um `.xlsx` real de produção com o código); `cotacao.py`
   (`gerar_planilha_cotacao`, rota órfã `POST /api/v1/orcamento/cotacao`)
-  não tem nenhuma referência no frontend — parece código morto de uma
-  versão anterior. Ver pendência registrada logo abaixo.
+  não tinha nenhuma referência no frontend — código morto de uma versão
+  anterior, confirmado e removido em 2026-09-16 (ver seção própria
+  abaixo).
 - **Texto acrescentado** (mesma frase nas duas planilhas, sem inserir linha
   nova em nenhuma):
   - Planilha de Cotação (`cotacao_excel.py`): linha 3 (`A3:{ULT_COL}3`), que
@@ -1749,21 +1750,34 @@ de item).
   que a Lista de Engenharia é gerada 100% client-side). 36/36 testes
   automatizados passando (mudança não tocou lógica testada).
 
-### Pendência — verificar/remover gerador de cotação órfão (`cotacao.py`)
+### Gerador de cotação órfão — REMOVIDO (2026-09-16)
 
 Achado incidentalmente comparando um `.xlsx` real com o código (seção
-acima). `backend/app/services/cotacao.py` (`gerar_planilha_cotacao`) e a
-rota que o usa, `POST /api/v1/orcamento/cotacao`
-(`backend/app/api/routes_orcamento.py`), não têm **nenhuma** referência no
-frontend (`grep` em `frontend/src` inteiro, zero resultado) — parecem
-órfãos de uma versão anterior à criação do fluxo real de Cotações
-(`cotacao_excel.py` + `routes_cotacao.py`, com código de cotação,
-fornecedor e validade). Diferente da rota real, essa não tem os campos
-extras (código da cotação, fornecedor, validade, coluna "Qtde (m)" de
-tubo). **Não confirmado 100% morto ainda** — só a checagem de frontend foi
-feita; antes de remover, verificar se algum script/integração externa ainda
-aponta pra `POST /api/v1/orcamento/cotacao`. Não bloqueante, não afeta o
-fluxo real do usuário.
+acima) em 2026-09-14. `backend/app/services/cotacao.py`
+(`gerar_planilha_cotacao`) e a rota que o usava, `POST
+/api/v1/orcamento/cotacao` (em `routes_orcamento.py`), não tinham nenhuma
+referência no frontend.
+
+- **Confirmado morto de propósito antes de remover** (produção já tinha
+  usuários reais, verificação extra pedida pelo usuário): `git log -S`
+  no histórico completo do `frontend/` achou o commit exato que
+  **documenta a troca**, na época — `8acc405` (2026-06-11, 9 dias depois
+  da rota nascer em `85b34b3`): *"Fluxo antigo /api/v1/orcamento/cotacao
+  substituido pelo novo /api/v1/cotacoes"*. Não foi esquecimento — foi
+  migração intencional já registrada no próprio histórico, há mais de 3
+  meses sem nenhuma referência em lugar nenhum (frontend, site-ecosistema,
+  docs, testes, scripts).
+- Endpoint era **sem estado** (recebia itens no corpo, devolvia um Excel
+  na hora, sem ler/gravar nada no banco) — remoção não afeta nenhum
+  projeto/cotação salvo.
+- Removido: arquivo `cotacao.py` inteiro + sub-rota `/cotacao`,
+  `ItemCotacao`/`CotacaoRequest` e o import morto em `routes_orcamento.py`
+  — mantido intacto o `POST /api/v1/orcamento` principal (usado de
+  verdade pelo Card 6).
+- Testado local: `POST /api/v1/orcamento/cotacao` → 404 confirmado;
+  `/api/v1/orcamento` continua no schema OpenAPI e intacto (código
+  byte-a-byte igual, só o resto do arquivo saiu). 36/36 testes
+  automatizados passando.
 
 ### Importação de cotação em PDF via IA (em produção desde 2026-09-01)
 
