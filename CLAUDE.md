@@ -1187,6 +1187,21 @@ salvos) pra entender engajamento — 3ª aba em Administração, ao lado de
   ("conta individual" vs. "empresa real + N membros", criando um 2º usuário
   na mesma empresa de teste pra validar) confirmados na tela real. 36/36
   testes automatizados passando.
+- **Fix — "há -1 dias" (2026-09-16, achado testando em produção)**:
+  `usuario_criado_em`/`ultimo_acesso` vêm de colunas sem timezone (naive) —
+  o valor gravado é UTC (padrão do Postgres gerenciado, Render incluído),
+  mas sem marcação explícita o Pydantic serializava sem "Z"/offset, e o
+  navegador interpretava a data como horário **local** do usuário. Pra um
+  acesso de poucas horas atrás, ler uma data UTC como se já fosse horário
+  de Brasília "adianta" o relógio em 3h — suficiente pra virar "-1 dias" em
+  vez de "0". Corrigido marcando esses 2 campos como UTC explicitamente
+  antes de devolver a resposta (`dt.replace(tzinfo=timezone.utc)`), sem
+  tocar em coluna nem migration. **Pendência sistêmica registrada, não
+  bloqueante**: todo `created_at`/`updated_at` do sistema (`TimestampMixin`)
+  tem essa mesma fragilidade de fuso ambíguo — só ficou visível aqui porque
+  foi a 1ª vez que alguém fez conta de "quantos dias atrás" em cima disso;
+  resolver de raiz (colunas com timezone de verdade) é uma revisão técnica
+  futura maior, fora de escopo agora.
 
 ---
 

@@ -287,12 +287,23 @@ async def relatorio_atividade_usuarios(
     )
     rows = (await db.execute(query)).all()
 
+    # `created_at`/`ultimo_uso_em` são colunas sem timezone (naive) — o valor
+    # gravado é UTC (padrão do Postgres gerenciado, Render incluído; nada no
+    # código força outro fuso), mas sem essa marcação explícita o Pydantic
+    # serializa a data sem "Z"/offset, e o navegador interpreta como horário
+    # LOCAL do usuário — achado testando em produção: um acesso de poucas
+    # horas atrás virava "há -1 dias" (Brasil é UTC-3, então uma data UTC
+    # lida como se já fosse local "adianta" o relógio em 3h). Marcar como
+    # UTC aqui resolve na fonte, sem tocar em coluna nem migration.
+    def _utc(dt: datetime | None) -> datetime | None:
+        return dt.replace(tzinfo=timezone.utc) if dt is not None else None
+
     return [
         AtividadeUsuario(
             usuario_id=uid, username=username, empresa_id=empresa_id, empresa_nome=empresa_nome,
-            membros_empresa=membros_empresa or 0, usuario_criado_em=criado_em,
+            membros_empresa=membros_empresa or 0, usuario_criado_em=_utc(criado_em),
             total_acessos=total_acessos, dias_distintos_acesso=dias_distintos,
-            ultimo_acesso=ultimo_acesso, total_projetos=total_projetos,
+            ultimo_acesso=_utc(ultimo_acesso), total_projetos=total_projetos,
         )
         for (uid, username, empresa_id, empresa_nome, membros_empresa, criado_em,
              total_acessos, dias_distintos, ultimo_acesso, total_projetos) in rows
