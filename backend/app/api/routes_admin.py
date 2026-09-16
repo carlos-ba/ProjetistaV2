@@ -20,6 +20,7 @@ from app.database.session import get_db
 from app.models.empresa import Empresa, PAPEL_ADMIN, PAPEL_MEMBRO
 from app.models.usuario import Usuario
 from app.models.sessao_usuario import SessaoUsuario
+from app.models.projeto import Projeto
 from app.schemas.auth import UserOut
 from app.schemas.produto_empresa import ProdutoEmpresaCreate, ProdutoEmpresaUpdate, ProdutoEmpresaOut
 from app.services.auth import exigir_superadmin
@@ -60,6 +61,27 @@ class CadastroPorDia(BaseModel):
     # que pé estão hoje". Suficiente pra orientar marketing por ora; evoluir
     # pra funil de verdade só se a diferença virar pergunta real do dia a dia.
     por_status: dict[str, int]
+
+
+class AtividadeUsuario(BaseModel):
+    usuario_id: UUID
+    username: str
+    empresa_id: UUID
+    empresa_nome: str
+    # Quantos usuários existem na mesma empresa — hoje a maioria dos
+    # cadastros é self-serve (1 empresa por usuário, `empresa.nome` nasce
+    # igual ao `username`, ver `registrar_usuario`), então mostrar o nome
+    # da empresa seria redundante. `membros_empresa == 1` deixa o frontend
+    # rotular como "conta individual" em vez de repetir o mesmo nome numa
+    # coluna a mais. Quando empresas com equipe de verdade existirem (Fase
+    # C ainda não construída, ou implantação manual via admin), esse mesmo
+    # campo já identifica isso sozinho, sem precisar redesenhar o relatório.
+    membros_empresa: int
+    usuario_criado_em: datetime
+    total_acessos: int
+    dias_distintos_acesso: int
+    ultimo_acesso: datetime | None
+    total_projetos: int
 
 
 class EmpresaOut(BaseModel):
@@ -187,6 +209,93 @@ async def relatorio_cadastros(
     return [
         CadastroPorDia(periodo=dia, **dados)
         for dia, dados in sorted(por_dia.items())
+    ]
+
+
+@router.get("/relatorios/atividade-usuarios", response_model=list[AtividadeUsuario])
+async def relatorio_atividade_usuarios(
+    desde: date | None = None,
+    ate: date | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: UserOut = Depends(exigir_superadmin),
+):
+    """1 linha por usuário — grão de usuário, não de empresa, por pedido
+    explícito do usuário (2026-09-16): hoje o cadastro que importa
+    monitorar é o individual (self-serve, 1 empresa por usuário); a
+    subdivisão por empresa com equipe só passa a fazer diferença quando
+    esse cenário existir de verdade (ver `membros_empresa` no schema).
+
+    `desde`/`ate`, quando informados, filtram só a janela de acessos
+    (`total_acessos`/`dias_distintos_acesso`/`ultimo_acesso` refletem só o
+    período) — `total_projetos` continua sempre desde sempre, não é uma
+    métrica de "período", é o total já criado pelo usuário.
+    """
+    filtros_sessao = []
+    if desde is not None:
+        filtros_sessao.append(SessaoUsuario.created_at >= desde)
+    if ate is not None:
+        filtros_sessao.append(SessaoUsuario.created_at < ate + timedelta(days=1))
+
+    sessoes = (
+        select(
+            SessaoUsuario.usuario_id.label("usuario_id"),
+            func.count().label("total_acessos"),
+            func.count(func.distinct(func.date(SessaoUsuario.created_at))).label("dias_distintos_acesso"),
+            func.max(SessaoUsuario.ultimo_uso_em).label("ultimo_acesso"),
+        )
+        .where(*filtros_sessao)
+        .group_by(SessaoUsuario.usuario_id)
+        .subquery()
+    )
+
+    projetos = (
+        select(
+            Projeto.owner_id.label("owner_id"),
+            func.count().label("total_projetos"),
+        )
+        .group_by(Projeto.owner_id)
+        .subquery()
+    )
+
+    membros = (
+        select(
+            Usuario.empresa_id.label("empresa_id"),
+            func.count().label("membros_empresa"),
+        )
+        .group_by(Usuario.empresa_id)
+        .subquery()
+    )
+
+    query = (
+        select(
+            Usuario.id,
+            Usuario.username,
+            Usuario.empresa_id,
+            Empresa.nome,
+            membros.c.membros_empresa,
+            Usuario.created_at,
+            func.coalesce(sessoes.c.total_acessos, 0),
+            func.coalesce(sessoes.c.dias_distintos_acesso, 0),
+            sessoes.c.ultimo_acesso,
+            func.coalesce(projetos.c.total_projetos, 0),
+        )
+        .join(Empresa, Empresa.id == Usuario.empresa_id)
+        .outerjoin(sessoes, sessoes.c.usuario_id == Usuario.id)
+        .outerjoin(projetos, projetos.c.owner_id == Usuario.id)
+        .outerjoin(membros, membros.c.empresa_id == Usuario.empresa_id)
+        .order_by(Usuario.username)
+    )
+    rows = (await db.execute(query)).all()
+
+    return [
+        AtividadeUsuario(
+            usuario_id=uid, username=username, empresa_id=empresa_id, empresa_nome=empresa_nome,
+            membros_empresa=membros_empresa or 0, usuario_criado_em=criado_em,
+            total_acessos=total_acessos, dias_distintos_acesso=dias_distintos,
+            ultimo_acesso=ultimo_acesso, total_projetos=total_projetos,
+        )
+        for (uid, username, empresa_id, empresa_nome, membros_empresa, criado_em,
+             total_acessos, dias_distintos, ultimo_acesso, total_projetos) in rows
     ]
 
 

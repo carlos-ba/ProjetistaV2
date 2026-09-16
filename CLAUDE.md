@@ -1136,6 +1136,60 @@ conversa antes do código; versão **simples** por decisão consciente.
 
 ---
 
+## Administração — Atividade de Usuários (em produção desde 2026-09-16)
+
+Pedido do usuário: medir uso do sistema por usuário (acessos, projetos
+salvos) pra entender engajamento — 3ª aba em Administração, ao lado de
+"Empresas"/"Relatórios". Desenhado em conversa antes do código, versão
+**simples** por decisão consciente (mesmo espírito dos Relatórios).
+
+- **Grão é usuário, não empresa** — decisão explícita do usuário
+  (2026-09-16): hoje o cadastro que importa monitorar é o individual
+  (self-serve, `registrar_usuario` grava `empresa.nome = username`, 1
+  empresa por usuário) — empresa com equipe de verdade só existe via
+  implantação manual do admin, ainda é exceção. `membros_empresa` (contagem
+  de usuários na mesma empresa) deixa o relatório pronto pra quando isso
+  mudar sem precisar redesenhar nada: com 1 membro só, mostra "conta
+  individual"; com mais, mostra o nome real da empresa + "(N membros)".
+- **`GET /api/v1/admin/relatorios/atividade-usuarios`** (novo, só esse) —
+  1 linha por usuário: `total_acessos`/`dias_distintos_acesso`/
+  `ultimo_acesso` vêm de `sessao_usuario` (cada login real = 1 linha —
+  conferido no código: `renovar_token` só atualiza `ultimo_uso_em` na
+  sessão existente, nunca cria linha nova, então contar linhas é contar
+  login de verdade, sem inflar por refresh automático em segundo plano);
+  `total_projetos` vem de `projeto.owner_id`. Agregação em **SQL** (não em
+  Python como o relatório de cadastros) — aqui precisa cruzar 2 tabelas
+  por usuário via subquery, mais direto em SQL do que puxar tudo pro
+  Python. `LEFT JOIN` de propósito nas 3 subqueries — usuário que nunca
+  logou ou nunca salvou projeto aparece com 0, não some da lista (sinal
+  útil: "cadastrou e nunca voltou").
+- **`desde`/`ate` opcionais** filtram só a janela de acessos
+  (`total_acessos`/`dias_distintos_acesso`/`ultimo_acesso`) —
+  `total_projetos` continua sempre desde sempre, não é uma métrica de
+  período. Sem filtro (uso normal da tela hoje), mostra tudo desde o
+  cadastro.
+- **Frontend** (`AdminAtividade.jsx`): tabela simples, ordenada por último
+  acesso — quem nunca acessou vai pro topo (pior sinal), depois quem sumiu
+  há mais tempo primeiro, mesmo raciocínio de "quem vence primeiro aparece
+  primeiro" já usado na lista de empresas por vencimento. Selo verde
+  "ativo" (acessou nos últimos 7 dias) vs. cinza "há N dias" vs. vermelho
+  "nunca acessou".
+- **Fora do escopo desta v1, por decisão consciente**: uso de
+  funcionalidade específica dentro do wizard (Modo Engenharia, exportação,
+  em qual Card mais abandona) — precisaria de tabela de eventos nova,
+  analytics de produto de verdade, é outra frente; gráfico de acessos ao
+  longo do tempo — a tabela plana já resolve "quem está ativo/sumido", se
+  virar pergunta recorrente evolui pra agregação por dia como no relatório
+  de cadastros; filtro por empresa/busca por nome — adiciona se o volume de
+  usuários crescer a ponto da tabela ficar longa demais.
+- Testado local com dados reais (superadmin de teste descartável) — request
+  cru, request filtrado por `desde`, e os 2 ramos de exibição de empresa
+  ("conta individual" vs. "empresa real + N membros", criando um 2º usuário
+  na mesma empresa de teste pra validar) confirmados na tela real. 36/36
+  testes automatizados passando.
+
+---
+
 ## Trial de 15 Dias — Trava Real (em produção desde 2026-08-25)
 
 Cadastro novo (`registrar_usuario`) grava `plano="tecnico"` +
@@ -1823,7 +1877,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-14)
+## Estado atual do código (auditado em 2026-09-16)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -1877,6 +1931,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Reconhecimento de pagamento na tela de cadastro | ✅ em produção desde 2026-09-10 — checagem silenciosa por e-mail (conta existente/pagamento pendente/nada) |
 | Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ✅ em produção desde 2026-09-11 — Codex atualizou o link no mesmo dia, validado ponta a ponta (landing page real → app) |
 | Administração — Relatórios (cadastros por dia, empresas por vencimento) | ✅ em produção desde 2026-09-11 — versão simples, status atual (não funil de conversão) |
+| Administração — Atividade de Usuários (acessos, projetos, último acesso) | ✅ em produção desde 2026-09-16 — grão de usuário (não empresa), pronto pra empresas com equipe sem redesenho |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
