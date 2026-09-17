@@ -356,6 +356,67 @@ contínua de sustentação. Só teto, não piso (piso se apoia no chão).
 
 ---
 
+## Card 1 — Modo Revenda — Corte sob medida por barra (em produção desde 2026-09-17)
+
+No **Modo Revenda** (`CalculadoraGabinete.jsx`, compra em barras de comprimento
+fixo, padrão 12m, em vez de painel cortado sob medida pelo fabricante), o
+algoritmo de empacotamento (`planoCorte`, First-Fit-Decreasing) sempre deixa
+sobra de barra não usada em algumas barras — até esta mudança, o orçamento
+cobrava **todas** as barras pelo comprimento cheio (12m), mesmo a que tinha
+sobra.
+
+Usuário trouxe a distinção correta entre os 2 jeitos de comprar cada barra:
+
+- **Corte sob medida** (checkbox marcado): compra só a metragem líquida
+  (barra − sobra) — o **fornecedor** corta na medida e fica com a sobra, ela
+  nunca é sua.
+- **Barra padrão** (não marcado, comportamento de sempre): compra a barra de
+  12m inteira — a sobra é sua, mas vira **estoque não controlado por este
+  sistema** (não existe módulo de estoque no projeto).
+
+- **Checkbox por barra** (não um só global) — o Mapa de Corte já lista sobra
+  individual por barra (`b.sobra`), e sobras diferentes não deviam se
+  misturar num desconto único.
+- **`cortesSobMedida`** (novo `Set` de índices de barra, persistido em
+  `dados_completos`) — `agruparBarrasCorte()` (novo helper) percorre
+  `planoCorte.barras` e agrupa por comprimento efetivo: barra não marcada
+  conta como `barraM` cheio; marcada conta como `barraM − sobra`. Sobras
+  iguais caem no mesmo grupo (testado: 2 barras com a mesma sobra de 1,2m
+  agruparam numa linha só, "2×", em vez de 2 linhas separadas); sobras
+  diferentes formam grupos distintos.
+- **A lista de materiais deixa de ter uma linha fixa** ("Painel — Barra 12m")
+  e passa a ter uma linha por grupo — ex: "Barra padrão 12m" (14, 193,2m²) +
+  "Corte sob medida 10,8m" (2, 24,8m²). O `detalhe` de cada grupo já deixa
+  explícito quem fica com a sobra em cada caso. Mesmo helper reusado no
+  orçamento (`dadosParaSincronizar`), na tabela de preview e no relatório PDF
+  do Modo Engenharia (`montarLinhasRelatorioGabinete`) — as 3 fontes de linha
+  ficam consistentes entre si.
+- **Reset automático dos checkboxes quando o plano de corte muda de verdade**
+  (mudou dimensão/painel/comprimento de barra) — índice de barra não é
+  estável entre recálculos (a composição pode embaralhar), então um checkbox
+  marcado apontaria pra barra errada em silêncio se não resetasse. Comparação
+  por assinatura completa do plano (`indice:nº de peças:sobra` de cada barra
+  + `barraM`/`larguraM`), não só contagem de barras — pega qualquer mudança
+  de composição, não só mudança de quantidade. **Não reseta no 1º render**
+  (inclusive reabrindo um projeto salvo, cujo recálculo é determinístico e
+  bate com os índices salvos).
+- **Confirmado que não afeta o kit de montagem** (perfis/selante/rebite/
+  parafuso+bucha) nem barreira de vapor — esses vêm de
+  `POST /api/v1/gabinete` (backend), calculados 100% pela geometria real da
+  câmara montada (`area_total_paineis_m2`/`comp_parede_m`), sem nenhuma
+  noção de "revenda"/"barra"/"sobra" — o payload enviado ao backend nem tem
+  esses campos. `planoCorte`/`cortesSobMedida` são inteiramente frontend,
+  só reescrevem a linha de exibição do painel no orçamento.
+- **Zero mudança de backend** — feature 100% frontend.
+- Testado pela tela real (projeto 10×6×3m, MBP Isoblock PIR 150mm, modo
+  Revenda): 16 barras/sobra total 8,4m → marcar 1 barra (sobra 1,2m) split
+  corretamente em 15 padrão (207m²) + 1 sob medida 10,8m (12,4m²), total caiu
+  pra 219,4m² (exatamente a área da sobra removida); marcar uma 2ª barra com
+  a mesma sobra agrupou na mesma linha (14+2, não 3 linhas); perfis/selante/
+  rebite/parafuso permaneceram com as mesmas quantidades o tempo todo.
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
@@ -2064,6 +2125,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
+| Card 1 — Modo Revenda — corte sob medida por barra | ✅ em produção desde 2026-09-17 — checkbox por barra na sobra: marcado compra só a metragem líquida (sobra com o fornecedor), não marcado compra a barra 12m inteira (sobra vira estoque não controlado pelo sistema); zero mudança de backend |
 | Card 1 — Perfil T + Barra Roscada (sustentação do teto dividido) | ✅ em produção desde 2026-09-10 (migration 0040) — código de fabricante MBP ainda placeholder, pendente confirmação |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |

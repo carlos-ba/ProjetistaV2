@@ -85,6 +85,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // 'revenda'    = barras de comprimento fixo (padrão 12.000mm), técnico corta na obra
   const [modoCompra, setModoCompra] = useState(initialValues?.modoCompra ?? 'fabricante');
   const [comprimentoBarra, setComprimentoBarra] = useState(initialValues?.comprimentoBarra ?? 12000);
+  // Barras marcadas pra corte sob medida (índice de planoCorte.barras) — quando
+  // marcada, a barra deixa de ser "padrão 12m" e vira "corte sob medida" pela
+  // metragem líquida (sem a sobra). A sobra fica com o fornecedor nesse caso;
+  // se não marcada, a barra é comprada inteira e a sobra fica de estoque do
+  // comprador (não controlado por este sistema).
+  const [cortesSobMedida, setCortesSobMedida] = useState(() => new Set(initialValues?.cortesSobMedida ?? []));
 
   const [resultado, setResultado] = useState(initialValues?.resultado ?? null);
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
@@ -95,12 +101,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
-      fatorSegurancaSelante, perfisManuaisSelecionados,
+      fatorSegurancaSelante, perfisManuaisSelecionados, cortesSobMedida: [...cortesSobMedida],
     });
   }, [comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
-      fatorSegurancaSelante, perfisManuaisSelecionados]);
+      fatorSegurancaSelante, perfisManuaisSelecionados, cortesSobMedida]);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -290,6 +296,47 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     };
   }, [resultado, comprimentoBarra, painelSelecionado]);
 
+  // Reseta os checkboxes de corte sob medida sempre que o plano de corte
+  // recalcula pra uma composição de barras diferente (mudou dimensão/painel/
+  // comprimento da barra) — índice de barra não é estável entre recálculos,
+  // então manter o checkbox marcado apontaria pra barra errada em silêncio.
+  // Não reseta no 1º render (inclusive ao reabrir um projeto salvo, cujo
+  // plano recalculado bate exatamente com o que gerou os índices salvos).
+  const assinaturaPlanoCorteRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!planoCorte) { assinaturaPlanoCorteRef.current = null; return; }
+    const assinatura = planoCorte.barras
+      .map(b => `${b.indice}:${b.pecas.length}:${b.sobra.toFixed(3)}`)
+      .join('|') + `@${planoCorte.barraM}x${planoCorte.larguraM}`;
+    if (assinaturaPlanoCorteRef.current === null) {
+      assinaturaPlanoCorteRef.current = assinatura;
+      return;
+    }
+    if (assinaturaPlanoCorteRef.current !== assinatura) {
+      assinaturaPlanoCorteRef.current = assinatura;
+      setCortesSobMedida(new Set());
+    }
+  }, [planoCorte]);
+
+  // Agrupa as barras do plano de corte por comprimento efetivo — barras não
+  // marcadas ficam no grupo "padrão" (comprimento cheio da barra); marcadas
+  // ficam num grupo "sob medida" pelo comprimento líquido (barra - sobra),
+  // um grupo por valor distinto (sobras diferentes não se misturam).
+  const agruparBarrasCorte = (plano, marcados) => {
+    if (!plano) return [];
+    const grupos = new Map();
+    plano.barras.forEach(b => {
+      const marcado = marcados.has(b.indice);
+      const comprimento = marcado ? Math.max(0, plano.barraM - b.sobra) : plano.barraM;
+      const chave = `${marcado ? 'sob_medida' : 'padrao'}:${comprimento.toFixed(3)}`;
+      if (!grupos.has(chave)) grupos.set(chave, { comprimento, qtde: 0, custom: marcado });
+      grupos.get(chave).qtde += 1;
+    });
+    return Array.from(grupos.values()).sort((a, b) =>
+      a.custom === b.custom ? b.comprimento - a.comprimento : (a.custom ? 1 : -1)
+    );
+  };
+
   const dadosParaSincronizar = React.useMemo(() => {
     const base = {
       comprimento: parseFloat(comprimento),
@@ -314,21 +361,23 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       ? `${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm | larg. ${painelSelecionado.largura_mm}mm | ${painelSelecionado.fabricante?.nome || ''}`
       : '';
 
-    // Modo Revenda: substitui as peças de painel por uma linha de barras de 12m
+    // Modo Revenda: substitui as peças de painel pelas barras (padrão 12m e/ou
+    // corte sob medida, conforme os checkboxes do Mapa de Corte)
     const linhasPaineis = (modoCompra === 'revenda' && planoCorte)
-      ? [{
+      ? agruparBarrasCorte(planoCorte, cortesSobMedida).map(g => ({
           id: null,
-          item: `Painel ${base.nucleo} ${base.espessura}mm — Barra ${planoCorte.barraM}m`,
+          item: `Painel ${base.nucleo} ${base.espessura}mm — ${g.custom ? 'Corte sob medida' : 'Barra padrão'} ${fmtQtd(g.comprimento)}m`,
           tipo_item: 'painel_parede',
-          quantidade: planoCorte.numBarras,
+          quantidade: g.qtde,
           unidade: 'un',
-          area_total: Number(planoCorte.areaBarrasM2.toFixed(2)),
+          area_total: Number((g.qtde * g.comprimento * planoCorte.larguraM).toFixed(2)),
           detalhe: [
             especBase,
-            `${planoCorte.numBarras} barras × ${fmtQtd(planoCorte.barraM)}m (corte na obra)`,
-            `sobra total ${fmtQtd(planoCorte.sobraTotalM)}m`,
+            g.custom
+              ? `${g.qtde} peça(s) cortada(s) sob medida a ${fmtQtd(g.comprimento)}m — sobra fica com o fornecedor`
+              : `${g.qtde} barra(s) padrão × ${fmtQtd(planoCorte.barraM)}m (corte na obra) — sobra fica de estoque do comprador, não controlado pelo sistema`,
           ].filter(Boolean).join(' | '),
-        }]
+        }))
       : resultado.lista_corte.map(i => ({
           id: null,
           item: i.item,
@@ -363,7 +412,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         ...portasMateriais,
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte, cortesSobMedida]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -378,9 +427,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       painel: painelSelecionado?.id, esp: espessuraSelecionada, tipoPiso, rebaixado: pisoRebaixado, portas: portasKey,
       modoCompra, barra: comprimentoBarra, fatorSegurancaSelante, perfisManuais: perfisManuaisKey,
       abaPadrao: configuracoesMontagem?.largura_aba_padrao_mm, rendimentoSelante: configuracoesMontagem?.rendimento_selante_m_por_embalagem,
+      cortesSobMedida: [...cortesSobMedida].sort().join(','),
     });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
-  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra, fatorSegurancaSelante, perfisManuaisSelecionados, configuracoesMontagem]);
+  }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra, fatorSegurancaSelante, perfisManuaisSelecionados, configuracoesMontagem, cortesSobMedida]);
 
   // ── Voz ───────────────────────────────────────────────────────────────
   const iniciarOuvinteVoz = () => {
@@ -468,11 +518,13 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   const montarLinhasRelatorioGabinete = () => {
     const linhas = [];
     if (modoCompra === 'revenda' && planoCorte) {
-      linhas.push({
-        item: `Painel ${resultado?.nucleo_selecionado || ''} — Barra ${fmtQtd(planoCorte.barraM)}m`,
-        detalhe: `Corte na obra · sobra total ${fmtQtd(planoCorte.sobraTotalM)}m`,
-        qtd: planoCorte.numBarras,
-        medida: `${fmtQtd(planoCorte.areaBarrasM2, 1)} m² (barras)`,
+      agruparBarrasCorte(planoCorte, cortesSobMedida).forEach(g => {
+        linhas.push({
+          item: `Painel ${resultado?.nucleo_selecionado || ''} — ${g.custom ? 'Corte sob medida' : 'Barra padrão'} ${fmtQtd(g.comprimento)}m`,
+          detalhe: g.custom ? 'Corte sob medida · sobra com o fornecedor' : 'Corte na obra · sobra com o comprador',
+          qtd: g.qtde,
+          medida: `${fmtQtd(g.qtde * g.comprimento * planoCorte.larguraM, 1)} m²`,
+        });
       });
     } else {
       (resultado?.lista_corte || []).forEach(item => {
@@ -1094,16 +1146,18 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {modoCompra === 'revenda' && planoCorte ? (
-                    <tr className="hover:bg-slate-50 bg-indigo-50/40">
+                  {modoCompra === 'revenda' && planoCorte ? agruparBarrasCorte(planoCorte, cortesSobMedida).map((g, idx) => (
+                    <tr key={`b-${idx}`} className="hover:bg-slate-50 bg-indigo-50/40">
                       <td className="px-4 py-3 text-slate-700">
-                        <div className="font-medium">Painel {resultado?.nucleo_selecionado || ''} — Barra {fmtQtd(planoCorte.barraM)}m</div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Corte na obra · sobra {fmtQtd(planoCorte.sobraTotalM)}m</div>
+                        <div className="font-medium">Painel {resultado?.nucleo_selecionado || ''} — {g.custom ? 'Corte sob medida' : 'Barra padrão'} {fmtQtd(g.comprimento)}m</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">
+                          {g.custom ? 'Sobra fica com o fornecedor' : 'Corte na obra · sobra fica com o comprador'}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-900">{planoCorte.numBarras}</td>
-                      <td className="px-4 py-3 text-right text-indigo-500 text-xs italic">{fmtQtd(planoCorte.areaBarrasM2, 1)} m² (barras)</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{g.qtde}</td>
+                      <td className="px-4 py-3 text-right text-indigo-500 text-xs italic">{fmtQtd(g.qtde * g.comprimento * planoCorte.larguraM, 1)} m²</td>
                     </tr>
-                  ) : (resultado?.lista_corte || []).map((item, idx) => (
+                  )) : (resultado?.lista_corte || []).map((item, idx) => (
                     <tr key={`c-${idx}`} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-700 font-medium">{item.item}</td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.quantidade}</td>
@@ -1154,9 +1208,28 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                           <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-500 italic">sobra {fmtQtd(b.sobra)}m</span>
                         )}
                       </div>
+                      {b.sobra > 0.01 && (
+                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 cursor-pointer flex-shrink-0" title="Comprar só a metragem líquida (corte sob medida) — a sobra fica com o fornecedor">
+                          <input
+                            type="checkbox"
+                            checked={cortesSobMedida.has(b.indice)}
+                            onChange={e => setCortesSobMedida(prev => {
+                              const novo = new Set(prev);
+                              if (e.target.checked) novo.add(b.indice); else novo.delete(b.indice);
+                              return novo;
+                            })}
+                            className="w-3.5 h-3.5 accent-indigo-600"
+                          />
+                          corte sob medida
+                        </label>
+                      )}
                     </div>
                   ))}
                 </div>
+                <p className="px-4 py-2 text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100">
+                  Marcado: compra só {fmtQtd(planoCorte.barraM)}m menos a sobra — o fornecedor corta sob medida e fica com a sobra.
+                  Não marcado: compra a barra {fmtQtd(planoCorte.barraM)}m inteira — a sobra é sua, mas vira estoque não controlado por este sistema.
+                </p>
               </div>
             )}
 
