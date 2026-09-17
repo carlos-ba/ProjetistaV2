@@ -789,6 +789,49 @@ codar (ver seção de decisão abaixo).
   "(interpolado)" aparecendo certo na VET). 36/36 testes automatizados
   passando (nenhum cobria VET especificamente até agora).
 
+### VET — Prioridade de família de corpo T2→TE5→TE12→TE20→TE55 (fix em produção desde 2026-09-17)
+
+Achado do usuário testando um projeto real (5.860 kcal/h, -6°C Evap.,
+45°C Cond., R404A): o sistema selecionou **TE5-0.5**, mas um **T2-5**
+(corpo mais simples/barato, confirmado pelo usuário) também cobria a
+capacidade pedida — impacto direto no orçamento, trocar de corpo de
+válvula sem necessidade encarece a lista de materiais à toa.
+
+- **Causa raiz**: `_buscar_por_capacidade_interpolado` (fix de
+  2026-09-11, seção acima) trata a categoria "Válvula de Expansão
+  Termostática" inteira como **um pool só** — avalia T2, TE5, TE12,
+  TE20 e TE55 juntos e fica com o de **menor capacidade máxima
+  interpolada** entre todos que atendem, sem noção de família/corpo.
+  A 5.860 kcal/h e -6°C, o teto do T2-5 (7.781) é maior que o teto do
+  TE5-0.5 (6.211) — mesmo os dois cobrindo a capacidade pedida, o
+  algoritmo escolhia o TE5-0.5 só por ter o número menor, ignorando que
+  ficar no T2 (corpo mais barato) resolvia igual. Conferido que o mesmo
+  padrão de sobreposição se repete em toda fronteira de família (ex:
+  TE12-05 tem capacidade mínima ~8.127 kcal/h a -10°C, bem dentro da
+  faixa do TE5-04, que chega a ~25.000+) — não era um caso isolado
+  T2×TE5.
+- **Fix**: `_buscar_por_capacidade_interpolado` ganhou parâmetro
+  opcional `ordem_familia`. Passado (só pra VET, `_ORDEM_FAMILIA_VET =
+  ["T2", "TE5", "TE12", "TE20", "TE55"]`, hierarquia de custo/mercado
+  confirmada com o usuário — não é dado do catálogo, `custo` está
+  zerado em todo `componente_tecnico` de VET), tenta esgotar cada
+  família nessa ordem — só passa pra próxima quando a família atual não
+  tem **nenhum** modelo que cubra a capacidade pedida (ex: T2 só perde
+  pra TE5 quando passa do teto do T2-6). A lógica de interpolação por
+  modelo em si (`_avaliar_menor_cap_max`, extraída sem mudança da
+  função antiga) continua idêntica — só mudou o agrupamento/ordem de
+  busca. Separadores de Líquido/Óleo continuam sem esse parâmetro
+  (`ordem_familia=None`), pool único como sempre — não têm essa
+  estrutura de famílias com custo diferente documentada.
+- **Sem regressão no caso WEM** (2026-09-11, 9.220 kcal/h, -6°C): T2-6
+  (teto 9.073 kcal/h nesse ponto) não cobre 9.220 — a busca escala pra
+  TE5 mesmo com a prioridade de família, chegando em TE5-01, resultado
+  idêntico ao já confirmado em produção.
+- Testado via API direta: 5.860 kcal/h → **T2-5** (antes: TE5-0.5);
+  9.220 kcal/h (WEM) → TE5-01 inalterado; 9.073 kcal/h (teto exato do
+  T2-6) → T2-6, escala certo na fronteira. 36/36 testes automatizados
+  passando. Não testado pela tela completa nesta leva.
+
 ---
 
 ### Carga de Selagem — Estimativa de Carga de Fluido (em produção desde 2026-09-17)
@@ -2030,7 +2073,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 3 — Filtro de Fabricante/Modelo (chips não-excludentes) | ✅ em produção desde 2026-09-11 — família extraída por convenção de nomenclatura (regex), não é coluna no banco; estado independente por categoria (UC/Evaporadora) |
 | Tubulação ASHRAE + isolamento Armacel (por peça, comprimento editável) | ✅ isolamento vendido em peças (default 2m editável) desde 2026-09-17 — tubo de cobre continua em metro linear |
 | Card 5 — Separadores (banco de dados) | ✅ |
-| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 desde 2026-09-09; interpolação em T.Evap (fix, achado real da WEM Refrigeração) desde 2026-09-11 |
+| Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 desde 2026-09-09; interpolação em T.Evap desde 2026-09-11; prioridade de família T2→TE5→TE12→TE20→TE55 (evita trocar de corpo à toa) desde 2026-09-17 |
 | Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |
 | Card 5 — Filtro secador automático (DML/DMC) | ✅ avisa quando cai em "Consultar Engenharia" (linha > 1.3/8") desde 2026-09-08 |
 | Card 5 — Visor de líquido automático (SGN) | ✅ avisa pra montar em tubo paralelo quando linha > 7/8" (maior SGN) desde 2026-09-08 |

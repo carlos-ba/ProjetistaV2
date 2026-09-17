@@ -40,45 +40,48 @@ def _interpolar(t: float, t1: float, v1: float, t2: float, v2: float) -> float:
     return v1 + (t - t1) * (v2 - v1) / (t2 - t1)
 
 
-async def _buscar_por_capacidade_interpolado(
-    db: AsyncSession,
-    cat_nome: str,
+# Hierarquia de corpos da VET Danfoss, por custo/padrão de mercado (confirmada
+# com o usuário em 2026-09-17) — T2 é o corpo mais simples/barato; só escala
+# pra TE5/TE12/TE20/TE55 quando o T2 (até o maior orifício, T2-6) não cobre
+# mais a capacidade pedida. Sem isso, `_avaliar_menor_cap_max` (que já existia
+# antes desta mudança) tratava a categoria inteira como um pool só e podia
+# escolher um TE5 pequeno em vez de um T2 maior, só porque o teto interpolado
+# do TE5 era numericamente menor — mesmo o T2 maior também cobrindo a
+# capacidade pedida (achado real: 5.860 kcal/h a -6°C/R404A caía dentro tanto
+# do T2-5 quanto do TE5-0.5; o algoritmo antigo escolhia o TE5-0.5 por ter
+# teto menor, ignorando que ficar no T2 é mais barato quando ele já resolve).
+_ORDEM_FAMILIA_VET = ["T2", "TE5", "TE12", "TE20", "TE55"]
+
+
+def _familia_modelo(modelo: str) -> str:
+    """'T2 - 5' → 'T2', 'TE5 - 0.5' → 'TE5' — prefixo antes do ' - ' já usado
+    como separador em todo o catálogo de VET (corpo + orifício)."""
+    return modelo.split(" - ")[0].strip()
+
+
+def _avaliar_menor_cap_max(
+    componentes,
     fluido: str,
     temp_evap: float,
     capacidade: float,
 ) -> tuple[ComponenteTecnico | None, float, float]:
     """
-    Seleciona componente por interpolação linear na T.Evap do projeto.
-
-    Para cada modelo:
+    Para cada modelo do grupo recebido:
       1. Encontra os dois pontos da tabela que cercam T.Evap do projeto
       2. Interpola cap_max e cap_min na T.Evap exata
       3. Verifica se capacidade_projeto está dentro da faixa interpolada
 
-    Avalia TODOS os modelos da categoria (não para no primeiro que atender)
-    e retorna o de menor cap_max_interp entre os que atendem — "menor
+    Avalia TODOS os modelos do grupo (não para no primeiro que atender) e
+    retorna o de menor cap_max_interp entre os que atendem — "menor
     equipamento que cobre a capacidade pedida" sem depender de
     `ComponenteTecnico.capacidade_nominal` estar preenchido/ordenado direito
     (nem todo catálogo populou esse campo — ex: VET, onde vale 0 em todos os
     22 modelos cadastrados).
 
-    Retorna (componente, cap_max_interp, cap_min_interp) do menor modelo adequado.
+    Retorna (componente, cap_max_interp, cap_min_interp) do menor modelo
+    adequado dentro do grupo recebido — o chamador decide o que é "o grupo"
+    (categoria inteira, ou só uma família de corpo, ver `_ORDEM_FAMILIA_VET`).
     """
-    # Carregar todos os pontos da categoria agrupados por componente
-    stmt = (
-        select(ComponenteTecnico)
-        .join(ComponenteTecnico.categoria)
-        .join(ComponenteTecnico.fabricante)
-        .where(Categoria.nome == cat_nome)
-        .options(
-            selectinload(ComponenteTecnico.tabela_capacidade),
-            selectinload(ComponenteTecnico.categoria),
-            selectinload(ComponenteTecnico.fabricante),
-        )
-    )
-    result = await db.execute(stmt)
-    componentes = result.scalars().unique().all()
-
     melhor: ComponenteTecnico | None = None
     melhor_cap_max: float | None = None
     melhor_cap_min = 0.0
@@ -138,6 +141,55 @@ async def _buscar_por_capacidade_interpolado(
     return melhor, (melhor_cap_max or 0.0), melhor_cap_min
 
 
+async def _buscar_por_capacidade_interpolado(
+    db: AsyncSession,
+    cat_nome: str,
+    fluido: str,
+    temp_evap: float,
+    capacidade: float,
+    ordem_familia: list[str] | None = None,
+) -> tuple[ComponenteTecnico | None, float, float]:
+    """
+    Seleciona componente por interpolação linear na T.Evap do projeto (ver
+    `_avaliar_menor_cap_max` pra lógica de interpolação por modelo).
+
+    Sem `ordem_familia` (Separadores): avalia a categoria inteira como um
+    pool só, mesmo comportamento de sempre.
+
+    Com `ordem_familia` (VET): tenta esgotar cada família nessa ordem —
+    "T2" primeiro, só passa pra próxima família da lista quando a família
+    atual não tem NENHUM modelo que cubra a capacidade pedida. Evita trocar
+    de corpo de válvula (mais caro) quando o corpo mais simples ainda resolve.
+    """
+    # Carregar todos os pontos da categoria agrupados por componente
+    stmt = (
+        select(ComponenteTecnico)
+        .join(ComponenteTecnico.categoria)
+        .join(ComponenteTecnico.fabricante)
+        .where(Categoria.nome == cat_nome)
+        .options(
+            selectinload(ComponenteTecnico.tabela_capacidade),
+            selectinload(ComponenteTecnico.categoria),
+            selectinload(ComponenteTecnico.fabricante),
+        )
+    )
+    result = await db.execute(stmt)
+    componentes = result.scalars().unique().all()
+
+    if not ordem_familia:
+        return _avaliar_menor_cap_max(componentes, fluido, temp_evap, capacidade)
+
+    for familia in ordem_familia:
+        grupo = [c for c in componentes if _familia_modelo(c.modelo) == familia]
+        if not grupo:
+            continue
+        comp, cap_max_i, cap_min_i = _avaliar_menor_cap_max(grupo, fluido, temp_evap, capacidade)
+        if comp:
+            return comp, cap_max_i, cap_min_i
+
+    return None, 0.0, 0.0
+
+
 async def _maior_capacidade_cadastrada(db: AsyncSession, cat_nome: str, fluido: str) -> float | None:
     """Maior capacidade_kcalh cadastrada pra essa categoria+fluido, sem
     filtro de T.Evap — usado só pra compor uma mensagem de aviso mais útil
@@ -173,8 +225,9 @@ async def selecionar_componentes_fluxo(
     avisos: list[str] = []
 
     for cat_nome in _CATEGORIAS_POR_CAPACIDADE:
+        ordem_familia = _ORDEM_FAMILIA_VET if cat_nome == "Válvula de Expansão Termostática" else None
         comp, cap_max_i, cap_min_i = await _buscar_por_capacidade_interpolado(
-            db, cat_nome, req.fluido, req.temp_evap, req.capacidade_kcalh
+            db, cat_nome, req.fluido, req.temp_evap, req.capacidade_kcalh, ordem_familia
         )
         if comp:
             selecionados.append(ComponenteSelecionado(
