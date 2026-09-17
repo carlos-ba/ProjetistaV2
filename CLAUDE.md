@@ -740,6 +740,58 @@ codar (ver seção de decisão abaixo).
 
 ---
 
+### Carga de Selagem — Estimativa de Carga de Fluido (em produção desde 2026-09-17)
+
+Usuário trouxe um ponto de engenharia real: o cálculo de carga de fluido
+(`carga_fluido.py`) não considerava que o tanque de líquido precisa manter uma
+reserva mínima de líquido no fundo pra o dip-tube ficar sempre submerso — sem
+essa reserva, o tanque pode passar gás pra linha de líquido em vez de só
+líquido. Hipótese inicial do usuário: 1/3 (33%) da carga.
+
+- **Pesquisa antes do código** (pedido explícito: "não quero que vc chute e
+  sim pesquise"): o conceito é real na literatura de refrigeração — chamado
+  **"sealing charge"** (ACHR News, Evomart/Parker-Sporlan Bulletin 40-10-6,
+  IIAR) — mas nenhuma fonte confirma "1/3" nem qualquer fração fixa universal;
+  o valor real depende do diâmetro do vaso e da conexão de saída, tabela
+  própria de cada fabricante. Tentativa de achar o número exato nas fichas
+  técnicas da Castel/RAC (mesmos fabricantes já usados em `tanque_liquido.py`)
+  não teve sucesso (PDFs bloqueados/redirecionando). Decisão: modelar como
+  **percentual editável**, default **30%**, deixando claro na UI que é margem
+  de segurança definida pelo usuário, não valor normativo.
+- **Onde entra na conta**: `carga_fluido.py` calcula a carga base (evaporador +
+  UC + linha líquido + linha sucção, cálculo inalterado) e soma
+  `carga_selagem = carga_base × fator_selagem_perc / 100` — o resultado
+  (`carga_total_kg`) já sai com a margem incluída.
+- **Decisão de arquitetura (opção B, escolhida com o usuário)**: a carga de
+  selagem é fluido real que fica retido no tanque, não um fator abstrato só
+  pra escolher um tanque maior — por isso ela entra na **mesma**
+  `carga_total_kg` que já alimenta tanto `tanque_liquido.py` (dimensionamento)
+  quanto o item "Carga de Fluido" do orçamento/Lista de Engenharia (quantidade
+  comprada/carregada no sistema). Não foi preciso tocar em
+  `tanque_liquido.py` — ele já recebe o total (agora maior) sem mudança de
+  código.
+- **Retrocompatível**: `fator_selagem_perc: 0` reproduz exatamente o cálculo
+  antigo (testado via API antes/depois — mesma carga_total_kg). Default 30%
+  é aplicado só a partir de agora; projetos salvos antes desta mudança não são
+  recalculados retroativamente (o valor só é usado quando o técnico clica
+  "Calcular Carga de Fluido" de novo).
+- **Frontend** (`ComponentesFluxo.jsx`): novo campo "Carga de selagem (%)" ao
+  lado dos comprimentos de linha líquido/sucção (mesmo grid, default 30,
+  persistido em `dados_completos`); 5º chip "Selagem (+N%)" no detalhamento
+  (ao lado de Evaporador/UC/Linha Líquido/Linha Sucção); nota de transparência
+  abaixo do campo avisando que é margem editável sem norma confirmada.
+- **Efeito esperado nos tanques**: sistemas próximos do limite de uma faixa da
+  tabela (`_TANQUES` em `tanque_liquido.py`) podem passar a exigir o próximo
+  modelo acima com a margem de 30% ativa — e sistemas grandes podem bater no
+  aviso de "excede o maior tanque da tabela" (RAC VLR-200) um pouco antes do
+  que batiam sem a margem. Comportamento esperado, não é regressão.
+- Testado via API direta (`/carga-fluido/estimar` com fator padrão 30% e com
+  0%, confirmando os dois casos e o encadeamento pro `/tanque-liquido/selecionar`)
+  e carregamento do frontend sem erro de console. Fluxo completo pela tela
+  (Cards 1→5 reais) não foi re-testado nesta leva.
+
+---
+
 ## Card 2 — Cálculo de Carga Térmica
 
 Em produção desde 2026-08-31. Arquivo: `frontend/src/components/CalculadoraCargaTermica.jsx`.
@@ -1906,7 +1958,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-16)
+## Estado atual do código (auditado em 2026-09-17)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -1932,7 +1984,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 5 — Filtro secador automático (DML/DMC) | ✅ avisa quando cai em "Consultar Engenharia" (linha > 1.3/8") desde 2026-09-08 |
 | Card 5 — Visor de líquido automático (SGN) | ✅ avisa pra montar em tubo paralelo quando linha > 7/8" (maior SGN) desde 2026-09-08 |
 | Card 5 — Tanque de Líquido (NBR 16.069) | ✅ |
-| Card 5 — Carga de Fluido (kg por trecho) | ✅ |
+| Card 5 — Carga de Fluido (kg por trecho + carga de selagem) | ✅ carga de selagem (margem % editável, default 30%) em produção desde 2026-09-17 — soma na carga total real, usada tanto pro tanque quanto pro orçamento |
 | Card 5 — Cavalete (luvas/porcas/reduções + válvulas GBC) | ✅ |
 | Card 5 — Modo Engenharia (CoolSelector) | ✅ |
 | Card 6 — Embalagem de fluido (Card 6, converte kg em cilindros) | ✅ só R404A tem dado real |

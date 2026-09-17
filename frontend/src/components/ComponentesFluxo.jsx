@@ -95,6 +95,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const [cargaFluido,        setCargaFluido]        = useState(null);
   const [comprimentoLiquido, setComprimentoLiquido] = useState(initialValues?.comprimentoLiquido ?? '');
   const [comprimentoSuccao,  setComprimentoSuccao]  = useState(initialValues?.comprimentoSuccao  ?? '');
+  const [fatorSelagemPerc,   setFatorSelagemPerc]   = useState(initialValues?.fatorSelagemPerc   ?? 30);
 
   // ── Tanque de líquido ─────────────────────────────────────────────────
   const [tanqueResult,      setTanqueResult]      = useState(null);
@@ -113,8 +114,8 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
   const projetoSalvoNoMount = React.useRef(!!initialValues);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais });
-  }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
+    if (onValoresChange) onValoresChange({ modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, fatorSelagemPerc, tanqueSelecionado, cavaleteIncluido, linhasManuais });
+  }, [modo, solenoidSelecionado, temTanqueLiquido, filtroSelecionado, visorSelecionado, gbcEntradaSelecionado, gbcSaidaSelecionado, comprimentoLiquido, comprimentoSuccao, fatorSelagemPerc, tanqueSelecionado, cavaleteIncluido, linhasManuais]);
   const tempCond = tempAmb + 10;
 
   // Notifica App.jsx sempre que o resultado do cavalete ou tanque muda
@@ -217,6 +218,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
       volume_interno_uc_kg:   condensadora?.volume_interno_kg ?? null,
       carga_refrigerante_evap_kg: evaporador?.carga_refrigerante_kg ?? null,
       carga_refrigerante_uc_kg:   condensadora?.carga_refrigerante_kg ?? null,
+      fator_selagem_perc:     parseFloat(fatorSelagemPerc) || 0,
       bitola_liquido:         dadosTubulacao.diametro_liquido,
       comprimento_liquido_m:  lm,
       bitola_succao:          dadosTubulacao.diametro_succao,
@@ -366,7 +368,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
         fluido,
         quantidade: cargaFluido.carga_total_kg,
         unidade: 'kg',
-        detalhe: `Evaporador ${fmtQtd(cargaFluido.carga_evaporador_kg)} kg | UC ${fmtQtd(cargaFluido.carga_uc_kg)} kg | Linha líquido ${fmtQtd(cargaFluido.carga_linha_liquido_kg)} kg | Linha sucção ${fmtQtd(cargaFluido.carga_linha_succao_kg)} kg`,
+        detalhe: `Evaporador ${fmtQtd(cargaFluido.carga_evaporador_kg)} kg | UC ${fmtQtd(cargaFluido.carga_uc_kg)} kg | Linha líquido ${fmtQtd(cargaFluido.carga_linha_liquido_kg)} kg | Linha sucção ${fmtQtd(cargaFluido.carga_linha_succao_kg)} kg | Selagem (+${fmtQtd(cargaFluido.fator_selagem_perc, 0)}%) ${fmtQtd(cargaFluido.carga_selagem_kg)} kg`,
         aviso: cargaFluido.aviso_volume_uc || null,
         custo_unitario: 0, preco: 0,
       });
@@ -694,7 +696,7 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
                     <label className="text-[10px] font-bold text-indigo-500 uppercase">Comprimento linha líquido (m)</label>
                     <input
@@ -713,7 +715,19 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                       className="w-full mt-1 px-3 py-2 rounded-lg border border-indigo-200 text-sm outline-none bg-white"
                     />
                   </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-500 uppercase">Carga de selagem (%)</label>
+                    <input
+                      type="number" value={fatorSelagemPerc}
+                      onChange={e => setFatorSelagemPerc(e.target.value)}
+                      placeholder="30"
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-indigo-200 text-sm outline-none bg-white"
+                    />
+                  </div>
                 </div>
+                <p className="text-[10px] text-indigo-400 mb-3">
+                  Reserva de líquido que fica retida no tanque pra manter o dip-tube submerso (evita gás na linha de líquido) — margem de segurança editável, sem valor normativo confirmado; entra na carga total (tanque + orçamento).
+                </p>
 
                 <button
                   onClick={estimarCargaFluido}
@@ -724,12 +738,13 @@ const ComponentesFluxo = ({ cargaAlvo, fluido, tempEvap, tempAmb: tempAmbProp = 
                 </button>
 
                 {cargaFluido && (
-                  <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                  <div className="mt-3 grid grid-cols-5 gap-2 text-center">
                     {[
                       { label: 'Evaporador', valor: cargaFluido.carga_evaporador_kg },
                       { label: 'UC', valor: cargaFluido.carga_uc_kg },
                       { label: 'Linha Líquido', valor: cargaFluido.carga_linha_liquido_kg },
                       { label: 'Linha Sucção', valor: cargaFluido.carga_linha_succao_kg },
+                      { label: `Selagem (+${fmtQtd(cargaFluido.fator_selagem_perc, 0)}%)`, valor: cargaFluido.carga_selagem_kg },
                     ].map(item => (
                       <div key={item.label} className="bg-white rounded-lg p-2 border border-indigo-100">
                         <div className="text-xs font-black text-indigo-700">{fmtQtd(item.valor)} kg</div>

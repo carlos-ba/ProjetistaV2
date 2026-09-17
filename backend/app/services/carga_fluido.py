@@ -2,15 +2,28 @@
 Estimativa de carga de fluido refrigerante (kg).
 
 Fórmula:
-    Carga total = volume_evaporador (kg, do catálogo)
-                + volume_linha_líquido (L) × ρ_líquido (kg/L)
-                + volume_linha_sucção  (L) × ρ_vapor   (kg/L)
+    Carga base = volume_evaporador (kg, do catálogo)
+               + volume_linha_líquido (L) × ρ_líquido (kg/L)
+               + volume_linha_sucção  (L) × ρ_vapor   (kg/L)
+    Carga de selagem = carga base × fator_selagem_perc / 100
+    Carga total = carga base + carga de selagem
 
 Volumes das linhas calculados a partir dos diâmetros internos e comprimentos.
 Densidades: valores médios de catálogo ASHRAE / Danfoss, saturado na T.Evap típica.
 
 Referência bitola → diâmetro interno Cu (mm):
   Norma ASTM B280 / EN 12735 — tubo de cobre para refrigeração.
+
+Carga de selagem (fix 2026-09-17): reserva de líquido que fica retida no fundo
+do tanque de líquido pra manter o dip-tube sempre submerso (evita gás entrando
+na linha de líquido) — conceito real de engenharia ("sealing charge"), mas sem
+tabela por fabricante/diâmetro de vaso disponível (pesquisado, não encontrado
+pra Castel/RAC). Modelado como % editável sobre a carga base, default 30% —
+valor de engenharia definido pelo usuário, não normativo. Entra na carga_total
+retornada (opção B, decidida com o usuário): a mesma carga_total_kg alimenta
+tanto a seleção do tanque (tanque_liquido.py) quanto a quantidade real do item
+"Carga de Fluido" no orçamento — a reserva de selagem é fluido de verdade que
+fica no tanque, não um fator abstrato só de dimensionamento.
 """
 
 import math
@@ -79,6 +92,7 @@ def estimar_carga_fluido(
     volume_interno_uc_kg: float | None = None,
     carga_refrigerante_evap_kg: float | None = None,
     carga_refrigerante_uc_kg: float | None = None,
+    fator_selagem_perc: float = 30.0,
 ) -> dict:
     """
     Estima a carga total de fluido refrigerante do sistema.
@@ -106,9 +120,13 @@ def estimar_carga_fluido(
                                  model, mas o cálculo nunca tinha sido ligado nele —
                                  evaporador entrava com carga 0).
         carga_refrigerante_uc_kg:  mesma ideia, pro lado da unidade condensadora.
+        fator_selagem_perc:     margem de carga de selagem (%) sobre a carga
+                                 base — reserva de líquido retida no tanque
+                                 pra manter o dip-tube submerso. Editável no
+                                 Card 5; sem valor normativo confirmado.
 
     Returns:
-        dict com carga por componente e total em kg
+        dict com carga por componente, carga de selagem e total em kg
     """
     fluido_key = fluido.upper().replace('-', '')
     rho_liq  = _RHO_LIQUIDO.get(fluido_key,  _RHO_LIQUIDO[_FLUIDO_FALLBACK])
@@ -123,7 +141,11 @@ def estimar_carga_fluido(
     valor_uc   = carga_refrigerante_uc_kg if carga_refrigerante_uc_kg else volume_interno_uc_kg
     carga_evap = round(float(valor_evap), 3) if valor_evap else 0.0
     carga_uc   = round(float(valor_uc), 3) if valor_uc else 0.0
-    carga_total = round(carga_evap + carga_uc + carga_liq + carga_suc, 2)
+    carga_base = round(carga_evap + carga_uc + carga_liq + carga_suc, 2)
+
+    fator = max(0.0, fator_selagem_perc)
+    carga_selagem = round(carga_base * fator / 100, 3)
+    carga_total = round(carga_base + carga_selagem, 2)
 
     nota = ""
     if fluido_key not in _RHO_LIQUIDO:
@@ -135,6 +157,9 @@ def estimar_carga_fluido(
         "carga_uc_kg":         carga_uc,
         "carga_linha_liquido_kg": carga_liq,
         "carga_linha_succao_kg":  carga_suc,
+        "carga_base_kg":       carga_base,
+        "fator_selagem_perc":  fator,
+        "carga_selagem_kg":    carga_selagem,
         "carga_total_kg":      carga_total,
         "detalhes": {
             "vol_liquido_L":  round(vol_liq_L, 3),
