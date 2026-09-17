@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TubulacaoRequest(BaseModel):
@@ -10,6 +10,7 @@ class TubulacaoRequest(BaseModel):
     fluido: str = "R22"
     delta_t_selecionado: float = 6.0
     padrao_isolamento: str = "H"
+    comprimento_peca_isolamento_m: float = Field(2.0, gt=0, description="Comprimento de cada peça de isolamento (m) — Armacel é vendido em peças/varas, não a metro corrido; editável no Card 4")
     isolar_liquido: bool = False
     num_circuitos: int = 1
     parede_liquido: str = "fina"    # "fina" (0.79mm) ou "grossa" (1.59mm)

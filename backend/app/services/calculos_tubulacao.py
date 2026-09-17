@@ -265,21 +265,28 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
         ),
     ]
 
+    # Isolamento vendido em peças/varas, não a metro corrido — arredonda pra
+    # cima o total de metros necessários (já com circuitos somados) dividido
+    # pelo comprimento de cada peça (editável no Card 4, padrão 2m).
+    comp_peca = req.comprimento_peca_isolamento_m
+    qtde_pecas_isolamento = math.ceil(qtd_tubo / comp_peca)
+    nota_peca = f"{qtd_tubo}m necessários — peças de {comp_peca:g}m"
+
     # Isolamento sucção (sempre)
     iso_succao = await _buscar_isolamento(db, diam_succao, padrao)
     if iso_succao:
         ref, esp = iso_succao
         materiais.append(ItemTubulacao(
             item=f'Isolamento Armacel {ref} (Sucção)',
-            quantidade=qtd_tubo, unidade="m",
-            detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_succao}",
+            quantidade=qtde_pecas_isolamento, unidade="pç",
+            detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_succao} | {nota_peca}",
             tipo_item="isolamento_tubo_succao",
         ))
     else:
         materiais.append(ItemTubulacao(
             item=f'Isolamento Armacel padrão {padrao} (Sucção)',
-            quantidade=qtd_tubo, unidade="m",
-            detalhe=f"Consultar catálogo para bitola {diam_succao}",
+            quantidade=qtde_pecas_isolamento, unidade="pç",
+            detalhe=f"Consultar catálogo para bitola {diam_succao} | {nota_peca}",
             tipo_item="isolamento_tubo_succao",
         ))
 
@@ -290,15 +297,15 @@ async def calcular_tubulacao(req: TubulacaoRequest, db: AsyncSession) -> Tubulac
             ref, esp = iso_liq
             materiais.append(ItemTubulacao(
                 item=f'Isolamento Armacel {ref} (Líquido)',
-                quantidade=qtd_tubo, unidade="m",
-                detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_liquido}",
+                quantidade=qtde_pecas_isolamento, unidade="pç",
+                detalhe=f"Espessura {esp}mm | Padrão {padrao} | {diam_liquido} | {nota_peca}",
                 tipo_item="isolamento_tubo_liquido",
             ))
         else:
             materiais.append(ItemTubulacao(
                 item=f'Isolamento Armacel padrão {padrao} (Líquido)',
-                quantidade=qtd_tubo, unidade="m",
-                detalhe=f"Consultar catálogo para bitola {diam_liquido}",
+                quantidade=qtde_pecas_isolamento, unidade="pç",
+                detalhe=f"Consultar catálogo para bitola {diam_liquido} | {nota_peca}",
                 tipo_item="isolamento_tubo_liquido",
             ))
 

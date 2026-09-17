@@ -556,6 +556,57 @@ e Elgin ao mesmo tempo pra comparar.
 
 ---
 
+## Card 4 — Tubulação — Isolamento por peça (em produção desde 2026-09-17)
+
+Achado do usuário: o isolamento Armacel (`calculos_tubulacao.py`) entrava na
+lista de materiais em metro linear puro, igual ao tubo de cobre — mas na
+prática a maioria dos fornecedores vende isolamento em **peças** de
+comprimento fixo (normalmente 2m), não a metro corrido. Pedido: converter pra
+peças, arredondando pra cima, com o comprimento da peça editável (porque
+pode variar por fornecedor).
+
+- **Análise antes do código** (mesmo padrão de outras decisões desta sessão):
+  4 pontos levantados e confirmados com o usuário antes de implementar —
+  (1) arredondamento **uma vez sobre o total combinado** dos circuitos, não
+  por circuito separado (mesmo critério já usado em Perfil T e Rebite/
+  Parafuso+Bucha — soma tudo primeiro, arredonda uma vez no fim); (2) rótulo
+  da unidade **"pç"**; (3) os 2 casos de fallback ("Consultar catálogo pra
+  bitola X", quando a espessura/referência não bate no catálogo) também
+  entram na conversão por peça, mesma lógica dos casos encontrados; (4) um
+  campo só, compartilhado entre isolamento de sucção e líquido (é
+  característica do produto Armacel, não da bitola do tubo).
+- **Escopo**: só o **isolamento** — tubo de cobre continua em metro linear,
+  intocado, por pedido explícito do usuário.
+- **`comprimento_peca_isolamento_m`** (novo campo em `TubulacaoRequest`,
+  default 2.0, `Field(gt=0)`) — `calculos_tubulacao.py` calcula
+  `qtde_pecas = math.ceil(qtd_tubo / comprimento_peca_isolamento_m)` uma vez
+  (`qtd_tubo` já vem somado por todos os circuitos, ver "Quantidades" no
+  próprio arquivo) e usa esse valor pros 4 branches de isolamento (sucção/
+  líquido × encontrado no catálogo/fallback). `detalhe` do item passou a
+  mostrar os metros reais necessários e o comprimento de peça usado (ex:
+  `"... | 10m necessários — peças de 2m"`), pra manter a auditoria visível
+  mesmo depois da conversão de unidade.
+- **Frontend** (`CalculadoraTubulacao.jsx`): campo "Comprimento da peça de
+  isolamento (m)" logo depois do grid de padrões D–T, antes do botão "GERAR
+  LISTA DE MATERIAIS" — default 2, persistido em `dados_completos`. Mudar o
+  valor invalida o resultado atual (mesmo padrão dos outros parâmetros do
+  card — precisa clicar em gerar de novo).
+- **Zero transformação no frontend** — a lista de materiais do Card 4 vai
+  direto pro orçamento/Lista de Engenharia via `aoFinalizar(r.data.lista_materiais, ...)`,
+  sem nenhum processamento no meio; por isso a conversão tinha que acontecer
+  no backend, senão orçamento automático e Lista de Engenharia manual
+  ficariam com valores diferentes.
+- Testado via API direta: comprimento padrão (2m, 10m→5pç), editado (3m,
+  10m→4pç, confirma arredondamento pra cima de 3,33), e 2 circuitos (20m
+  combinados→10pç, confirma que soma antes de arredondar uma vez só, não por
+  circuito). Precisou reiniciar o backend limpo — `--reload` não pegou a
+  edição (gotcha já documentado, ver `project_ambiente_local` na memória).
+  Não testado pela tela completa (Cards 1-4 reais) nesta leva.
+- **Não retroativo** — só passa a valer quando o Card 4 for reaberto e
+  "Gerar Lista de Materiais" for clicado de novo.
+
+---
+
 ## Card 5 — ComponentesFluxo — Estado Atual (completo)
 
 ### Dois modos de seleção
@@ -1977,7 +2028,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
 | Card 3 — Selo AC/EC + fix de seleção visual ambígua | ✅ em produção desde 2026-09-10 — `jaAdicionado` comparava por modelo (não só id), marcando as 2 variantes de motor como selecionadas |
 | Card 3 — Filtro de Fabricante/Modelo (chips não-excludentes) | ✅ em produção desde 2026-09-11 — família extraída por convenção de nomenclatura (regex), não é coluna no banco; estado independente por categoria (UC/Evaporadora) |
-| Tubulação ASHRAE + isolamento Armacel | ✅ |
+| Tubulação ASHRAE + isolamento Armacel (por peça, comprimento editável) | ✅ isolamento vendido em peças (default 2m editável) desde 2026-09-17 — tubo de cobre continua em metro linear |
 | Card 5 — Separadores (banco de dados) | ✅ |
 | Card 5 — VET automática (banco de dados) | ✅ desmembrada em corpo+orifício na lista desde 2026-08-31; avisa (banner vermelho) quando capacidade excede o catálogo desde 2026-09-08; catálogo Danfoss TE5-TE55 desde 2026-09-09; interpolação em T.Evap (fix, achado real da WEM Refrigeração) desde 2026-09-11 |
 | Card 5 — Solenoide automático (R404A/R22) | ✅ motor Kv; desmembrado em válvula+bobina na lista desde 2026-08-31 |

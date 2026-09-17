@@ -18,6 +18,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
   const [altaEficiencia, setAltaEficiencia]= useState(initialValues?.altaEficiencia ?? false);
   const [deltaT,         setDeltaT]        = useState(initialValues?.deltaT         ?? 6);
   const [padrao,         setPadrao]        = useState(initialValues?.padrao         ?? 'H');
+  const [comprimentoPecaIsolamento, setComprimentoPecaIsolamento] = useState(initialValues?.comprimentoPecaIsolamento ?? 2);
   const [isolarLiquido,  setIsolarLiquido] = useState(initialValues?.isolarLiquido  ?? false);
   const [paredeliquido,  setParedeliquido]  = useState(initialValues?.paredeiquido  ?? 'fina');
   const [paredeSuccao,   setParedeSuccao]  = useState(initialValues?.paredeSuccao   ?? 'fina');
@@ -27,8 +28,8 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
   const [resultado,      setResultado]     = useState(initialValues?.resultado ?? null);
 
   useEffect(() => {
-    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, isolarLiquido, paredeliquido, paredeSuccao, resultado });
-  }, [distancia, altaEficiencia, deltaT, padrao, isolarLiquido, paredeliquido, paredeSuccao, resultado]);
+    if (onValoresChange) onValoresChange({ distancia, altaEficiencia, deltaT, padrao, comprimentoPecaIsolamento, isolarLiquido, paredeliquido, paredeSuccao, resultado });
+  }, [distancia, altaEficiencia, deltaT, padrao, comprimentoPecaIsolamento, isolarLiquido, paredeliquido, paredeSuccao, resultado]);
   const [erro,           setErro]          = useState('');
   const [loading,        setLoading]       = useState(false);
 
@@ -68,6 +69,7 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
     alta_eficiencia:     altaEficiencia,
     delta_t_selecionado: deltaT,
     padrao_isolamento:   padrao,
+    comprimento_peca_isolamento_m: parseFloat(comprimentoPecaIsolamento) || 2,
     isolar_liquido:      isolarLiquido,
     num_circuitos:       base.qtde || 1,
     parede_liquido:      paredeliquido,
@@ -343,6 +345,20 @@ const CalculadoraTubulacao = ({ evaporador, condensadora, aoFinalizar, initialVa
                   <p className="text-[10px] text-violet-600 mt-2 italic">{sugestao.justificativa}</p>
                 )}
               </div>
+            </div>
+
+            {/* Comprimento da peça de isolamento */}
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+              <label className="text-[10px] font-bold text-violet-500 uppercase">Comprimento da peça de isolamento (m)</label>
+              <input
+                type="number" value={comprimentoPecaIsolamento}
+                onChange={e => { setComprimentoPecaIsolamento(e.target.value); setResultado(null); }}
+                placeholder="2"
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-violet-200 text-sm outline-none bg-white"
+              />
+              <p className="text-[10px] text-violet-400 mt-1">
+                Isolamento é vendido em peças, não a metro corrido — cada peça da lista de materiais terá esta metragem individual (padrão 2m, ajustável conforme o fornecedor).
+              </p>
             </div>
 
             {/* Botão gerar materiais */}
