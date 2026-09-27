@@ -2059,6 +2059,32 @@ EDITAR LOCAL → TESTAR LOCAL → COMMIT → PUSH → PRODUÇÃO
 
 ---
 
+## ⚠️ Risco de Perda de Dados de Usuários Pagantes (regra desde 2026-09-27)
+
+Produção já tem **usuários pagantes reais** (não é mais só ambiente de teste/
+poucos clientes). A partir de 2026-09-27, qualquer desenvolvimento que possa
+**acarretar perda de dados de usuários** exige aviso explícito ao usuário
+(dono do produto) **antes da implantação efetiva** — ele decide se e quando
+aplicar, mesmo que o código já esteja pronto/testado localmente.
+
+- **O que conta como risco**: migration que altera/remove coluna ou tabela
+  com dado real gravado; script que faz `UPDATE`/`DELETE` em massa fora de
+  um `--aplicar` já confirmado; mudança de formato/schema de
+  `Projeto.dados_completos` (JSON) que pode tornar projetos salvos
+  ilegíveis ou truncar dados ao recarregar; qualquer operação em produção
+  que não seja trivialmente reversível.
+- **Não é bloqueio de trabalho** — é um gate de **implantação**: pode
+  analisar, codar e testar local normalmente; o aviso explícito acontece
+  antes do passo que efetivamente coloca em risco dado real (rodar
+  migration/script em produção, ou push de uma mudança de schema que
+  produção vai aplicar sozinha no deploy).
+- **Como avisar**: 1-2 frases claras — o que pode ser perdido, em que
+  cenário, e por quê é necessário pra entregar a melhoria — antes de pedir
+  a confirmação de "pode dar o push"/"pode aplicar em produção". Não
+  presumir que "já testei local" substitui esse aviso.
+
+---
+
 ## Regras de Desenvolvimento
 
 1. **Fluidos suportados no motor de solenoide:** R404A e R22. Para outros, redirecionar ao CoolSelector
