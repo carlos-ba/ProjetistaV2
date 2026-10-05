@@ -19,6 +19,14 @@ class PortaPerfilU(BaseModel):
     quantidade: int = Field(gt=0)
 
 
+class PainelExtra(BaseModel):
+    """Painel extra adicionado manualmente pelo projetista (mesmo painel do
+    projeto — a largura vem de `largura_painel`). Só entra na área de painéis
+    (selante); a lista de painéis em si é montada no frontend."""
+    comprimento_m: float = Field(gt=0)
+    quantidade: int = Field(gt=0)
+
+
 class GabineteRequest(BaseModel):
     comprimento: float
     largura: float
@@ -36,6 +44,7 @@ class GabineteRequest(BaseModel):
     fator_seguranca_selante: float = Field(0.10, ge=0)
     perfis_manuais: list[PerfilManualItem] = []
     portas_perfil_u: list[PortaPerfilU] = []   # só as portas com "incluir Perfil U de acabamento" marcado
+    paineis_extras: list[PainelExtra] = []     # painéis extras manuais (Card 1) — somam na área de painéis (selante)
 
 
 class GabineteDXFRequest(BaseModel):

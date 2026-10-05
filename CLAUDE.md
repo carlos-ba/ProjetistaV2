@@ -471,6 +471,61 @@ comprado à parte junto com o kit de montagem.
 
 ---
 
+## Card 1 — Painéis extras manuais (em produção desde 2026-10-05)
+
+Pedido de usuários: depois do cálculo automático de painéis, o projetista às
+vezes precisa acrescentar painéis à mão (peças de ajuste/fechamento) e
+quer que eles façam parte da relação de painéis do projeto.
+
+- **Seção "Painéis extras (manuais)"** no Card 1, depois do cálculo (antes
+  de "Compra dos painéis"): uso (Parede/Teto/Piso/Outro), comprimento (m),
+  quantidade e observação opcional; cada linha tem quantidade editável e
+  remover. É o **mesmo painel do projeto** (largura/espessura/núcleo do
+  painel selecionado) — só comprimento + qtde; painel de outra espessura
+  seria outro produto e não entrou. Aviso em vermelho se o comprimento passa
+  de `comprimento_max_m` do painel (12 m nos MBP).
+- **Estado**: `paineisExtras` (`[{id, uso, comprimento, qtde, obs}]`)
+  persistido em `dados_completos` via `onValoresChange`; projeto antigo não
+  tem o campo → lista vazia, nada muda pra ele.
+- **Linha separada das automáticas** ("Painéis extras — Parede (manual)")
+  na lista de materiais do orçamento, na tabela do Card 1 e no relatório do
+  Modo Engenharia (as 3 fontes de linha, como no corte sob medida), pra ficar
+  visível o que foi manual. `tipo_item` segue o uso (`painel_parede`/
+  `painel_teto`/`painel_piso`; "Outro" → `painel_parede`) — mesma
+  classificação "painéis", sem migration.
+- **Selante**: a área dos extras soma em `area_total_paineis_m2` no backend
+  (`calcular_gabinete`, `PainelExtra`/`paineis_extras` no `GabineteRequest`,
+  `Field(gt=0)` em comprimento/qtde) — painel instalado tem junta e consome
+  selante (área × 0,145). A `lista_corte` automática **não** é alterada
+  (a linha de extras é montada no frontend). Como os extras afetam o
+  backend, `paineisExtrasKey` entrou na lista que marca o cálculo como
+  "desatualizado" (botão âmbar ao adicionar/alterar; mesma armadilha do
+  Card 2, 2026-08-31) e a seção continua visível enquanto houver extras
+  mesmo com o resultado invalidado.
+- **Modo Revenda**: os extras entram no plano de corte (`planoCorte`, peças
+  com origem "Extra · Uso" aparecem no Mapa de Corte) — senão a revenda
+  compraria barras sem contá-los; nesse modo não há linha "extras" avulsa
+  na tabela (já estão dentro das barras). O plano pode mudar → os checkboxes
+  de corte sob medida resetam.
+- **Correção de bug da entrega de 2026-09-17 (corte sob medida)**: os
+  checkboxes **não resetavam** quando o cálculo era invalidado por edição e
+  refeito (o efeito só comparava assinaturas enquanto o plano existia; ao
+  virar `null` zerava só a ref, e depois de recalcular o `null → plano`
+  contava como 1º render). Agora, se o plano some e já havia um anterior,
+  `cortesSobMedida` é limpo — sem isso os índices apontavam pra barras
+  erradas em silêncio.
+- Testado via API (área 211,14 → 224,36 m² com 3×2,5m + 1×4m; `lista_corte`
+  idêntica com/sem extras; 40×6m → 487,14 m² e selante 26 → 30; comprimento
+  0/qtde 0 → 422), 36/36 testes e pela tela real: adicionar 2 extras →
+  botão âmbar → recalcular → linhas extras (8,63 m² e 4,6 m²) e selante
+  contando 224,4 m²; Revenda 16 → 17 barras com as 4 peças extras no Mapa de
+  Corte e sem linha duplicada; reset dos checkboxes confirmado (1 → 0);
+  salvar → recarregar → reabrir o projeto devolve os extras.
+- Sem risco pra dado de usuário: mudança aditiva, sem migration, formato
+  salvo só ganhou um campo opcional.
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
@@ -2207,6 +2262,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
 | Card 1 — Modo Revenda — corte sob medida por barra | ✅ em produção desde 2026-09-17 — checkbox por barra na sobra: marcado compra só a metragem líquida (sobra com o fornecedor), não marcado compra a barra 12m inteira (sobra vira estoque não controlado pelo sistema); zero mudança de backend |
 | Card 1 — Perfil U de acabamento da abertura das portas | ✅ em produção desde 2026-10-05 — caixa por linha de porta; perímetro pela medida real + batente (4B = 2A+2L, 3B = 2A+L); entra em selante/rebite, não em parafuso+bucha; não altera a lista de painéis |
+| Card 1 — Painéis extras manuais | ✅ em produção desde 2026-10-05 — peças de ajuste (uso/comprimento/qtde) em linha separada; somam na área do selante e entram no plano de corte da Revenda; inclui correção do reset dos checkboxes de corte sob medida |
 | Card 1 — Perfil T + Barra Roscada (sustentação do teto dividido) | ✅ em produção desde 2026-09-10 (migration 0040) — código de fabricante MBP ainda placeholder, pendente confirmação |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |

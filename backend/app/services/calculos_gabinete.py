@@ -116,6 +116,13 @@ def calcular_gabinete(req: GabineteRequest) -> GabineteResponse:
         if not req.piso_rebaixado:
             altura_util -= esp_m + concreto_m
 
+    # Painéis extras manuais (2026-10-05): instalados de verdade, então a área
+    # entra no consumo de selante (area_total_paineis_m2). Não mexem na
+    # lista_corte — a linha "extras" é montada no frontend, separada das
+    # automáticas pra ficar visível o que foi manual.
+    for extra in req.paineis_extras:
+        area_total_paineis += extra.quantidade * extra.comprimento_m * req.largura_painel
+
     return GabineteResponse(
         lista_corte=lista_corte,
         materiais_extras=materiais_extras,

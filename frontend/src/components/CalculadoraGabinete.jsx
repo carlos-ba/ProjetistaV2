@@ -91,6 +91,11 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // se não marcada, a barra é comprada inteira e a sobra fica de estoque do
   // comprador (não controlado por este sistema).
   const [cortesSobMedida, setCortesSobMedida] = useState(() => new Set(initialValues?.cortesSobMedida ?? []));
+  // Painéis extras manuais (mesmo painel do projeto, só comprimento + qtde): peças de
+  // ajuste/fechamento que o projetista acrescenta depois do cálculo automático.
+  // `uso` só classifica a linha no orçamento (Parede/Teto/Piso/Outro).
+  const [paineisExtras, setPaineisExtras] = useState(initialValues?.paineisExtras ?? []);
+  const [novoExtra, setNovoExtra] = useState({ uso: 'Parede', comprimento: '', qtde: 1, obs: '' });
 
   const [resultado, setResultado] = useState(initialValues?.resultado ?? null);
   const [statusCalculo, setStatusCalculo] = useState((jaFinalizado || initialValues?.resultado) ? 'pronto' : null);
@@ -102,11 +107,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
       fatorSegurancaSelante, perfisManuaisSelecionados, cortesSobMedida: [...cortesSobMedida],
+      paineisExtras,
     });
   }, [comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, tipoPiso, espessuraConcreto, pisoRebaixado,
       fabricanteSelecionado, nucleoSelecionado, espessuraSelecionada, larguraSelecionada,
       portasSelecionadas, resultado, modoCompra, comprimentoBarra,
-      fatorSegurancaSelante, perfisManuaisSelecionados, cortesSobMedida]);
+      fatorSegurancaSelante, perfisManuaisSelecionados, cortesSobMedida, paineisExtras]);
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCAD, setLoadingCAD] = useState(false);
@@ -180,6 +186,28 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     .map(p => `${p.porta.id}x${p.qtde}`)
     .join(',');
 
+  // Painéis extras: comprimento+qtde afetam o selante (backend) → assinatura pra marcar
+  // o cálculo como desatualizado quando mudam.
+  const paineisExtrasKey = paineisExtras.map(e => `${e.comprimento}x${e.qtde}`).join(',');
+  const TIPO_ITEM_USO_EXTRA = { Parede: 'painel_parede', Teto: 'painel_teto', Piso: 'painel_piso', Outro: 'painel_parede' };
+  const compMaxPainelM = painelSelecionado?.comprimento_max_m ? Number(painelSelecionado.comprimento_max_m) : null;
+  const extraValido = (parseFloat(novoExtra.comprimento) > 0) && (parseInt(novoExtra.qtde) > 0);
+
+  const adicionarPainelExtra = () => {
+    if (!extraValido) return;
+    setPaineisExtras(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      uso: novoExtra.uso,
+      comprimento: parseFloat(novoExtra.comprimento),
+      qtde: parseInt(novoExtra.qtde),
+      obs: novoExtra.obs.trim(),
+    }]);
+    setNovoExtra(prev => ({ ...prev, comprimento: '', qtde: 1, obs: '' }));
+  };
+  const removerPainelExtra = (id) => setPaineisExtras(prev => prev.filter(e => e.id !== id));
+  const updateQtdePainelExtra = (id, qtde) =>
+    setPaineisExtras(prev => prev.map(e => e.id === id ? { ...e, qtde: Math.max(1, parseInt(qtde) || 1) } : e));
+
   const adicionarPerfilManual = (perfil) => {
     setPerfisManuaisSelecionados(prev => {
       if (prev.some(p => p.perfil.id === perfil.id)) return prev; // já adicionado
@@ -242,7 +270,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       setResultado(null);
     }
   }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto, pisoRebaixado,
-      fatorSegurancaSelante, perfisManuaisSelecionados, portasPerfilUKey,
+      fatorSegurancaSelante, perfisManuaisSelecionados, portasPerfilUKey, paineisExtrasKey,
       configuracoesMontagem?.largura_aba_padrao_mm, configuracoesMontagem?.rendimento_selante_m_por_embalagem]);
 
   // ── Sincroniza com pai ────────────────────────────────────────────────
@@ -280,6 +308,10 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       const origem = i.item.replace('Painéis de ', '').replace('Painéis ', '');
       for (let k = 0; k < i.quantidade; k++) pecas.push({ comprimento: i.comprimento, origem });
     });
+    // Painéis extras manuais também entram nas barras (senão a revenda compraria sem contá-los)
+    paineisExtras.forEach(e => {
+      for (let k = 0; k < e.qtde; k++) pecas.push({ comprimento: e.comprimento, origem: `Extra · ${e.uso}` });
+    });
     const grandes = pecas.filter(p => p.comprimento > barraM);
     const cortaveis = pecas.filter(p => p.comprimento <= barraM).sort((a, b) => b.comprimento - a.comprimento);
     // First-Fit-Decreasing
@@ -305,7 +337,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         ? `${grandes.length} peça(s) de ${fmtQtd(grandes[0].comprimento)}m excedem a barra de ${fmtQtd(barraM)}m — não podem ser cortadas de uma única barra.`
         : null,
     };
-  }, [resultado, comprimentoBarra, painelSelecionado]);
+  }, [resultado, comprimentoBarra, painelSelecionado, paineisExtras]);
 
   // Reseta os checkboxes de corte sob medida sempre que o plano de corte
   // recalcula pra uma composição de barras diferente (mudou dimensão/painel/
@@ -315,7 +347,13 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
   // plano recalculado bate exatamente com o que gerou os índices salvos).
   const assinaturaPlanoCorteRef = React.useRef(null);
   React.useEffect(() => {
-    if (!planoCorte) { assinaturaPlanoCorteRef.current = null; return; }
+    if (!planoCorte) {
+      // O plano sumiu (cálculo invalidado por edição): os índices de barra deixam de valer —
+      // sem resetar aqui, depois de recalcular os checkboxes apontariam pra barras erradas.
+      if (assinaturaPlanoCorteRef.current !== null) setCortesSobMedida(new Set());
+      assinaturaPlanoCorteRef.current = null;
+      return;
+    }
     const assinatura = planoCorte.barras
       .map(b => `${b.indice}:${b.pecas.length}:${b.sobra.toFixed(3)}`)
       .join('|') + `@${planoCorte.barraM}x${planoCorte.larguraM}`;
@@ -347,6 +385,26 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       a.custom === b.custom ? b.comprimento - a.comprimento : (a.custom ? 1 : -1)
     );
   };
+
+  // Largura do painel em metros (painel selecionado; senão derivada de uma peça da lista)
+  const larguraPainelM = (() => {
+    if (painelSelecionado) return painelSelecionado.largura_mm / 1000;
+    const p0 = resultado?.lista_corte?.[0];
+    return (p0?.quantidade && p0?.comprimento) ? p0.area_total / (p0.quantidade * p0.comprimento) : 1.16;
+  })();
+
+  // Linhas de painéis extras no modo Fabricante (no modo Revenda eles já entram no plano de corte
+  // das barras). Linha separada das automáticas, de propósito: o projetista vê o que foi manual.
+  const montarLinhasPaineisExtras = (especBase = '') => paineisExtras.map(e => ({
+    id: null,
+    item: `Painéis extras — ${e.uso} (manual)`,
+    tipo_item: TIPO_ITEM_USO_EXTRA[e.uso] ?? 'painel_parede',
+    quantidade: e.qtde,
+    unidade: 'un',
+    comprimento: e.comprimento,
+    area_total: Number((e.qtde * e.comprimento * larguraPainelM).toFixed(2)),
+    detalhe: [`Peças de ${e.comprimento}m (acrescentadas manualmente)`, e.obs || null, especBase].filter(Boolean).join(' | '),
+  }));
 
   const dadosParaSincronizar = React.useMemo(() => {
     const base = {
@@ -398,7 +456,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           comprimento: i.comprimento,
           area_total: i.area_total,
           detalhe: [i.descricao, especBase].filter(Boolean).join(' | '),
-        }));
+        })).concat(montarLinhasPaineisExtras(especBase));
 
     return {
       ...base, ...resultado,
@@ -423,7 +481,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         ...portasMateriais,
       ]
     };
-  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte, cortesSobMedida]);
+  }, [resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, tipoPiso, portasMateriais, modoCompra, planoCorte, cortesSobMedida, paineisExtras]);
 
   const lastSyncRef = React.useRef("");
   React.useEffect(() => {
@@ -439,6 +497,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       modoCompra, barra: comprimentoBarra, fatorSegurancaSelante, perfisManuais: perfisManuaisKey,
       abaPadrao: configuracoesMontagem?.largura_aba_padrao_mm, rendimentoSelante: configuracoesMontagem?.rendimento_selante_m_por_embalagem,
       cortesSobMedida: [...cortesSobMedida].sort().join(','),
+      paineisExtras: paineisExtras.map(e => `${e.uso}:${e.comprimento}x${e.qtde}:${e.obs}`).join(','),
     });
     if (lastSyncRef.current !== key) { lastSyncRef.current = key; aoFinalizar(dadosParaSincronizar); }
   }, [dadosParaSincronizar, aoFinalizar, resultado, imagemProjeto, comprimento, largura, altura, temperaturaInterna, temperaturaAmbiente, painelSelecionado, espessuraSelecionada, tipoPiso, pisoRebaixado, portasSelecionadas, modoCompra, comprimentoBarra, fatorSegurancaSelante, perfisManuaisSelecionados, configuracoesMontagem, cortesSobMedida]);
@@ -497,6 +556,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         perfis_manuais: perfisManuaisSelecionados.map(({ perfil, qtdeBarras }) => ({
           perfil_id: perfil.id, quantidade_barras: qtdeBarras,
         })),
+        paineis_extras: paineisExtras.map(e => ({ comprimento_m: e.comprimento, quantidade: e.qtde })),
         portas_perfil_u: portasSelecionadas
           .filter(p => p.perfilU)
           .map(({ porta, qtde }) => ({
@@ -550,6 +610,14 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           detalhe: item.descricao || '',
           qtd: item.quantidade,
           medida: `${fmtQtd(item.comprimento)}m | ${fmtQtd(item.area_total)}m²`,
+        });
+      });
+      paineisExtras.forEach(e => {
+        linhas.push({
+          item: `Painéis extras — ${e.uso} (manual)`,
+          detalhe: e.obs || 'Acrescentados manualmente',
+          qtd: e.qtde,
+          medida: `${fmtQtd(e.comprimento)}m | ${fmtQtd(e.qtde * e.comprimento * larguraPainelM)}m²`,
         });
       });
     }
@@ -1105,7 +1173,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         </div>
 
         {/* Resultados */}
-        {(resultado || portasSelecionadas.length > 0) && (
+        {(resultado || portasSelecionadas.length > 0 || paineisExtras.length > 0) && (
           <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-l-4 border-indigo-500 pl-3">Materiais Dimensionados</h3>
 
@@ -1123,6 +1191,70 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                   ℹ️ <span className="font-semibold">Estimativa de concreto: {fmtQtd(resultado.volume_concreto_m3)} m³</span> —
                   obra civil, não entra na lista de materiais nem no orçamento. Valide o volume com o responsável pela obra.
                 </p>
+              </div>
+            )}
+
+            {/* Painéis extras manuais — peças de ajuste/fechamento acrescentadas após o cálculo */}
+            {(resultado || paineisExtras.length > 0) && (
+              <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                <p className="text-[10px] font-bold text-sky-600 uppercase mb-1">Painéis extras (manuais)</p>
+                <p className="text-[11px] text-sky-700 mb-3">
+                  Mesmo painel do projeto{painelSelecionado ? ` (${painelSelecionado.nucleo} ${painelSelecionado.espessura_mm}mm, larg. ${painelSelecionado.largura_mm}mm)` : ''} —
+                  informe o comprimento da peça e a quantidade. Entram na lista de painéis, no plano de corte (Revenda) e no consumo de selante.
+                  Depois de adicionar ou alterar, recalcule o projeto.
+                </p>
+                {paineisExtras.length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {paineisExtras.map(e => (
+                      <div key={e.id} className="flex items-center gap-3 bg-white border border-sky-200 rounded-lg px-3 py-2 text-xs">
+                        <div className="flex-1">
+                          <span className="font-bold text-slate-700">{fmtQtd(e.comprimento)} m — {e.uso}</span>
+                          {e.obs && <span className="text-slate-400 ml-2">{e.obs}</span>}
+                          {compMaxPainelM && e.comprimento > compMaxPainelM && (
+                            <span className="ml-2 text-red-500 font-bold">⚠ acima do comprimento máximo do painel ({fmtQtd(compMaxPainelM)} m)</span>
+                          )}
+                        </div>
+                        <label className="text-[10px] text-slate-500">Qtde:</label>
+                        <input type="number" min="1" value={e.qtde}
+                          onChange={ev => updateQtdePainelExtra(e.id, ev.target.value)}
+                          className="w-14 px-2 py-1 rounded border border-slate-300 text-center text-xs outline-none" />
+                        <button onClick={() => removerPainelExtra(e.id)}
+                          className="text-slate-300 hover:text-red-400 transition-colors text-sm">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Uso</label>
+                    <select value={novoExtra.uso} onChange={ev => setNovoExtra(p => ({ ...p, uso: ev.target.value }))}
+                      className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs bg-white outline-none">
+                      {Object.keys(TIPO_ITEM_USO_EXTRA).map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Comprimento (m)</label>
+                    <input type="number" min="0" step="0.01" value={novoExtra.comprimento} placeholder="Ex: 2.50"
+                      onChange={ev => setNovoExtra(p => ({ ...p, comprimento: ev.target.value }))}
+                      className="w-28 px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Qtde</label>
+                    <input type="number" min="1" value={novoExtra.qtde}
+                      onChange={ev => setNovoExtra(p => ({ ...p, qtde: ev.target.value }))}
+                      className="w-16 px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-center outline-none bg-white" />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Observação (opcional)</label>
+                    <input type="text" value={novoExtra.obs} maxLength={80} placeholder="Ex: fechamento da coluna"
+                      onChange={ev => setNovoExtra(p => ({ ...p, obs: ev.target.value }))}
+                      className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                  </div>
+                  <button onClick={adicionarPainelExtra} disabled={!extraValido}
+                    className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    + Adicionar
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1186,6 +1318,16 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
                       <td className="px-4 py-3 text-slate-700 font-medium">{item.item}</td>
                       <td className="px-4 py-3 font-semibold text-slate-900">{item.quantidade}</td>
                       <td className="px-4 py-3 text-right text-slate-500">{fmtQtd(item.comprimento)}m | {fmtQtd(item.area_total)}m²</td>
+                    </tr>
+                  ))}
+                  {!(modoCompra === 'revenda' && planoCorte) && paineisExtras.map(e => (
+                    <tr key={`px-${e.id}`} className="hover:bg-slate-50 bg-sky-50/40">
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="font-medium">Painéis extras — {e.uso} (manual)</div>
+                        {e.obs && <div className="text-[10px] text-slate-400 uppercase font-bold">{e.obs}</div>}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{e.qtde}</td>
+                      <td className="px-4 py-3 text-right text-sky-600 text-xs italic">{fmtQtd(e.comprimento)}m | {fmtQtd(e.qtde * e.comprimento * larguraPainelM)}m²</td>
                     </tr>
                   ))}
                   {(resultado?.materiais_extras || []).map((item, idx) => (
