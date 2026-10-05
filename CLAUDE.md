@@ -667,6 +667,27 @@ utilizável hoje (via fallback `carga_refrigerante_kg || volume_interno_kg`).
 
 ---
 
+## Card 3 — Faixa de capacidade e nº de opções (ampliados em 2026-10-05)
+
+Achado do usuário: às vezes só aparecia 1 card nas opções de UC/Evaporadora.
+Investigado antes de codar (simulação do motor sem corte, banco local):
+
+- **Causa**: `selecionar_equipamentos_db` aceita só equipamentos entre 80% e
+  300% da carga e devolvia `candidatos[:5]` ordenados por |diferença| — o
+  corte em 5 escondia dezenas de opções válidas (ex: Evaporadora R404A -10°C,
+  5.000 kcal/h: 45 candidatos na faixa, 5 exibidos).
+- **Mudança**: constantes `PERCENTUAL_MIN = 70` (era 80), `PERCENTUAL_MAX = 300`
+  (inalterado), `MAX_CANDIDATOS = 8` (era 5) em `selecao_equipamentos.py`.
+  Ordenação por proximidade mantida; selos ideal/menor/maior inalterados
+  (abaixo de 90% sai "Capacidade Menor"). Só backend, sem migration.
+- **Limite que a faixa não resolve**: cargas altas (≥20.000 kcal/h) ou T.Evap
+  muito baixa (-35°C) têm poucos modelos no catálogo mesmo com a faixa aberta
+  (ex: UC R404A -35°C/20.000 → 4 cards) — é lacuna de catálogo, não de
+  regra. R134a/R448A/R449A/R507A praticamente sem evaporadora cadastrada.
+- Testado direto no motor (UC e Evaporadora, 4 cenários) + 36/36 testes.
+
+---
+
 ## Card 3 — Filtro de Fabricante/Modelo (em produção desde 2026-09-11)
 
 Achado do usuário: com o catálogo crescendo (hoje 104 modelos de UC em 3
@@ -2269,6 +2290,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Catálogo Mipal Hd/Hdl400 Pro (evaporadoras) + Bitzer Combat/Combat+/BIG CDU (UC) | ✅ em produção desde 2026-09-08 (migrations 0037/0038) — schema evoluído (AC/EC, dimensões, peso, ruído, ventiladores, variantes elétricas, dados de compressor) |
 | Card 3 — Ventiladores no card do evaporador (qtde/diâmetro/vazão) | ✅ em produção desde 2026-09-08, diâmetro ainda "não informado" pro Mipal (catálogo sem esse dado) |
 | Card 3 — Selo AC/EC + fix de seleção visual ambígua | ✅ em produção desde 2026-09-10 — `jaAdicionado` comparava por modelo (não só id), marcando as 2 variantes de motor como selecionadas |
+| Card 3 — Faixa 70–300% e até 8 opções (era 80–300% e 5) | ✅ implementado em 2026-10-05 — corte em 5 escondia opções válidas; extremos de carga/T.Evap seguem limitados pelo catálogo |
 | Card 3 — Filtro de Fabricante/Modelo (chips não-excludentes) | ✅ em produção desde 2026-09-11 — família extraída por convenção de nomenclatura (regex), não é coluna no banco; estado independente por categoria (UC/Evaporadora) |
 | Tubulação ASHRAE + isolamento Armacel (por peça, comprimento editável) | ✅ isolamento vendido em peças (default 2m editável) desde 2026-09-17 — tubo de cobre continua em metro linear |
 | Card 5 — Separadores (banco de dados) | ✅ |

@@ -7,6 +7,14 @@ from app.models.equipamento import Equipamento, PerformanceEquipamento, FatorCor
 from app.schemas.selecao import SelecaoRequest, EquipamentoSelecionado
 
 
+# Faixa de capacidade (% da carga pedida) e nº máximo de cards devolvidos por busca.
+# Ampliados em 2026-10-05 (5 → 8 cards, piso 80% → 70%): o corte em 5 escondia
+# opções válidas, ordenadas por proximidade.
+PERCENTUAL_MIN = 70
+PERCENTUAL_MAX = 300
+MAX_CANDIDATOS = 8
+
+
 def _interpolar(x: float, x1: float, y1: float, x2: float, y2: float) -> float:
     if x1 == x2:
         return y1
@@ -181,7 +189,9 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
         diff = capacidade - req.carga_termica_total
         percentual = (capacidade / req.carga_termica_total) * 100
 
-        if not (80 <= percentual <= 300):
+        # Faixa de capacidade aceita (ampliada em 2026-10-05: piso 80% → 70%).
+        # Abaixo de 90% o card sai com o selo "menor" (frontend) — o projetista decide.
+        if not (PERCENTUAL_MIN <= percentual <= PERCENTUAL_MAX):
             continue
 
         status = "ideal"
@@ -211,4 +221,4 @@ async def selecionar_equipamentos_db(req: SelecaoRequest, db: AsyncSession) -> l
         ))
 
     candidatos.sort(key=lambda x: abs(x.diferenca))
-    return candidatos[:5]
+    return candidatos[:MAX_CANDIDATOS]
