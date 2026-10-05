@@ -417,6 +417,60 @@ Usuário trouxe a distinção correta entre os 2 jeitos de comprar cada barra:
 
 ---
 
+## Card 1 — Perfil U de acabamento da abertura das portas (em produção desde 2026-10-05)
+
+Pedido de usuários: alguns fabricantes de porta enviam o perfil U de
+acabamento da abertura no conjunto, outros não — nesses o perfil precisa ser
+comprado à parte junto com o kit de montagem.
+
+- **Caixa por linha de porta** no Card 1 ("incluir Perfil U de acabamento da
+  abertura (vendido à parte)"), desmarcada por padrão. Por linha (não uma
+  só pro projeto) porque o mesmo projeto pode ter portas de fabricantes
+  diferentes. `portasSelecionadas[i].perfilU` (boolean) persiste em
+  `dados_completos` junto com o resto; projeto salvo antes desta mudança não
+  tem o campo → vale `false`, nada muda pra ele.
+- **O recorte da porta NÃO reduz painel**: a câmara é montada com a
+  quantidade fixa de painéis e a abertura é cortada depois (o que sai é
+  sucata) — por isso a lista de painéis (`lista_corte`,
+  `area_total_paineis_m2`) não depende das portas e não foi tocada.
+- **Perímetro por porta, pela medida real do cadastro e pelo batente**:
+  `4B` = 2 alturas + 2 larguras; `3B` = 2 alturas + 1 largura (a base é
+  soleira, sem perfil). **Não usa o campo `soleira`** do catálogo — está
+  `false` em todas as 26 portas, inclusive nas 3B (confirmando a cautela já
+  registrada em "Catálogo Técnico": `batente` e `soleira` são independentes).
+  Porta sem batente (nenhuma hoje) → tratada como 4B (nunca sai curto) +
+  aviso em `avisos_kit_montagem`.
+- **Quantidade**: soma `perímetro × qtde` de todas as linhas marcadas e
+  arredonda **uma vez** (`ceil(total ÷ comprimento da barra)`, 3 m no
+  catálogo — mesmo critério de Perfil T/Rebite). Perfil escolhido pela mesma
+  busca do U do piso (`_buscar_perfil`: aba padrão das Configurações + alma
+  = espessura da parede, com fallback "próximo tamanho acima").
+- **Entra em selante e rebite** (soma em `metros_perfis_totais` — é rebitado
+  e selado como os demais perfis) e **não** em parafuso+bucha (esse é só do U
+  que fixa na laje, `metros_perfil_u`).
+- **Linha própria** "Perfil U — acabamento de porta", reaproveitando
+  `tipo_item="perfil_u"` (mesma classificação "Acessórios de Montagem") — sem
+  migration. `detalhe` mostra metros de abertura e a composição (ex:
+  "10.40m de abertura (1x 1000x2000 4B; 1x 800x1800 3B)").
+- **Backend**: `PortaPerfilU` + `GabineteRequest.portas_perfil_u` (só as
+  portas marcadas, com `Field(gt=0)` em medidas/qtde); novo parâmetro em
+  `calcular_kit_montagem`. **Frontend**: o payload de `POST /api/v1/gabinete`
+  passou a levar as portas marcadas. Como as portas deixaram de ser
+  independentes do cálculo, `portasPerfilUKey` (portas marcadas + qtde)
+  entrou na lista de dependências que marca o cálculo como "desatualizado" —
+  mesma armadilha do Card 2 (2026-08-31), senão marcar a caixa não pediria
+  recálculo.
+- Testado via API (2×1000×2000 4B + 1×800×1800 3B = 16,40 m → 6 barras;
+  selante 26→29 e rebite 1230→1410 = exatamente +18 m de perfil; parafuso+
+  bucha inalterado em 66; sem batente → aviso; limite exato de 6,00 m → 2
+  barras; qtde 0 → 422), 36/36 testes automatizados e pela tela real
+  (sem marcar: lista idêntica à anterior; marcando 2 portas e recalculando:
+  10,40 m → 4 barras, botão âmbar ao marcar).
+- Sem risco pra dado de usuário: mudança aditiva, sem migration, sem alterar
+  o formato salvo.
+
+---
+
 ## Card 3 — Seleção de Equipamentos (interpolação bilinear)
 
 Em produção desde 2026-08-31. Arquivo: `backend/app/services/selecao_equipamentos.py`.
@@ -2139,7 +2193,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 
 ---
 
-## Estado atual do código (auditado em 2026-09-17)
+## Estado atual do código (auditado em 2026-10-05)
 
 | Funcionalidade | Status |
 |---------------|--------|
@@ -2152,6 +2206,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
 | Card 1 — Modo Revenda — corte sob medida por barra | ✅ em produção desde 2026-09-17 — checkbox por barra na sobra: marcado compra só a metragem líquida (sobra com o fornecedor), não marcado compra a barra 12m inteira (sobra vira estoque não controlado pelo sistema); zero mudança de backend |
+| Card 1 — Perfil U de acabamento da abertura das portas | ✅ em produção desde 2026-10-05 — caixa por linha de porta; perímetro pela medida real + batente (4B = 2A+2L, 3B = 2A+L); entra em selante/rebite, não em parafuso+bucha; não altera a lista de painéis |
 | Card 1 — Perfil T + Barra Roscada (sustentação do teto dividido) | ✅ em produção desde 2026-09-10 (migration 0040) — código de fabricante MBP ainda placeholder, pendente confirmação |
 | Carga térmica | ✅ campos de horas (iluminação/ocupação/motores) e margem de segurança editáveis desde 2026-08-31 |
 | Seleção UC + Evaporadora | ✅ interpolação bilinear T.Ambiente × T.Evap desde 2026-08-31; fix do fator de correção de fluido (Mipal/R404A etc.) desde 2026-09-08 |

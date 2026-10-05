@@ -9,6 +9,16 @@ class PerfilManualItem(BaseModel):
     quantidade_barras: int = Field(gt=0)
 
 
+class PortaPerfilU(BaseModel):
+    """Porta (linha do projeto) marcada pra receber Perfil U de acabamento da
+    abertura, vendido à parte. Só dimensão/batente/qtde — o recorte da porta
+    não altera a lista de painéis (o painel inteiro é montado e depois cortado)."""
+    largura_mm: int = Field(gt=0)
+    altura_mm: int = Field(gt=0)
+    batente: str | None = None   # "3B" (sem perfil na base, soleira) | "4B" (perímetro completo)
+    quantidade: int = Field(gt=0)
+
+
 class GabineteRequest(BaseModel):
     comprimento: float
     largura: float
@@ -25,6 +35,7 @@ class GabineteRequest(BaseModel):
     rendimento_selante_m_por_embalagem: float = Field(12.0, gt=0)
     fator_seguranca_selante: float = Field(0.10, ge=0)
     perfis_manuais: list[PerfilManualItem] = []
+    portas_perfil_u: list[PortaPerfilU] = []   # só as portas com "incluir Perfil U de acabamento" marcado
 
 
 class GabineteDXFRequest(BaseModel):

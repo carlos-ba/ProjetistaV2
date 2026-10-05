@@ -157,7 +157,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     setPortasSelecionadas(prev => {
       const idx = prev.findIndex(p => p.porta.id === porta.id);
       if (idx >= 0) return prev; // já adicionada
-      return [...prev, { porta, qtde: 1 }];
+      return [...prev, { porta, qtde: 1, perfilU: false }];
     });
   };
 
@@ -168,6 +168,17 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
     setPortasSelecionadas(prev =>
       prev.map(p => p.porta.id === id ? { ...p, qtde: Math.max(1, parseInt(qtde) || 1) } : p)
     );
+
+  // Perfil U de acabamento da abertura (vendido à parte por alguns fabricantes de porta)
+  const updatePerfilUPorta = (id, marcado) =>
+    setPortasSelecionadas(prev => prev.map(p => p.porta.id === id ? { ...p, perfilU: marcado } : p));
+
+  // Só as portas marcadas (+ qtde) afetam o cálculo do backend — assinatura usada
+  // pra marcar o cálculo como desatualizado quando muda.
+  const portasPerfilUKey = portasSelecionadas
+    .filter(p => p.perfilU)
+    .map(p => `${p.porta.id}x${p.qtde}`)
+    .join(',');
 
   const adicionarPerfilManual = (perfil) => {
     setPerfisManuaisSelecionados(prev => {
@@ -231,7 +242,7 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
       setResultado(null);
     }
   }, [comprimento, largura, altura, temperaturaInterna, painelSelecionado, tipoPiso, espessuraConcreto, pisoRebaixado,
-      fatorSegurancaSelante, perfisManuaisSelecionados,
+      fatorSegurancaSelante, perfisManuaisSelecionados, portasPerfilUKey,
       configuracoesMontagem?.largura_aba_padrao_mm, configuracoesMontagem?.rendimento_selante_m_por_embalagem]);
 
   // ── Sincroniza com pai ────────────────────────────────────────────────
@@ -486,6 +497,12 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
         perfis_manuais: perfisManuaisSelecionados.map(({ perfil, qtdeBarras }) => ({
           perfil_id: perfil.id, quantidade_barras: qtdeBarras,
         })),
+        portas_perfil_u: portasSelecionadas
+          .filter(p => p.perfilU)
+          .map(({ porta, qtde }) => ({
+            largura_mm: porta.largura_mm, altura_mm: porta.altura_mm,
+            batente: porta.batente ?? null, quantidade: qtde,
+          })),
       });
       setResultado(response.data);
       setStatusCalculo('pronto');
@@ -932,13 +949,20 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           {portasSelecionadas.length > 0 && (
             <div className="border-t border-slate-200 pt-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Portas no projeto</p>
-              {portasSelecionadas.map(({ porta, qtde }) => (
+              {portasSelecionadas.map(({ porta, qtde, perfilU }) => (
                 <div key={porta.id} className="flex items-center gap-3 bg-white border border-emerald-200 rounded-lg px-3 py-2">
                   <div className="flex-1 text-xs">
                     <span className="font-bold text-slate-700">
                       {porta.largura_mm}×{porta.altura_mm}mm — {TIPO_PORTA_LABEL[porta.tipo] || porta.tipo}
                     </span>
-                    <span className="text-slate-400 ml-1">({porta.classificacao})</span>
+                    <span className="text-slate-400 ml-1">({porta.classificacao}{porta.batente ? ` · ${porta.batente}` : ''})</span>
+                    <label className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-emerald-700 cursor-pointer"
+                      title="Marque quando o fabricante da porta NÃO envia o perfil U de acabamento da abertura no conjunto">
+                      <input type="checkbox" checked={!!perfilU}
+                        onChange={e => updatePerfilUPorta(porta.id, e.target.checked)}
+                        className="w-3.5 h-3.5 accent-emerald-600" />
+                      incluir Perfil U de acabamento da abertura (vendido à parte)
+                    </label>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <label className="text-[10px] text-slate-500">Qtde:</label>

@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.models.perfil_metalico import PerfilMetalico
 from app.models.kit_montagem import SelanteMontagem, Rebite, ParafusoBucha, BarraRoscadaPerfilT
-from app.schemas.gabinete import MaterialExtra, PerfilManualItem
+from app.schemas.gabinete import MaterialExtra, PerfilManualItem, PortaPerfilU
 
 
 async def _buscar_perfil(
@@ -67,6 +67,7 @@ async def calcular_kit_montagem(
     perfis_manuais: list[PerfilManualItem],
     largura_painel: float,
     linhas_sustentacao_perfil_t: int = 0,
+    portas_perfil_u: list[PortaPerfilU] | None = None,
 ) -> tuple[list[MaterialExtra], list[str]]:
     itens: list[MaterialExtra] = []
     avisos: list[str] = []
@@ -153,6 +154,58 @@ async def calcular_kit_montagem(
             ),
             tipo_item="perfil_u",
         ))
+
+    # U de acabamento da abertura das portas (2026-10-05): só pras linhas de
+    # porta marcadas no Card 1 (fabricante não manda o perfil no conjunto).
+    # Mesma busca do U do piso (aba padrão + alma = espessura da parede). O
+    # recorte da porta NÃO reduz painel (a câmara é montada inteira e a
+    # abertura cortada depois), então nada muda na lista de painéis. Perímetro
+    # por porta: 4B = 2 alturas + 2 larguras; 3B = 2 alturas + 1 largura (base
+    # é soleira, sem perfil). Campo `soleira` do catálogo não serve de critério
+    # (vem falso até nas 3B) — a regra é só pelo batente; sem batente → 4B
+    # (perímetro completo, nunca sai curto). Soma todas as portas marcadas e
+    # arredonda UMA vez; entra em selante/rebite (rebitado e selado como os
+    # demais perfis) mas NÃO em parafuso+bucha (esse é só do U que fixa na laje).
+    if portas_perfil_u:
+        total_porta_m = 0.0
+        partes: list[str] = []
+        sem_batente = False
+        for p in portas_perfil_u:
+            larg_m, alt_m = p.largura_mm / 1000.0, p.altura_mm / 1000.0
+            bat = (p.batente or "").strip().upper()
+            if bat == "3B":
+                perim = 2 * alt_m + larg_m
+            else:
+                perim = 2 * alt_m + 2 * larg_m
+                if bat != "4B":
+                    sem_batente = True
+            total_porta_m += perim * p.quantidade
+            partes.append(f"{p.quantidade}x {p.largura_mm}x{p.altura_mm} {bat or 's/ batente (tratado como 4B)'}")
+        total_porta_m = round(total_porta_m, 6)
+        perfil, exato = await _buscar_perfil(db, "U", aba, medida_2_min=espessura_painel_mm, medida_3=aba)
+        if not perfil:
+            avisos.append(
+                f"Nenhum Perfil U com aba {aba}mm e alma ≥ {espessura_painel_mm:.0f}mm no catálogo — "
+                f"acabamento de porta não incluído na lista. Cadastre o perfil ou adicione manualmente."
+            )
+        else:
+            compr_m = perfil.comprimento_mm / 1000.0
+            barras = math.ceil(total_porta_m / compr_m)
+            metros_perfis_totais += barras * compr_m
+            aviso = "" if exato else f" — sem medida exata (alma ideal {espessura_painel_mm:.0f}mm), usado {perfil.medida_2_mm}mm"
+            itens.append(MaterialExtra(
+                item="Perfil U — acabamento de porta",
+                qtd=f"{barras} barra(s)",
+                quantidade=float(barras),
+                unidade="barra",
+                detalhe=(
+                    f"{aba}x{perfil.medida_2_mm}x{aba}x{perfil.comprimento_mm}mm — "
+                    f"{total_porta_m:.2f}m de abertura ({'; '.join(partes)}) ({perfil.codigo_fabricante}){aviso}"
+                ),
+                tipo_item="perfil_u",
+            ))
+            if sem_batente:
+                avisos.append("Porta sem batente (3B/4B) cadastrado — perímetro do acabamento calculado como 4B (completo).")
 
     # Perfis extras (seleção manual — Liso, Z, variações fora do padrão)
     for manual in perfis_manuais:

@@ -31,6 +31,7 @@ async def calcular_gabinete_endpoint(
         perfis_manuais=payload.perfis_manuais,
         largura_painel=payload.largura_painel,
         linhas_sustentacao_perfil_t=resultado.linhas_sustentacao_perfil_t,
+        portas_perfil_u=payload.portas_perfil_u,
     )
     itens_barreira, avisos_barreira = await calcular_barreira_vapor(db, resultado.area_piso_m2)
     resultado.materiais_extras += itens_kit + itens_barreira
