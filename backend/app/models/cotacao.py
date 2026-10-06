@@ -80,6 +80,9 @@ class CotacaoItem(Base):
     preco_unitario: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     marca_modelo_cotado: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     prazo_entrega_dias: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Quantidade que o fornecedor cotou (lida do PDF/ajustada na conferência) — pode
+    # diferir de `qtde` (o que pedimos) por embalagem/unidade; só informativa.
+    qtde_cotada: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 3), nullable=True)
     obs_fornecedor: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     cotacao: Mapped["Cotacao"] = relationship(back_populates="itens")

@@ -53,7 +53,15 @@ _TOOL = {
                         },
                         "preco_unitario": {"type": ["number", "null"]},
                         "marca_modelo": {"type": ["string", "null"], "description": "marca/modelo lido no PDF"},
-                        "prazo_dias": {"type": ["integer", "null"]},
+                        "qtde_cotada": {
+                            "type": ["number", "null"],
+                            "description": (
+                                "Quantidade que o fornecedor cotou para esse item, lida da coluna de "
+                                "quantidade do PDF (QTD/Quantidade). NUNCA ler de colunas como CST, NCM, "
+                                "código, % ICMS, preço ou valor total — esses números não são quantidade. "
+                                "null se o PDF não trouxer quantidade clara."
+                            ),
+                        },
                         "obs": {
                             "type": ["string", "null"],
                             "description": "observação — obrigatório explicar o motivo quando status=possivel_substituicao",
@@ -111,6 +119,12 @@ Instruções:
 4. Preços: leia o preço unitário já com impostos/descontos aplicados quando o PDF
    distinguir isso (preço final que o cliente pagaria por unidade).
 5. Nunca invente item_id que não esteja na nossa lista.
+6. `qtde_cotada`: a quantidade que o fornecedor cotou, lida SOMENTE da coluna de quantidade
+   (cabeçalho "QTD"/"Quantidade"). Cotações de revenda trazem colunas numéricas vizinhas que
+   NÃO são quantidade — CST (ex: 500, 200, 060), NCM (8 dígitos), código do produto, % ICMS,
+   preço e valor total. Se a unidade do fornecedor for diferente da nossa (ex: kg em vez de
+   metros, pacote em vez de unidade), reporte o número como está no PDF e explique em `obs`.
+7. Não existe campo de prazo de entrega neste relatório — ignore prazos.
 
 Responda chamando a ferramenta `reportar_casamento_cotacao` com o relatório completo."""
 
@@ -229,7 +243,8 @@ async def analisar_pdf_cotacao(
                 "preco_unitario": it.get("preco_unitario"),
                 "preco_bruto": None,
                 "marca_modelo": it.get("marca_modelo"),
-                "prazo_dias": it.get("prazo_dias"),
+                "prazo_dias": None,
+                "qtde_cotada": it.get("qtde_cotada"),
                 "obs": _obs(it.get("obs")),
                 "descricao_pdf": it.get("descricao_pdf"),
                 "termo_fornecedor": it.get("termo_fornecedor"),
@@ -245,7 +260,8 @@ async def analisar_pdf_cotacao(
                 "preco_unitario": it.get("preco_unitario"),
                 "preco_bruto": None,
                 "marca_modelo": it.get("marca_modelo"),
-                "prazo_dias": it.get("prazo_dias"),
+                "prazo_dias": None,
+                "qtde_cotada": it.get("qtde_cotada"),
                 "obs": _obs(it.get("obs")),
                 "descricao_pdf": it.get("descricao_pdf"),
                 "termo_fornecedor": None,
@@ -264,6 +280,7 @@ async def analisar_pdf_cotacao(
                 "preco_bruto": None,
                 "marca_modelo": None,
                 "prazo_dias": None,
+                "qtde_cotada": None,
                 "obs": None,
                 "descricao_pdf": None,
                 "termo_fornecedor": None,

@@ -1619,7 +1619,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0040)
+## Banco de Dados — Migrations (0001→0043)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -1665,6 +1665,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0040 | Perfil T (novo `tipo` em `perfil_metalico`) + tabela `barra_roscada_perfil_t` — sustentação do teto dividido pela auto-portância (ver seção própria acima); código de fabricante ainda placeholder, pendente confirmação |
 | 0041 | Preenche `peso_liquido_kg`/`carga_refrigerante_kg` dos 12 evaporadores Elgin FL* — dado extraído do catálogo técnico oficial (PDF), validado contra `volume_interno_kg` já cadastrado |
 | 0042 | Copia `volume_interno_kg` → `carga_refrigerante_kg` nos 13 evaporadores Mipal Mi BX (linha antiga) — nomenclatura antiga confirmada pelo usuário, mesmo padrão da Elgin (0041) |
+| 0043 | Campo `cotacao_item.qtde_cotada` (nullable) — quantidade que o fornecedor cotou, lida do PDF na importação por IA e ajustável na conferência |
 
 ---
 
@@ -2143,6 +2144,32 @@ Arquivos: `backend/app/services/cotacao_pdf.py` (chamada à IA),
 - `cotacao_item.obs_fornecedor` ampliado pra 500 caracteres (migration 0031)
   — as explicações de possível substituição geradas pela IA passavam fácil
   dos 250 caracteres pensados originalmente pra uma anotação manual curta.
+- **Fix — prazo lido do CST + "Qtde cotada" na conferência (2026-10-06)**:
+  achado do usuário conferindo a cotação COT-2026-0078-F015 (PDF Brasifrio):
+  o 3º campo de cada linha (sem rótulo quando preenchido) é o **prazo de
+  entrega em dias**, e a IA tinha preenchido 500/200 — valores da coluna
+  **CST** do PDF de revenda (o PDF não traz prazo por item, só "Prev.
+  Entrega: IMEDIATO" no cabeçalho). Causa: o `prazo_dias` do tool schema não
+  dizia de onde ler. Correção: `prazo_dias` **saiu** do import de PDF
+  (sempre `None`) e entrou **`qtde_cotada`** (quantidade da coluna QTD do PDF;
+  prompt proíbe explicitamente CST/NCM/código/% ICMS/valor, e pede explicar
+  em `obs` quando a unidade do fornecedor difere da nossa).
+  - **Conferência** (`PainelCotacoes.jsx`): rótulos fixos acima dos campos
+    ("Preço unitário", "Marca/modelo ofertado", "Qtde cotada", "Observação"),
+    título do item mostra "pedido: N un"; "Qtde cotada" fica **âmbar** quando
+    diverge do pedido. O import de **planilha Excel** mantém "Prazo (dias)"
+    (lá o fornecedor preenche de verdade) — `analise.origem` ('pdf'|'planilha')
+    decide qual dos dois aparece.
+  - **Migration 0043**: `cotacao_item.qtde_cotada` (Numeric 12,3, nullable,
+    aditiva — sem risco pra dado existente). `ItemConfirmacao.qtde_cotada`
+    (`ge=0`) grava na confirmação; exposto em `CotacaoItemOut`.
+  - **Só informativa por ora**: não altera preço nem proposta (a correção de
+    quantidade da proposta continua sendo a "Revisão manual" do Card 6).
+  - Testado com o PDF real + a lista da planilha (27 itens): 27/27
+    `qtde_cotada` batem com a coluna QTD (tubo 8,973→9 kg, curva 1.1/8
+    pedido 1 → cotado 6, destacada), prazo sempre vazio; 36/36 testes e
+    build do frontend. Não testado pela tela de conferência (precisa de login
+    + cotação), conferência visual feita pelo usuário.
 
 ---
 
@@ -2309,7 +2336,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
 | Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos` |
-| Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01 |
+| Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
 | Identidade da Proposta ao Cliente (nome/logo/contato do técnico) | ✅ em produção desde 2026-09-03 |

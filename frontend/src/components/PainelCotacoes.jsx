@@ -133,7 +133,7 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
       const r = await api.post('/api/v1/cotacoes/importar/analisar', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setAnalise(r.data);
+      setAnalise({ ...r.data, origem: 'planilha' });
       // Pré-carrega os campos editáveis com o que foi lido
       const ed = {};
       r.data.itens.forEach(it => {
@@ -167,14 +167,14 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
       const r = await api.post(`/api/v1/cotacoes/${cotacaoPdfAlvo}/importar/analisar-pdf`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setAnalise(r.data);
+      setAnalise({ ...r.data, origem: 'pdf' });
       const ed = {};
       r.data.itens.forEach(it => {
         if (it.item_id) {
           ed[it.item_id] = {
             preco: it.preco_unitario ?? '',
             marca: it.marca_modelo ?? '',
-            prazo: it.prazo_dias ?? '',
+            qtdeCotada: it.qtde_cotada ?? '',
             obs: it.obs ?? '',
             termoFornecedor: it.termo_fornecedor ?? null,
           };
@@ -200,7 +200,8 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
         item_id: parseInt(id),
         preco_unitario: e.preco !== '' ? parseFloat(e.preco) : null,
         marca_modelo_cotado: e.marca || null,
-        prazo_entrega_dias: e.prazo !== '' ? parseInt(e.prazo) : null,
+        prazo_entrega_dias: e.prazo !== '' && e.prazo != null ? parseInt(e.prazo) : null,
+        qtde_cotada: e.qtdeCotada !== '' && e.qtdeCotada != null ? parseFloat(e.qtdeCotada) : null,
         obs_fornecedor: e.obs || null,
         termo_fornecedor: e.termoFornecedor || null,
       }));
@@ -288,7 +289,7 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <p className="text-sm font-bold text-slate-800 leading-tight">
                           {it.descricao}
-                          <span className="font-normal text-slate-500 ml-2 text-xs">{it.qtde} {it.unidade}</span>
+                          <span className="font-normal text-slate-500 ml-2 text-xs">pedido: {it.qtde} {it.unidade}</span>
                         </p>
                         <span className={`text-[10px] font-bold whitespace-nowrap ${st.txt}`}>{st.label}</span>
                       </div>
@@ -318,21 +319,56 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
 
                       {ed && (
                         <div className="grid grid-cols-12 gap-2">
-                          <div className="col-span-3 relative">
-                            <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
-                            <input type="number" step="0.01" min="0" value={ed.preco}
-                              onChange={e => updateEdicao(it.item_id, 'preco', e.target.value)}
-                              className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
-                          </div>
-                          <input value={ed.marca} placeholder="Marca/modelo ofertado"
-                            onChange={e => updateEdicao(it.item_id, 'marca', e.target.value)}
-                            className="col-span-4 px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
-                          <input type="number" min="0" value={ed.prazo} placeholder="Prazo"
-                            onChange={e => updateEdicao(it.item_id, 'prazo', e.target.value)}
-                            className="col-span-2 px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-center outline-none bg-white" />
-                          <input value={ed.obs} placeholder="Obs"
-                            onChange={e => updateEdicao(it.item_id, 'obs', e.target.value)}
-                            className="col-span-3 px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                          <label className="col-span-3 block">
+                            <span className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço unitário</span>
+                            <span className="relative block">
+                              <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
+                              <input type="number" step="0.01" min="0" value={ed.preco}
+                                onChange={e => updateEdicao(it.item_id, 'preco', e.target.value)}
+                                className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                            </span>
+                          </label>
+                          <label className="col-span-4 block">
+                            <span className="block text-[10px] font-bold text-slate-500 mb-0.5">Marca/modelo ofertado</span>
+                            <input value={ed.marca}
+                              onChange={e => updateEdicao(it.item_id, 'marca', e.target.value)}
+                              className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                          </label>
+                          {analise.origem === 'pdf' ? (
+                            <label className="col-span-2 block">
+                              <span className="block text-[10px] font-bold text-slate-500 mb-0.5"
+                                title="Quantidade que o fornecedor cotou (lida do PDF). Compare com a quantidade pedida.">
+                                Qtde cotada
+                              </span>
+                              {(() => {
+                                const diverge = ed.qtdeCotada !== '' && ed.qtdeCotada != null
+                                  && Number(ed.qtdeCotada) !== Number(it.qtde);
+                                return (
+                                  <input type="number" min="0" step="any" value={ed.qtdeCotada}
+                                    onChange={e => updateEdicao(it.item_id, 'qtdeCotada', e.target.value)}
+                                    title={diverge ? `Diferente do pedido (${it.qtde} ${it.unidade})` : 'Igual ao pedido'}
+                                    className={`w-full px-2 py-1.5 rounded-lg border text-xs text-center outline-none ${
+                                      diverge ? 'border-amber-400 bg-amber-50' : 'border-slate-300 bg-white'}`} />
+                                );
+                              })()}
+                            </label>
+                          ) : (
+                            <label className="col-span-2 block">
+                              <span className="block text-[10px] font-bold text-slate-500 mb-0.5"
+                                title="Prazo de entrega informado pelo fornecedor, em dias.">
+                                Prazo (dias)
+                              </span>
+                              <input type="number" min="0" value={ed.prazo}
+                                onChange={e => updateEdicao(it.item_id, 'prazo', e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-center outline-none bg-white" />
+                            </label>
+                          )}
+                          <label className="col-span-3 block">
+                            <span className="block text-[10px] font-bold text-slate-500 mb-0.5">Observação</span>
+                            <input value={ed.obs}
+                              onChange={e => updateEdicao(it.item_id, 'obs', e.target.value)}
+                              className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                          </label>
                         </div>
                       )}
                     </div>

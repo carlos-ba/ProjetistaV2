@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -395,6 +395,7 @@ class ItemConfirmacao(BaseModel):
     preco_unitario: float | None = None
     marca_modelo_cotado: str | None = None
     prazo_entrega_dias: int | None = None
+    qtde_cotada: float | None = Field(default=None, ge=0)
     obs_fornecedor: str | None = None
     termo_fornecedor: str | None = None  # presente só quando veio do import de PDF — grava/atualiza o apelido
 
@@ -436,6 +437,7 @@ async def confirmar_importacao(
         item.preco_unitario = conf.preco_unitario
         item.marca_modelo_cotado = conf.marca_modelo_cotado
         item.prazo_entrega_dias = conf.prazo_entrega_dias
+        item.qtde_cotada = conf.qtde_cotada
         item.obs_fornecedor = conf.obs_fornecedor
         atualizados += 1
 
