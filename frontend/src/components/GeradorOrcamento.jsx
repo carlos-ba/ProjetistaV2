@@ -88,8 +88,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   }, [classIndex]);
 
   // ── Checkboxes para aprovar/desmarcar itens ───────────────────────────
-  const [materiaisAtivos,     setMateriaisAtivos]     = useState({});
-  const [equipamentosAtivos,  setEquipamentosAtivos]  = useState({});
+  // A seleção é guardada pelo que o técnico DESMARCOU, identificado pelo próprio item
+  // (nome + comprimento), não pela posição na lista — assim sobrevive a recálculos que
+  // só reemitem a lista, e item novo nasce marcado. Persistida em dados_completos.
+  const [materiaisDesmarcados,    setMateriaisDesmarcados]    = useState(() => new Set(initialValues?.itensDesmarcados?.materiais ?? []));
+  const [equipamentosDesmarcados, setEquipamentosDesmarcados] = useState(() => new Set(initialValues?.itensDesmarcados?.equipamentos ?? []));
   const [listaAprovada,       setListaAprovada]       = useState(false);
 
   // ── Embalagem de fluido refrigerante (Card 6) ─────────────────────────
@@ -150,7 +153,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
   // ── Orçamento e UI ───────────────────────────────────────────────────
   const [orcamento,    setOrcamento]    = useState(null);
-  const [erro,         setErro]         = useState(null);
+  const [orcamentoSig, setOrcamentoSig] = useState(null); // seleção de itens (sigLista) usada ao gerar o orçamento atual
+  const [erro,        setErro]         = useState(null);
   const [loading,      setLoading]      = useState(false);
 
   // ── Verificação de cotação ────────────────────────────────────────────
@@ -211,16 +215,40 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     }
   }, [triggerGerarProposta]);
 
-  // Reinicia checkboxes quando dadosAutomaticos muda
+  // Chave estável de cada item (nome + comprimento; repetidos ganham #n) — a seleção
+  // do técnico acompanha o item, não o índice.
+  const chavesDosItens = (lista, nomeDe) => {
+    const vistos = {};
+    return (lista || []).map(x => {
+      const base = `${norm(nomeDe(x) || '')}|${x.comprimento ?? ''}`;
+      vistos[base] = (vistos[base] || 0) + 1;
+      return vistos[base] > 1 ? `${base}#${vistos[base]}` : base;
+    });
+  };
+  const chavesMateriais    = chavesDosItens(dadosAutomaticos?.materiais,    m => m.item);
+  const chavesEquipamentos = chavesDosItens(dadosAutomaticos?.equipamentos, e => e.nome || e.item);
+  const materiaisAtivos = {};    chavesMateriais.forEach((k, i) => { materiaisAtivos[i] = !materiaisDesmarcados.has(k); });
+  const equipamentosAtivos = {}; chavesEquipamentos.forEach((k, i) => { equipamentosAtivos[i] = !equipamentosDesmarcados.has(k); });
+
+  // Só invalida a lista aprovada/orçamento quando o CONTEÚDO dos itens muda de verdade
+  // (um recálculo nos Cards 1-5). Antes, qualquer reemissão da lista (mesmo idêntica, ex:
+  // Card 1 reenviando por causa da imagem da planta) zerava seleção, aprovação e orçamento.
+  const assinaturaDados = JSON.stringify({
+    m: (dadosAutomaticos?.materiais || []).map(m => [m.item, m.quantidade ?? m.qtd ?? null, m.comprimento ?? null, m.unidade ?? null]),
+    e: (dadosAutomaticos?.equipamentos || []).map(e => [e.nome || e.item, e.qtde ?? 1]),
+  });
+  const primeiraAssinaturaRef = useRef(true);
   useEffect(() => {
-    const m = {}; (dadosAutomaticos?.materiais    || []).forEach((_, i) => { m[i] = true; }); setMateriaisAtivos(m);
-    const e = {}; (dadosAutomaticos?.equipamentos || []).forEach((_, i) => { e[i] = true; }); setEquipamentosAtivos(e);
+    if (primeiraAssinaturaRef.current) { primeiraAssinaturaRef.current = false; return; }
     setListaAprovada(false);
     setOrcamento(null);
-  }, [dadosAutomaticos]);
+  }, [assinaturaDados]);
 
-  const toggleMaterial    = (i) => setMateriaisAtivos(p => ({ ...p, [i]: !p[i] }));
-  const toggleEquipamento = (i) => setEquipamentosAtivos(p => ({ ...p, [i]: !p[i] }));
+  const alternarNoSet = (setFn, chave) => setFn(prev => {
+    const n = new Set(prev); if (n.has(chave)) n.delete(chave); else n.add(chave); return n;
+  });
+  const toggleMaterial    = (i) => alternarNoSet(setMateriaisDesmarcados,    chavesMateriais[i]);
+  const toggleEquipamento = (i) => alternarNoSet(setEquipamentosDesmarcados, chavesEquipamentos[i]);
 
   const materiaisAprovados    = materiaisComEmbalagem.filter((_, i) => materiaisAtivos[i]);
   const equipamentosAprovados = (dadosAutomaticos?.equipamentos || []).filter((_, i) => equipamentosAtivos[i]);
@@ -242,11 +270,12 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos,
+      itensDesmarcados: { materiais: [...materiaisDesmarcados], equipamentos: [...equipamentosDesmarcados] },
     });
   }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
       exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
-      precosManuals, qtdesManuais, itensSubstituidos]);
+      precosManuals, qtdesManuais, itensSubstituidos, materiaisDesmarcados, equipamentosDesmarcados]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -434,6 +463,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     try {
       const r = await api.post('/api/v1/orcamento', payload);
       setOrcamento(r.data);
+      setOrcamentoSig(sigLista);
       setItensSemPreco(semPreco);
       // Só acrescenta entrada nova pra item que ficou sem preço — nunca apaga uma
       // correção manual já digitada (ou restaurada do projeto salvo) de um item que
@@ -468,7 +498,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
   const verificarEGerar = async () => {
     if (!projetoAtual?.id) return;
-    setCotacaoAviso(null); setItensSemPreco([]); setPrecosManuals({});
+    // Não zera precosManuals: preço digitado à mão é persistido e reaplicado em cada geração
+    // (antes era apagado aqui e nunca reaplicado fora do "Recalcular").
+    setCotacaoAviso(null); setItensSemPreco([]);
     setBaseDesatualizada(false);
     setLoadingCotacaoCheck(true);
     try {
@@ -492,7 +524,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       }
     } catch {
       // Falha ao verificar — gera sem preços da cotação
-      await gerarOrcamentoComPrecos();
+      await gerarOrcamentoComPrecos(new Map(), precosManuals);
     } finally {
       setLoadingCotacaoCheck(false);
     }
@@ -517,7 +549,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     }
     ultimoPrecoMapRef.current = precoMap;
     ultimoModeloMapRef.current = modeloMap;
-    await gerarOrcamentoComPrecos(precoMap);
+    await gerarOrcamentoComPrecos(precoMap, precosManuals);
   };
 
   const confirmarEscolhaCotacao = async () => {
@@ -1510,7 +1542,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       </div>
 
       {/* ══ 2. CARRINHO (só após aprovar) ══ */}
-      {listaAprovada && (
+      {/* Também aparece quando já existe orçamento: a Composição da Proposta (modo de faturamento etc.)
+          mora aqui dentro e não pode sumir só porque a aprovação foi desfeita. */}
+      {(listaAprovada || !!orcamento) && (
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden print:hidden animate-in fade-in duration-500">
           <div className="bg-slate-800 px-6 py-4 text-white flex justify-between items-center">
             <h3 className="font-bold flex items-center gap-2">📋 Lista de Engenharia</h3>
@@ -1943,7 +1977,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       Ver painel de cotações
                     </button>
                   )}
-                  <button onClick={() => { setCotacaoAviso(null); gerarOrcamentoComPrecos(); }}
+                  <button onClick={() => { setCotacaoAviso(null); gerarOrcamentoComPrecos(new Map(), precosManuals); }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-white text-amber-700 font-bold hover:bg-amber-50 border border-amber-300"
                     title="Usa a lista de preços cadastrada da sua empresa (Catálogo de Preços, no menu) — sem precisar cotar com fornecedor">
                     💰 Gerar com meu catálogo de preços
@@ -2117,6 +2151,19 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 : `Empreitada · Margem mat. ${fmtQtd(margemMateriais)}% · serv. ${fmtQtd(margemServicos)}% · Imposto ${fmtQtd(imposto)}%`}
             </span>
           </div>
+
+          {/* Seleção de itens mudou depois de gerado — os valores abaixo são os da seleção anterior */}
+          {orcamentoSig !== null && orcamentoSig !== sigLista && (
+            <div className="rounded-xl px-4 py-3 bg-amber-500/15 border border-amber-400/40 text-amber-100 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span>
+                ⚠️ <b>A seleção de itens mudou</b> depois que este orçamento foi gerado — os valores abaixo ainda são os da seleção anterior.
+              </span>
+              <button onClick={recalcularComPrecosManuals} disabled={loading || bloqueadoTrial}
+                className="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold whitespace-nowrap disabled:opacity-40">
+                {loading ? 'Recalculando…' : '🔄 Recalcular orçamento'}
+              </button>
+            </div>
+          )}
 
           {/* Base de preços (rastreabilidade — uso interno) */}
           {baseCotacao?.cotacoes?.length > 0 && (

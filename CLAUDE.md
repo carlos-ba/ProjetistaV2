@@ -2335,7 +2335,8 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Projeto CAD (.DXF, Card 1) | ✅ reescrito 2026-09-01 com `ezdxf` — cotas reais (DIMENSION), altura, juntas nas 4 paredes, vistas Frontal/Lateral. Posição da porta na parede fica de fora (dado não capturado no wizard) |
 | Orçamento + Cotação Excel + Proposta PDF | ✅ |
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
-| Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos` |
+| Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos`; 2026-10-06: preços manuais não são mais apagados ao gerar |
+| Card 6 — seleção de itens estável (não reseta em reemissão da lista) | ✅ implementado 2026-10-06 — seleção por item e persistida, reset só quando o conteúdo muda, Composição sempre visível com orçamento, faixa "Recalcular orçamento" quando a seleção muda |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2419,12 +2420,60 @@ outro modelo/fabricante.
   e `itensSubstituidos` (todos `Map<norm(descricao), valor>`) entram no mesmo
   `onValoresChange` que já persiste o resto do Card 6 em `dados_completos`: —
   restaurados via `initialValues` ao reabrir o projeto salvo, reaplicados
-  automaticamente ao gerar a proposta de novo, sem precisar redigitar.
+  automaticamente ao gerar a proposta de novo, sem precisar redigitar
+  (**só passou a valer de fato em 2026-10-06** — até então `verificarEGerar`
+  apagava `precosManuals` e só o "Recalcular" os aplicava; ver seção
+  "Seleção de itens do Card 6" abaixo).
 - **Risco conhecido, aceito por ora**: mesma fragilidade de casamento por
   `norm(descricao)` das seções acima — se a descrição do item mudar entre
   gerações (ex: editar o Card que gerou aquele item), a correção salva não casa
   mais. Mitigação fica para uma revisão futura (não bloqueante pro lançamento
   desta funcionalidade).
+
+### Seleção de itens do Card 6 — não reseta mais sozinha (2026-10-06)
+
+Achado do usuário no mesmo projeto, já salvo: depois de desmarcar itens e gerar
+a lista, importou a cotação e (1) os itens desmarcados voltaram a ficar
+marcados, (2) os valores ficaram confusos, (3) a Composição da Proposta
+(empreitada/faturamento direto) sumiu, deixando a proposta "fixa".
+
+- **Causa raiz**: um efeito em `GeradorOrcamento.jsx` zerava seleção
+  (`materiaisAtivos`/`equipamentosAtivos`), `listaAprovada` e `orcamento`
+  sempre que a **identidade** de `dadosAutomaticos` mudava — e qualquer
+  reemissão da lista pelos Cards 1-5 (mesmo com conteúdo idêntico, ex: Card 1
+  reenviando por mudar a imagem da planta/um campo que não altera itens) cria
+  objeto novo. Reproduzido: com tudo aprovado e orçamento gerado, mudar só a
+  Temperatura Ambiente no Card 1 marcava todos os itens, desfazia a
+  aprovação e apagava orçamento + Composição (a Composição mora dentro do
+  bloco `listaAprovada &&`).
+- **Seleção por item, não por posição**: o estado guarda o que o técnico
+  **desmarcou** (`materiaisDesmarcados`/`equipamentosDesmarcados`, `Set` de
+  chaves `norm(nome)|comprimento`, repetidos ganham `#n`); `materiaisAtivos[i]`
+  deriva disso. Item novo nasce marcado. **Persistida** em
+  `inputs_orcamento.itensDesmarcados` (`{materiais, equipamentos}`, campo
+  opcional — projeto antigo sem ele = tudo marcado).
+- **Reset só se o conteúdo mudar**: efeito dependente de `assinaturaDados`
+  (JSON de nome/qtde/comprimento/unidade dos itens), não de identidade. Um
+  recálculo real (ex: mudar o comprimento e "Calcular projeto") continua
+  desfazendo aprovação + orçamento, de propósito.
+- **Composição sempre acessível**: o bloco "Lista de Engenharia" + "Composição
+  da Proposta" renderiza com `listaAprovada || !!orcamento`.
+- **Orçamento desatualizado**: `orcamentoSig` guarda a `sigLista` usada ao
+  gerar; se a seleção muda depois, faixa âmbar no "Resumo Financeiro Interno"
+  com botão **"Recalcular orçamento"** (`recalcularComPrecosManuals`).
+- **Preços manuais**: `verificarEGerar` **não zera mais** `precosManuals`, e
+  todas as gerações (`_gerarComCotacoes`, sem cotação, "Recalcular") passam
+  `precosManuals` como override. Isto **corrige** a descrição acima
+  ("reaplicados automaticamente ao gerar de novo"), que na prática só valia no
+  "Recalcular" — antes eram apagados a cada geração. Efeito a ter em mente:
+  preço digitado à mão **prevalece** sobre o preço de uma cotação nova.
+- Testado na tela real (conta descartável, projeto copiado): bug reproduzido
+  com o código antigo (controle via `git stash`) e ausente no novo; recálculo
+  real ainda invalida; faixa + "Recalcular orçamento" ok; salvar → recarregar →
+  reabrir devolve as desmarcações; 36/36 testes e build. **Não testado**: o
+  fluxo exato do painel de Cotações com cotação real (só a geração sem cotação).
+- Sem risco pra dado de usuário: campo novo opcional em `dados_completos`,
+  sem migration (só voltar a uma versão antiga ignoraria o campo).
 
 ### Riscos conhecidos
 
