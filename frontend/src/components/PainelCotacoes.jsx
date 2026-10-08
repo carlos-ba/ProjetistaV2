@@ -173,7 +173,9 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
         if (it.item_id) {
           ed[it.item_id] = {
             preco: it.preco_unitario ?? '',
-            marca: it.marca_modelo ?? '',
+            marca: it.marca ?? it.marca_modelo ?? '',
+            codigo: it.codigo_fabricante ?? '',
+            substituicao: it.status === 'possivel_substituicao',
             qtdeCotada: it.qtde_cotada ?? '',
             obs: it.obs ?? '',
             termoFornecedor: it.termo_fornecedor ?? null,
@@ -199,7 +201,12 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
       const itens = Object.entries(edicao).map(([id, e]) => ({
         item_id: parseInt(id),
         preco_unitario: e.preco !== '' ? parseFloat(e.preco) : null,
-        marca_modelo_cotado: e.marca || null,
+        // Marca e código do fabricante guardados separados (migration 0044); o texto combinado
+        // continua em marca_modelo_cotado pra compatibilidade com o que já existe.
+        marca_modelo_cotado: [(e.marca || '').trim(), (e.codigo || '').trim()].filter(Boolean).join(' ') || null,
+        marca_cotada: (e.marca || '').trim() || null,
+        codigo_fabricante_cotado: (e.codigo || '').trim() || null,
+        possivel_substituicao: e.substituicao ?? null,
         prazo_entrega_dias: e.prazo !== '' && e.prazo != null ? parseInt(e.prazo) : null,
         qtde_cotada: e.qtdeCotada !== '' && e.qtdeCotada != null ? parseFloat(e.qtdeCotada) : null,
         obs_fornecedor: e.obs || null,
@@ -319,7 +326,7 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
 
                       {ed && (
                         <div className="grid grid-cols-12 gap-2">
-                          <label className="col-span-3 block">
+                          <label className={`${analise.origem === 'pdf' ? 'col-span-2' : 'col-span-3'} block`}>
                             <span className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço unitário</span>
                             <span className="relative block">
                               <span className="absolute left-2 top-1.5 text-slate-400 text-xs">R$</span>
@@ -328,12 +335,26 @@ const PainelCotacoes = ({ aberto, aoFechar, projetoAtual = null, onGerarProposta
                                 className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
                             </span>
                           </label>
-                          <label className="col-span-4 block">
-                            <span className="block text-[10px] font-bold text-slate-500 mb-0.5">Marca/modelo ofertado</span>
+                          <label className={`${analise.origem === 'pdf' ? 'col-span-3' : 'col-span-4'} block`}>
+                            <span className="block text-[10px] font-bold text-slate-500 mb-0.5"
+                              title="Marca do produto cotado pelo fornecedor. É só informação — o item é o mesmo; pode ir na proposta ao cliente.">
+                              {analise.origem === 'pdf' ? 'Marca' : 'Marca/modelo'}
+                            </span>
                             <input value={ed.marca}
                               onChange={e => updateEdicao(it.item_id, 'marca', e.target.value)}
                               className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
                           </label>
+                          {analise.origem === 'pdf' && (
+                            <label className="col-span-2 block">
+                              <span className="block text-[10px] font-bold text-slate-500 mb-0.5"
+                                title="Código do produto no fabricante — uso interno (compra), não vai na proposta ao cliente.">
+                                Cód. fabricante
+                              </span>
+                              <input value={ed.codigo ?? ''}
+                                onChange={e => updateEdicao(it.item_id, 'codigo', e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs outline-none bg-white" />
+                            </label>
+                          )}
                           {analise.origem === 'pdf' ? (
                             <label className="col-span-2 block">
                               <span className="block text-[10px] font-bold text-slate-500 mb-0.5"

@@ -72,6 +72,9 @@ class CotacaoItemOut(BaseModel):
     marca_modelo_cotado: str | None
     prazo_entrega_dias: int | None
     qtde_cotada: float | None = None
+    marca_cotada: str | None = None
+    codigo_fabricante_cotado: str | None = None
+    possivel_substituicao: bool | None = None
     obs_fornecedor: str | None
 
 

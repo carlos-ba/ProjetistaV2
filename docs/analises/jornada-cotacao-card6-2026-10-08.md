@@ -320,6 +320,109 @@ que ele queria.
 
 ---
 
+## Achado 5 — "A importação trocou a descrição pela marca" (reteste em produção)
+
+### O que o usuário viu
+
+Reteste com uma lista nova: desmarcou itens, gerou nova cotação e importou a
+**mesma cotação do fornecedor** (PDF Brasifrio). Na lista de peças, o item
+"Luva de cobre redutora 1.1/8 x 3/4" apareceu só como **"ELF"** — de novo a marca
+no lugar da descrição. Pediu para verificar se a IA está fazendo isso.
+
+### Verificação da IA (2026-10-08)
+
+A análise do PDF foi rodada duas vezes com o mesmo PDF e a lista do projeto: sem
+apelidos e **com** os apelidos que a primeira passada ensinaria. Em **todas as 27
+linhas** a `descricao` devolvida é a **do sistema** (ex: "Luva de Redução 1.1/8" x
+3/4""); a marca vai separada, em `marca_modelo` ("ELF", "CURVA & COBRE",
+"DANFOSS 068-2032"…), e o texto do PDF em `descricao_pdf`. **A IA não troca a
+descrição pela marca.** Também não há linhas extras nem apelidos distorcidos
+("luva de cobre redutora" etc. são genéricos de propósito, sem a marca).
+
+### Causa provável (a confirmar com o usuário)
+
+A opção "usar este item / mencionar" (`itensSubstituidos`) **fica salva no projeto**
+e é **indexada só pela descrição do item**. Marcada num teste anterior, ela continua
+**ligada** quando chega uma cotação nova — e passa a valer para a oferta nova sem
+ninguém marcar nada. No código **antigo** isso trocava o nome pelo `marca_modelo`
+("ELF"), exatamente o que foi visto; no código **da entrega 1** o nome se mantém e
+só ganha "(oferta: ELF)". Como o app é uma SPA, a aba aberta antes do deploy
+continua rodando o JS antigo até **recarregar a página** (o bundle de produção já
+tem a entrega 1 — verificado em 2026-10-08).
+
+### Falha de desenho que sobra (mesmo com a entrega 1)
+
+A marca "ligada" não pergunta de novo a cada cotação: a decisão "mencionar a oferta
+do fornecedor" foi tomada para **uma oferta específica** (ex: ELF 1.1/8 do fornecedor
+A), mas o sistema a guarda como um "sim" genérico do item. Uma cotação futura, de
+outro fornecedor ou com outra marca, herda o "sim" sem o usuário saber.
+
+### Direção de correção (a decidir)
+
+- **V.** Guardar **qual oferta** foi aceita (o texto `marca_modelo`), não um sim/não:
+  só vale enquanto a oferta atual for a mesma; oferta diferente → volta a perguntar.
+  Flags antigas (booleanas) deixam de ser aplicadas.
+- **W.** Quando a oferta é só uma **marca** (sem código — "ELF", "CURVA & COBRE"),
+  não oferecer a menção na proposta: não acrescenta informação útil.
+
+---
+
+## Achado 6 — O sistema trata "marca" como se fosse "item substituto"
+
+### O que o usuário viu (Revisão, após a entrega 1)
+
+Em linhas como "Orifício de Expansão 6" aparece **"Fornecedor ofertou: DANFOSS —
+mencionar na proposta ao cliente"** e o nome ganha **"(oferta: DANFOSS)"**. O
+fornecedor, porém, só informou a **marca** (Danfoss) — o item é **o mesmo**, a
+descrição do sistema está correta. A tela apresenta como "oferta/substituição" algo
+que é só **marca**. O usuário aponta a confusão: o que está sendo sugerido trocar
+é a descrição, e o que existe é apenas uma marca (que ele poderia **editar**).
+
+### O que o código faz (verificado)
+
+- `_gerarComCotacoes` (`GeradorOrcamento.jsx`) monta `ultimoModeloMapRef` com
+  **todo** item cujo `marca_modelo_cotado` difere da descrição — e uma marca
+  **sempre** difere da descrição. Resultado: **toda linha cotada** vira "oferta".
+- A IA preenche `marca_modelo` com **MARCA + CÓDIGO** ("DANFOSS 068Z3409"), só a
+  **MARCA** ("ELF", "CURVA & COBRE") ou, em substituições, o produto diferente
+  ("IMPORTADO"). A mesma coluna mistura três coisas.
+- A **substituição de verdade** (produto diferente do pedido) é identificada pela IA
+  com `status = possivel_substituicao` + `obs` — mas esse status **não é gravado**
+  em `cotacao_item` (só `marca_modelo_cotado` e `obs_fornecedor`), então a
+  Revisão não consegue distinguir "só marca" de "item diferente". Na amostra da
+  Brasifrio foram **4 de 27** os casos de substituição real (acumulador importado,
+  tanque ELF 10L, isolamento KFLEX, quadro ELF).
+- O texto da tela ("ofertou", "mencionar na proposta") e o efeito
+  ("(oferta: …)" no nome) falam em substituição para qualquer marca.
+
+### Causa raiz
+
+Dois conceitos diferentes numa só coluna e numa só ação: **marca/modelo cotado**
+(informação de compra, sempre existe) e **item substituto** (decisão rara, exige
+atenção). O desenho antigo (entrega original, set/2026) só previa substituição; a
+entrega 1 manteve o conceito e só trocou "substituir" por "acrescentar".
+
+### Direção de correção (a decidir)
+
+- **Y. Separar os dois conceitos.**
+  1. **Marca** vira informação comum: em cada linha da Revisão, campo **"Marca"**
+     editável (pré-preenchido pela cotação), sem nenhum rótulo de "oferta" ou
+     "substituição". Opcionalmente impressa na proposta ("… — marca Danfoss").
+  2. **Código do fabricante** (068Z3409) fica **interno** (Revisão, planilhas,
+     compra) — não vai na proposta ao cliente.
+  3. **Possível substituição** (item realmente diferente) ganha tratamento próprio,
+     destacado, só para o que a IA sinalizou, com a explicação (`obs`) visível e uma
+     decisão explícita. Para isso, gravar o sinal da IA em `cotacao_item`
+     (coluna booleana nova, nullable, aditiva — migration 0044).
+- **V e W** (propostas anteriores) ficam **superadas** por esta separação.
+- **X** (edição na Revisão acende o aviso "recalcular") continua valendo.
+
+**Decisões do usuário (2026-10-08):** aprovou as recomendações — a marca só aparece
+na proposta quando marcada; o código do fabricante fica só interno; migration
+aditiva autorizada. Implementado como Entrega 1b (ver tabela de andamento).
+
+---
+
 ## Plano de correção e andamento
 
 Combinado com o usuário em 2026-10-08: corrigir em **3 entregas**, cada uma testada
@@ -328,6 +431,7 @@ na tela e pushada antes da seguinte, sem migration em nenhuma.
 | Entrega | Conteúdo | Situação |
 |---|---|---|
 | **1 — Integridade da proposta** | A, B (seleção × cotação, pergunta), D (origem do preço), K, L, M (descrição preservada, chave estável), R (atalho não gera às cegas) | ✅ implementada 2026-10-08 (C dispensada — a cotação passa a ser a fonte da seleção) |
+| **1b — Marca × substituição** (Achados 5 e 6: Y + X; V/W superadas) | marca editável e opcional na proposta; código só interno; substituição só quando a IA sinaliza; aviso de correções pendentes; migration 0044 aditiva | ✅ implementada 2026-10-08 |
 | **2 — Navegação da proposta** | F, G, I (e H/J opcionais) — "Ajustar composição" junto da proposta, "EDITAR" honesto, rename da Revisão | pendente |
 | **3 — Atalho de Cotações** | Q, S, T, U — botão por cotação, confirmar troca de projeto, caso sem cotação processada, filtro visível | pendente |
 

@@ -83,6 +83,11 @@ class CotacaoItem(Base):
     # Quantidade que o fornecedor cotou (lida do PDF/ajustada na conferência) — pode
     # diferir de `qtde` (o que pedimos) por embalagem/unidade; só informativa.
     qtde_cotada: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 3), nullable=True)
+    # Separados em 2026-10-08 (migration 0044): marca (info/proposta), código do fabricante
+    # (uso interno) e sinal da IA de que o item cotado é realmente diferente do pedido.
+    marca_cotada: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    codigo_fabricante_cotado: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    possivel_substituicao: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     obs_fornecedor: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     cotacao: Mapped["Cotacao"] = relationship(back_populates="itens")

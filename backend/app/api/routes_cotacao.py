@@ -396,6 +396,9 @@ class ItemConfirmacao(BaseModel):
     marca_modelo_cotado: str | None = None
     prazo_entrega_dias: int | None = None
     qtde_cotada: float | None = Field(default=None, ge=0)
+    marca_cotada: str | None = Field(default=None, max_length=100)
+    codigo_fabricante_cotado: str | None = Field(default=None, max_length=100)
+    possivel_substituicao: bool | None = None
     obs_fornecedor: str | None = None
     termo_fornecedor: str | None = None  # presente só quando veio do import de PDF — grava/atualiza o apelido
 
@@ -438,6 +441,9 @@ async def confirmar_importacao(
         item.marca_modelo_cotado = conf.marca_modelo_cotado
         item.prazo_entrega_dias = conf.prazo_entrega_dias
         item.qtde_cotada = conf.qtde_cotada
+        item.marca_cotada = conf.marca_cotada
+        item.codigo_fabricante_cotado = conf.codigo_fabricante_cotado
+        item.possivel_substituicao = conf.possivel_substituicao
         item.obs_fornecedor = conf.obs_fornecedor
         atualizados += 1
 

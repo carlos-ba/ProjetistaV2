@@ -1619,7 +1619,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0043)
+## Banco de Dados — Migrations (0001→0044)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -1665,6 +1665,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0040 | Perfil T (novo `tipo` em `perfil_metalico`) + tabela `barra_roscada_perfil_t` — sustentação do teto dividido pela auto-portância (ver seção própria acima); código de fabricante ainda placeholder, pendente confirmação |
 | 0041 | Preenche `peso_liquido_kg`/`carga_refrigerante_kg` dos 12 evaporadores Elgin FL* — dado extraído do catálogo técnico oficial (PDF), validado contra `volume_interno_kg` já cadastrado |
 | 0042 | Copia `volume_interno_kg` → `carga_refrigerante_kg` nos 13 evaporadores Mipal Mi BX (linha antiga) — nomenclatura antiga confirmada pelo usuário, mesmo padrão da Elgin (0041) |
+| 0044 | `cotacao_item.marca_cotada`/`codigo_fabricante_cotado`/`possivel_substituicao` (nullable) — separa marca, código do fabricante e sinal de substituição da IA (ver "Card 6 — Marca × possível substituição") |
 | 0043 | Campo `cotacao_item.qtde_cotada` (nullable) — quantidade que o fornecedor cotou, lida do PDF na importação por IA e ajustável na conferência |
 
 ---
@@ -2338,6 +2339,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos`; 2026-10-06: preços manuais não são mais apagados ao gerar |
 | Card 6 — seleção de itens estável (não reseta em reemissão da lista) | ✅ implementado 2026-10-06 — seleção por item e persistida, reset só quando o conteúdo muda, Composição sempre visível com orçamento, faixa "Recalcular orçamento" quando a seleção muda |
 | Card 6 — Entrega 1 "Integridade da proposta" (seleção × cotação, origem do preço, descrição preservada) | ✅ implementado 2026-10-08 — banner pergunta qual lista usar, selos na cotação/fora, origem do preço na Revisão, menção "(oferta: …)" sem trocar a descrição, atalho de Cotações não gera às cegas |
+| Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2502,9 +2504,8 @@ proposta), documentado em `docs/analises/jornada-cotacao-card6-2026-10-08.md`
   um aviso "N itens usam preço que não é da cotação escolhida" — antes o item
   esquecido entrava com preço de outra origem em silêncio.
 - **Nunca trocar a descrição do sistema (K/L/M)**: `nomeCorrigido()` mantém a
-  descrição e acrescenta **"(oferta: marca/modelo)"** quando o técnico marca
-  "Fornecedor ofertou: X — mencionar na proposta" (a opção segue desmarcada
-  por padrão; o rótulo deixa claro que a descrição é mantida). Chave estável:
+  descrição do sistema (a menção "(oferta: …)" desta entrega foi **substituída**
+  pela separação marca × substituição — ver seção seguinte). Chave estável:
   `ItemOrcamento.chave`/`ItemDetalhado.chave` (campo **opcional** novo em
   `schemas/orcamento.py`, ecoado por `services/orcamento.py`) carrega
   `norm(descrição original)`; a Revisão usa `l.chave ?? norm(l.item)` — o
@@ -2533,6 +2534,63 @@ proposta), documentado em `docs/analises/jornada-cotacao-card6-2026-10-08.md`
   aguardando preços (`enviada`) no banner.
 - Sem risco pra dado de usuário: sem migration; só um campo opcional novo na
   API de orçamento.
+
+### Card 6 — Marca × possível substituição (2026-10-08)
+
+Reteste do usuário depois da entrega 1: a Revisão mostrava "Fornecedor ofertou:
+DANFOSS — mencionar na proposta" e o nome ganhava "(oferta: DANFOSS)" para
+**toda** linha cotada — mas o fornecedor só tinha informado a **marca**; o item
+era o mesmo. (Achados 5 e 6 de `docs/analises/jornada-cotacao-card6-2026-10-08.md`;
+a IA **não** troca a descrição na importação — verificado nas 27 linhas do PDF
+Brasifrio. A troca vinha da opção "usar este item", que ficava salva no projeto e
+valia de novo para uma cotação nova.)
+
+- **Causa**: `cotacao_item.marca_modelo_cotado` misturava marca + código + produto
+  diferente, e `_gerarComCotacoes` tratava toda marca (que sempre difere da
+  descrição) como "item substituto". O sinal real de substituição da IA
+  (`status = possivel_substituicao`) não era gravado.
+- **Migration 0044** (aditiva, nullable): `cotacao_item.marca_cotada`,
+  `codigo_fabricante_cotado`, `possivel_substituicao`. `marca_modelo_cotado`
+  continua gravado (texto combinado) pra compatibilidade; `ItemConfirmacao` e
+  `CotacaoItemOut` ganharam os 3 campos.
+- **IA** (`cotacao_pdf.py`): o tool schema devolve também `marca` (só o
+  fabricante) e `codigo_fabricante`; prompt: marca diferente **não** é
+  substituição (só produto realmente diferente — outro tipo/capacidade/função) e
+  `codigo_fabricante` é o do **fabricante**, nunca o "CÓDIGO" interno do fornecedor.
+  Observação: a IA ainda erra o código às vezes (ex: "172" na bobina) — o campo é
+  editável na conferência.
+- **Tela de conferência** (`PainelCotacoes.jsx`): no PDF os campos são **Marca** e
+  **Cód. fabricante**; no import de planilha segue "Marca/modelo". Ao confirmar,
+  grava os 3 campos novos; `possivel_substituicao` vem do status da IA.
+- **Revisão (Card 6)**: `ultimoOfertaMapRef` (`{marca, codigo, combinado,
+  substituicao, obs}` por item, da última cotação usada). Por linha:
+  - **Marca** editável (`marcasManuais`, pré-preenchida pela cotação; cotações
+    anteriores à 0044 deduzem a marca do texto antigo — `marcaDoTextoLegado`:
+    termos antes do primeiro com dígito) + **"mostrar na proposta"**
+    (`mostrarMarca`, desligado por padrão) → nome "descrição — marca X".
+  - **Código do fabricante** só como texto cinza (uso interno; nunca vai na proposta).
+  - **Possível substituição**: bloco violeta **só** nos itens que a IA sinalizou,
+    com a explicação (`obs`) e o aceite "Aceitar e citar na proposta" →
+    nome "descrição (item cotado: X)". `itensSubstituidos[key]` agora guarda o
+    **texto aceito**, não booleano — só vale se a oferta atual for igual; flag
+    booleana antiga (do desenho anterior) é ignorada, e cotação nova com outro item
+    volta a perguntar.
+  - A descrição do sistema **nunca** é trocada.
+- **Aviso de correções pendentes (X)**: `sigCorr` (qtde, preço, marca, "mostrar",
+  substituição aceita — entradas vazias não contam, porque a geração acrescenta
+  `''` pros itens sem preço) é gravado em `orcamentoSigCorr` ao gerar; se mudar, o
+  mesmo banner âmbar da seleção avisa "Há correções da Revisão ainda não
+  aplicadas" com o botão "Recalcular orçamento".
+- Persistência: `marcasManuais`/`mostrarMarca` entram em `inputs_orcamento`
+  (campos opcionais; projeto antigo = vazio).
+- Testado: IA no PDF real (marca/código separados em todas as linhas; 1 item
+  sinalizado em vez de 4); tela real com conta descartável — marca + código
+  interno, bloco violeta só no item sinalizado, marca de cotação antiga deduzida,
+  aviso acende/some, nomes "— marca ELGIN" / "— marca Danfoss Original" (editada) /
+  "(item cotado: IMPORTADO)", código ausente da proposta, tudo salvo; 36/36 testes;
+  migration downgrade/upgrade ok. **Não testado**: a conferência da importação com
+  um PDF novo pela tela (só a gravação via API).
+- Sem risco pra dado de usuário: colunas novas opcionais, nada existente é tocado.
 
 ### Riscos conhecidos
 

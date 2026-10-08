@@ -52,7 +52,21 @@ _TOOL = {
                             "enum": ["ok", "nao_encontrado", "linha_extra", "possivel_substituicao"],
                         },
                         "preco_unitario": {"type": ["number", "null"]},
-                        "marca_modelo": {"type": ["string", "null"], "description": "marca/modelo lido no PDF"},
+                        "marca_modelo": {"type": ["string", "null"], "description": "marca + código lidos no PDF (texto completo, como antes)"},
+                        "marca": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "SOMENTE a marca/fabricante do produto cotado (ex: 'DANFOSS', 'ELF', "
+                                "'CURVA & COBRE'), sem código nem medida. null se o PDF não trouxer marca."
+                            ),
+                        },
+                        "codigo_fabricante": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "Código do produto no fabricante/fornecedor, exatamente como no PDF "
+                                "(ex: '068Z3409', 'ELFS10L'). null se não houver."
+                            ),
+                        },
                         "qtde_cotada": {
                             "type": ["number", "null"],
                             "description": (
@@ -125,6 +139,14 @@ Instruções:
    preço e valor total. Se a unidade do fornecedor for diferente da nossa (ex: kg em vez de
    metros, pacote em vez de unidade), reporte o número como está no PDF e explique em `obs`.
 7. Não existe campo de prazo de entrega neste relatório — ignore prazos.
+8. `marca` e `codigo_fabricante`: separe o que o PDF traz — a MARCA (coluna MARCA ou o nome do
+   fabricante) vai em `marca`; o CÓDIGO do produto (coluna CÓDIGO FABRICANTE) vai em
+   `codigo_fabricante`. `marca_modelo` continua com os dois juntos. Marca igual à do item pedido
+   NÃO é substituição: o status "possivel_substituicao" é só para produto realmente diferente
+   do pedido (outro tipo, capacidade ou função), nunca por causa da marca.
+   Cuidado: muitos PDFs têm duas colunas de código — "CÓDIGO" (número interno curto do
+   fornecedor, ex: 172, 36822) e "CÓDIGO FABRICANTE" (ex: 018F6264). `codigo_fabricante`
+   é sempre o do FABRICANTE; nunca o código interno do fornecedor.
 
 Responda chamando a ferramenta `reportar_casamento_cotacao` com o relatório completo."""
 
@@ -243,6 +265,8 @@ async def analisar_pdf_cotacao(
                 "preco_unitario": it.get("preco_unitario"),
                 "preco_bruto": None,
                 "marca_modelo": it.get("marca_modelo"),
+                "marca": it.get("marca"),
+                "codigo_fabricante": it.get("codigo_fabricante"),
                 "prazo_dias": None,
                 "qtde_cotada": it.get("qtde_cotada"),
                 "obs": _obs(it.get("obs")),
@@ -260,6 +284,8 @@ async def analisar_pdf_cotacao(
                 "preco_unitario": it.get("preco_unitario"),
                 "preco_bruto": None,
                 "marca_modelo": it.get("marca_modelo"),
+                "marca": it.get("marca"),
+                "codigo_fabricante": it.get("codigo_fabricante"),
                 "prazo_dias": None,
                 "qtde_cotada": it.get("qtde_cotada"),
                 "obs": _obs(it.get("obs")),
@@ -279,6 +305,8 @@ async def analisar_pdf_cotacao(
                 "preco_unitario": None,
                 "preco_bruto": None,
                 "marca_modelo": None,
+                "marca": None,
+                "codigo_fabricante": None,
                 "prazo_dias": None,
                 "qtde_cotada": None,
                 "obs": None,

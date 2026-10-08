@@ -26,6 +26,15 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
+// Cotações antigas guardam só "MARCA CÓDIGO" junto. A marca é o que vem antes do primeiro termo com
+// dígito ("DANFOSS 068Z3409" → "DANFOSS"; "CURVA & COBRE" → inteiro; "45ESB..." sozinho → vazio).
+const marcaDoTextoLegado = (texto) => {
+  const termos = String(texto || '').trim().split(/\s+/).filter(Boolean);
+  const marca = [];
+  for (const t of termos) { if (/\d/.test(t)) break; marca.push(t); }
+  return marca.join(' ');
+};
+
 // ── Origem do preço de cada item (Revisão) ──
 const ORIGEM_PRECO = {
   cotacao:           { label: 'cotação',          cls: 'bg-emerald-100 text-emerald-700', dica: 'Preço da cotação escolhida para este projeto' },
@@ -163,6 +172,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // ── Orçamento e UI ───────────────────────────────────────────────────
   const [orcamento,    setOrcamento]    = useState(null);
   const [orcamentoSig, setOrcamentoSig] = useState(null); // seleção de itens (sigLista) usada ao gerar o orçamento atual
+  const [orcamentoSigCorr, setOrcamentoSigCorr] = useState(null); // correções da Revisão (sigCorr) aplicadas ao gerar o orçamento atual
   const [origemPrecos, setOrigemPrecos] = useState({ usouCotacao: false, porItem: {} }); // fonte do preço de cada item do orçamento atual
   const itensDeOutraOrigem = Object.values(origemPrecos.porItem)
     .filter(f => f === 'lista_empresa' || f === 'cotacao_historico').length;
@@ -190,9 +200,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // onValoresChange pra não precisar redigitar toda vez que o projeto reabre.
   const [precosManuals,       setPrecosManuals]       = useState(initialValues?.precosManuals ?? {}); // norm(desc) → string
   const [qtdesManuais,        setQtdesManuais]        = useState(initialValues?.qtdesManuais ?? {}); // norm(desc) → string
-  const [itensSubstituidos,   setItensSubstituidos]   = useState(initialValues?.itensSubstituidos ?? {}); // norm(desc) → bool
+  // Possível substituição ACEITA: norm(desc) → texto exato do item cotado que foi aceito. Só vale enquanto a
+  // oferta atual for a mesma (cotação nova com outro item volta a perguntar). Valor booleano antigo é ignorado.
+  const [itensSubstituidos,   setItensSubstituidos]   = useState(initialValues?.itensSubstituidos ?? {});
+  // Marca (informação do fornecedor, editável) e se vai impressa na proposta ao cliente — norm(desc) → valor
+  const [marcasManuais,       setMarcasManuais]       = useState(initialValues?.marcasManuais ?? {});
+  const [mostrarMarca,        setMostrarMarca]        = useState(initialValues?.mostrarMarca ?? {});
   const ultimoPrecoMapRef = useRef(new Map()); // guarda precoMap da última geração
-  const ultimoModeloMapRef = useRef(new Map()); // norm(desc) → marca_modelo_cotado (quando o fornecedor substituiu o item)
+  // norm(desc) → { marca, codigo, combinado, substituicao, obs } da última cotação usada (oferta do fornecedor)
+  const ultimoOfertaMapRef = useRef(new Map());
   const [dadosCliente, setDadosCliente] = useState(
     initialValues?.dadosCliente ?? { nome: '', cnpj: '', contato: '', celular: '', email: '' }
   );
@@ -357,13 +373,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
-      precosManuals, qtdesManuais, itensSubstituidos,
+      precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca,
       itensDesmarcados: { materiais: [...materiaisDesmarcados], equipamentos: [...equipamentosDesmarcados] },
     });
   }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
       exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
-      precosManuals, qtdesManuais, itensSubstituidos, materiaisDesmarcados, equipamentosDesmarcados]);
+      precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca, materiaisDesmarcados, equipamentosDesmarcados]);
 
   // ── Tabela de peso de tubo de cobre (fallback para projetos sem quantidade_kg) ──
   const [pesosTubo, setPesosTubo] = useState({}); // { "1/2\"": { fina, grossa } }
@@ -510,15 +526,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       return !isNaN(manual) && manual > 0 ? manual : calculada;
     };
 
-    // "Mencionar o item ofertado pelo fornecedor" — NUNCA troca a descrição do sistema: ela
-    // continua como nome principal e a oferta do fornecedor entra entre parênteses. O projeto
-    // (Cards 1-5) continua intocado.
+    // Nome impresso: a descrição do sistema NUNCA é trocada. Duas menções opcionais, explícitas:
+    //  - possível substituição aceita → "(item cotado: X)"
+    //  - marca marcada para a proposta → "— marca X" (marca editável; o código do fabricante é interno)
     const nomeCorrigido = (descricao) => {
       const key = norm(descricao);
-      if (itensSubstituidos[key] && ultimoModeloMapRef.current.has(key)) {
-        return `${descricao} (oferta: ${ultimoModeloMapRef.current.get(key)})`;
+      const oferta = ultimoOfertaMapRef.current.get(key);
+      if (oferta?.substituicao && oferta.combinado && itensSubstituidos[key] === oferta.combinado) {
+        return `${descricao} (item cotado: ${oferta.combinado})`;
       }
-      return descricao;
+      const marca = (marcasManuais[key] ?? oferta?.marca ?? '').trim();
+      return mostrarMarca[key] && marca ? `${descricao} — marca ${marca}` : descricao;
     };
 
     const payload = {
@@ -564,6 +582,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       const r = await api.post('/api/v1/orcamento', payload);
       setOrcamento(r.data);
       setOrcamentoSig(sigLista);
+      setOrcamentoSigCorr(sigCorr);
       setOrigemPrecos({ usouCotacao: precoMap.size > 0, porItem: origens });
       setItensSemPreco(semPreco);
       // Só acrescenta entrada nova pra item que ficou sem preço — nunca apaga uma
@@ -634,7 +653,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const _gerarComCotacoes = async (ids) => {
     const cotacoesData = await Promise.all(ids.map(id => api.get(`/api/v1/cotacoes/${id}`)));
     const precoMap = new Map();
-    const modeloMap = new Map(); // norm(descrição do projeto) → marca/modelo que o fornecedor realmente cotou
+    const ofertaMap = new Map(); // norm(descrição do projeto) → oferta do fornecedor (marca, código, substituição)
     for (const r of cotacoesData) {
       for (const item of (r.data.itens || [])) {
         if (item.preco_unitario != null && item.preco_unitario > 0) {
@@ -643,13 +662,21 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             precoMap.set(key, item.preco_unitario);
           }
         }
-        if (item.marca_modelo_cotado && norm(item.marca_modelo_cotado) !== norm(item.descricao)) {
-          modeloMap.set(norm(item.descricao), item.marca_modelo_cotado);
+        // Cotações anteriores à migration 0044 só têm o texto combinado — a marca vem dele (heurística)
+        const marca = (item.marca_cotada || marcaDoTextoLegado(item.marca_modelo_cotado)).trim();
+        const codigo = (item.codigo_fabricante_cotado || '').trim();
+        const combinado = (item.marca_modelo_cotado || [marca, codigo].filter(Boolean).join(' ')).trim();
+        if (marca || codigo || combinado) {
+          ofertaMap.set(norm(item.descricao), {
+            marca, codigo, combinado,
+            substituicao: item.possivel_substituicao === true,
+            obs: item.obs_fornecedor || '',
+          });
         }
       }
     }
     ultimoPrecoMapRef.current = precoMap;
-    ultimoModeloMapRef.current = modeloMap;
+    ultimoOfertaMapRef.current = ofertaMap;
     await gerarOrcamentoComPrecos(precoMap, precosManuals);
   };
 
@@ -716,6 +743,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     mat: materiaisAprovados.map(m => [m.item, m.quantidade ?? m.qtd ?? 1, m.comprimento ?? '']),
     comp: complementos.filter(c => c.descricao.trim()).map(c => [c.descricao, c.qtde, c.unidade]),
   }), [equipamentosAprovados, materiaisAprovados, complementos]);
+
+  // Correções feitas na Revisão (qtde, preço, marca, menção, substituição aceita). Entradas vazias não contam
+  // (a própria geração acrescenta entradas '' pros itens sem preço) — só mudança real deixa o orçamento "pendente".
+  const sigCorr = (() => {
+    const limpo = (o, ok = v => v !== '' && v != null && v !== false) =>
+      Object.keys(o || {}).filter(k => ok(o[k])).sort().map(k => [k, o[k]]);
+    return JSON.stringify({
+      q: limpo(qtdesManuais), p: limpo(precosManuals), mm: limpo(marcasManuais),
+      m: limpo(mostrarMarca), s: limpo(itensSubstituidos),
+    });
+  })();
 
   const sigProposta = useMemo(() => JSON.stringify({
     sigLista, custos, margemMateriais, margemServicos, imposto, modoFaturamento,
@@ -2214,8 +2252,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             🔍 Revisão antes de gerar a proposta
           </p>
           <p className="text-xs text-amber-700 mb-3">
-            Confira quantidade e preço de cada item — útil quando o fornecedor cota em pacote/embalagem
-            diferente da unidade dimensionada, ou sugere outro modelo.
+            Confira quantidade, preço e marca de cada item — útil quando o fornecedor cota em pacote/embalagem
+            diferente da unidade dimensionada. Itens realmente diferentes do pedido aparecem destacados como
+            possível substituição.
             {itensSemPreco.length > 0 && (
               <span className="block mt-1 font-semibold">
                 ⚠️ {itensSemPreco.length} {itensSemPreco.length === 1 ? 'item está' : 'itens estão'} sem preço na cotação.
@@ -2231,7 +2270,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             {(orcamento.detalhamento_itens || []).map((l, i) => {
               // Chave ORIGINAL do item (devolvida pelo backend) — não muda se o nome impresso mudar
               const key = l.chave ?? norm(l.item);
-              const modeloSugerido = ultimoModeloMapRef.current.get(key);
+              const oferta = ultimoOfertaMapRef.current.get(key);
               const fonte = origemPrecos.porItem[key];
               const origemInfo = ORIGEM_PRECO[fonte];
               return (
@@ -2267,15 +2306,37 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                         className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-amber-300 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-50" />
                     </div>
                   </div>
-                  {modeloSugerido && (
-                    <label className="flex items-center gap-2 text-[10px] text-indigo-700 pl-1 pt-1.5 cursor-pointer">
-                      <input type="checkbox" checked={!!itensSubstituidos[key]}
-                        onChange={e => setItensSubstituidos(p => ({ ...p, [key]: e.target.checked }))}
-                        disabled={bloqueadoTrial}
-                        className="w-3 h-3 accent-indigo-600 flex-shrink-0" />
-                      Fornecedor ofertou: <b>{modeloSugerido}</b> — mencionar na proposta ao cliente
-                      <span className="text-slate-400">(a descrição do sistema é mantida)</span>
+                  {/* Marca: informação do fornecedor (o item é o mesmo) — editável; vai à proposta só se marcado */}
+                  <div className="flex items-center gap-2 pl-1 pt-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-slate-500">Marca</span>
+                    <input value={marcasManuais[key] ?? oferta?.marca ?? ''}
+                      onChange={e => setMarcasManuais(p => ({ ...p, [key]: e.target.value }))}
+                      disabled={bloqueadoTrial} placeholder="sem marca"
+                      className="w-36 px-2 py-0.5 rounded-md border border-amber-200 text-[11px] outline-none focus:ring-1 focus:ring-amber-400 bg-white disabled:opacity-50" />
+                    <label className="flex items-center gap-1 text-[10px] text-slate-600 cursor-pointer">
+                      <input type="checkbox" checked={!!mostrarMarca[key]}
+                        onChange={e => setMostrarMarca(p => ({ ...p, [key]: e.target.checked }))}
+                        disabled={bloqueadoTrial} className="w-3 h-3 accent-amber-600" />
+                      mostrar na proposta
                     </label>
+                    {oferta?.codigo && (
+                      <span className="text-[10px] text-slate-400" title="Código do produto no fabricante — uso interno, não vai na proposta">
+                        cód. fabricante: {oferta.codigo}
+                      </span>
+                    )}
+                  </div>
+                  {/* Possível substituição: item realmente diferente do pedido (sinal da IA) — decisão explícita */}
+                  {oferta?.substituicao && (
+                    <div className="mt-1.5 ml-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[10px] text-violet-800">
+                      <p className="font-bold">⚠️ Possível substituição — o fornecedor cotou outro item: {oferta.combinado}</p>
+                      {oferta.obs && <p className="mt-0.5">{oferta.obs}</p>}
+                      <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
+                        <input type="checkbox" checked={itensSubstituidos[key] === oferta.combinado}
+                          onChange={e => setItensSubstituidos(p => ({ ...p, [key]: e.target.checked ? oferta.combinado : '' }))}
+                          disabled={bloqueadoTrial} className="w-3 h-3 accent-violet-600" />
+                        Aceitar e citar na proposta <span className="text-violet-500">(a descrição do sistema é mantida)</span>
+                      </label>
+                    </div>
                   )}
                 </div>
               );
@@ -2311,10 +2372,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           </div>
 
           {/* Seleção de itens mudou depois de gerado — os valores abaixo são os da seleção anterior */}
-          {orcamentoSig !== null && orcamentoSig !== sigLista && (
+          {((orcamentoSig !== null && orcamentoSig !== sigLista) || (orcamentoSigCorr !== null && orcamentoSigCorr !== sigCorr)) && (
             <div className="rounded-xl px-4 py-3 bg-amber-500/15 border border-amber-400/40 text-amber-100 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <span>
-                ⚠️ <b>A seleção de itens mudou</b> depois que este orçamento foi gerado — os valores abaixo ainda são os da seleção anterior.
+                ⚠️ <b>{orcamentoSig !== null && orcamentoSig !== sigLista ? 'A seleção de itens mudou' : 'Há correções da Revisão ainda não aplicadas'}</b>
+                {' '}depois que este orçamento foi gerado — os valores e nomes abaixo ainda são os da versão anterior.
               </span>
               <button onClick={recalcularComPrecosManuals} disabled={loading || bloqueadoTrial}
                 className="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold whitespace-nowrap disabled:opacity-40">
