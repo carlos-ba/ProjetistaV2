@@ -9,6 +9,10 @@ class ItemOrcamento(BaseModel):
     preco_unitario: float | None = None
     categoria: str | None = None
     tipo_item: str | None = None
+    # Chave estável do item (descrição ORIGINAL do sistema, normalizada) — devolvida como
+    # veio em ItemDetalhado.chave, pra o frontend casar correções/preço/qtde mesmo quando o
+    # nome impresso (`item`) mudar (ex: menção ao item ofertado pelo fornecedor).
+    chave: str | None = None
 
 
 class OrcamentoRequest(BaseModel):
@@ -25,6 +29,7 @@ class ItemDetalhado(BaseModel):
     detalhe: str
     categoria: str | None = None
     tipo_item: str | None = None
+    chave: str | None = None
 
 
 class OrcamentoResponse(BaseModel):

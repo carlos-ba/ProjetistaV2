@@ -26,6 +26,15 @@ const CONDICOES_PADRAO = {
   nao_incluso: 'Obras civis e base nivelada; alimentação elétrica até o ponto da unidade condensadora; disjuntores e quadro geral; descarte de entulho; taxas e licenças.',
 };
 
+// ── Origem do preço de cada item (Revisão) ──
+const ORIGEM_PRECO = {
+  cotacao:           { label: 'cotação',          cls: 'bg-emerald-100 text-emerald-700', dica: 'Preço da cotação escolhida para este projeto' },
+  manual:            { label: 'manual',           cls: 'bg-sky-100 text-sky-700',         dica: 'Preço digitado por você' },
+  lista_empresa:     { label: 'catálogo empresa', cls: 'bg-amber-100 text-amber-800',     dica: 'Preço da lista de preços da sua empresa — não veio da cotação' },
+  cotacao_historico: { label: 'cotação antiga',   cls: 'bg-orange-100 text-orange-800',   dica: 'Último preço de uma cotação anterior (qualquer projeto) — não veio da cotação escolhida' },
+  sem_preco:         { label: 'sem preço',        cls: 'bg-red-100 text-red-700',         dica: 'Nenhum preço encontrado' },
+};
+
 // ── Cores por bloco — Proposta ao Cliente (faturamento direto, lista completa) ──
 // Uma cor por bloco (nome vem de bloco_orcamento no banco), igual na lista
 // itemizada e no resumo de investimento. Mão de obra tem cor própria, fora
@@ -154,6 +163,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // ── Orçamento e UI ───────────────────────────────────────────────────
   const [orcamento,    setOrcamento]    = useState(null);
   const [orcamentoSig, setOrcamentoSig] = useState(null); // seleção de itens (sigLista) usada ao gerar o orçamento atual
+  const [origemPrecos, setOrigemPrecos] = useState({ usouCotacao: false, porItem: {} }); // fonte do preço de cada item do orçamento atual
+  const itensDeOutraOrigem = Object.values(origemPrecos.porItem)
+    .filter(f => f === 'lista_empresa' || f === 'cotacao_historico').length;
   const [erro,        setErro]         = useState(null);
   const [loading,      setLoading]      = useState(false);
 
@@ -210,8 +222,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     if (triggerGerarProposta === 0) return;
     if (totalItens > 0) {
       setListaAprovada(true);
-      // Pequeno delay para garantir que o DOM renderizou o carrinho antes de verificar
-      setTimeout(() => verificarEGerar(), 300);
+      // Atalho "Cotações → Gerar proposta": só gera direto se a seleção atual já bate com as
+      // cotações do projeto; se diverge, não gera às cegas — pergunta (banner de conferência).
+      iniciarGeracaoPeloAtalho();
     }
   }, [triggerGerarProposta]);
 
@@ -249,6 +262,81 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   });
   const toggleMaterial    = (i) => alternarNoSet(setMateriaisDesmarcados,    chavesMateriais[i]);
   const toggleEquipamento = (i) => alternarNoSet(setEquipamentosDesmarcados, chavesEquipamentos[i]);
+
+  // ── Conferência da seleção com as cotações do projeto ────────────────────
+  // A cotação é um retrato da lista no momento em que foi gerada (cotacao_item). A seleção
+  // da tela é outro estado, sem vínculo — aqui os dois são comparados (casamento por
+  // descrição normalizada, a mesma chave que casa preço) e o usuário decide qual vale.
+  const [cotacoesProjeto, setCotacoesProjeto] = useState([]);   // [{id, codigo, status, data_recebimento, chaves:Set}]
+  const [conferenciaIgnorada, setConferenciaIgnorada] = useState(false);
+  const [avisoAtalho, setAvisoAtalho] = useState(false);        // chegou pelo atalho de Cotações e a seleção diverge
+  const checklistRef = useRef(null);
+
+  const carregarCotacoesProjeto = async () => {
+    if (!projetoAtual?.id) { setCotacoesProjeto([]); return []; }
+    try {
+      const r = await api.get(`/api/v1/cotacoes?projeto_id=${projetoAtual.id}`);
+      const lista = (r.data || []).filter(c => c.status !== 'cancelada');
+      const detalhes = await Promise.all(
+        lista.map(c => api.get(`/api/v1/cotacoes/${c.id}`).then(x => x.data).catch(() => null))
+      );
+      const out = detalhes.filter(Boolean).map(d => ({
+        id: d.id, codigo: d.codigo, status: d.status, data_recebimento: d.data_recebimento,
+        chaves: new Set((d.itens || []).map(i => norm(i.descricao))),
+      }));
+      setCotacoesProjeto(out);
+      return out;
+    } catch { return []; }
+  };
+  useEffect(() => { carregarCotacoesProjeto(); }, [projetoAtual?.id]);
+
+  // Chave de cada item como a cotação o descreve (mesma regra de montarItensCotacao)
+  const descCotMat = materiaisComEmbalagem.map(m => norm(m.comprimento ? `${m.item} ${m.comprimento}m` : m.item));
+  const descCotEq  = (dadosAutomaticos?.equipamentos || []).map(e => norm(e.nome || e.item));
+
+  // Diferença entre a seleção atual e uma cotação: marcados que ela não tem / desmarcados que ela tem
+  const diferencasDe = (cot) => {
+    let fora = 0, faltando = 0;
+    descCotMat.forEach((d, i) => { const dentro = cot.chaves.has(d); if (materiaisAtivos[i] && !dentro) fora++; if (!materiaisAtivos[i] && dentro) faltando++; });
+    descCotEq.forEach((d, i) => { const dentro = cot.chaves.has(d); if (equipamentosAtivos[i] && !dentro) fora++; if (!equipamentosAtivos[i] && dentro) faltando++; });
+    return { fora, faltando };
+  };
+  const usarListaDaCotacao = (cot) => {
+    setMateriaisDesmarcados(new Set(chavesMateriais.filter((_, i) => !cot.chaves.has(descCotMat[i]))));
+    setEquipamentosDesmarcados(new Set(chavesEquipamentos.filter((_, i) => !cot.chaves.has(descCotEq[i]))));
+    setConferenciaIgnorada(false); setAvisoAtalho(false);
+  };
+  const cotacoesDivergentes = cotacoesProjeto
+    .map(c => ({ cot: c, ...diferencasDe(c) }))
+    .filter(x => x.fora > 0 || x.faltando > 0);
+  // Em quais cotações o item aparece (pro selo "na cotação / fora das cotações" da checklist)
+  const cotacoesDoItem = (desc) => cotacoesProjeto.filter(c => c.chaves.has(desc));
+  const seloCotacao = (desc) => {
+    if (cotacoesProjeto.length === 0) return null;
+    const cs = cotacoesDoItem(desc);
+    return cs.length > 0
+      ? <span title={cs.map(c => c.codigo).join(', ')}
+          className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+          na cotação{cs.length > 1 ? ` (${cs.length})` : ''}
+        </span>
+      : <span title="Este item não está em nenhuma cotação do projeto — se ficar marcado, o preço virá do catálogo da empresa ou de cotação antiga"
+          className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+          fora das cotações
+        </span>;
+  };
+
+  const iniciarGeracaoPeloAtalho = async () => {
+    const cots = await carregarCotacoesProjeto();
+    const divergente = cots.filter(c => c.status === 'processada').some(c => {
+      const d = diferencasDe(c); return d.fora > 0 || d.faltando > 0;
+    });
+    if (divergente) {
+      setConferenciaIgnorada(false); setAvisoAtalho(true);
+      setTimeout(() => checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+      return;
+    }
+    setTimeout(() => verificarEGerar(), 300);
+  };
 
   const materiaisAprovados    = materiaisComEmbalagem.filter((_, i) => materiaisAtivos[i]);
   const equipamentosAprovados = (dadosAutomaticos?.equipamentos || []).filter((_, i) => equipamentosAtivos[i]);
@@ -391,19 +479,28 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     // resolvido pelo backend) preenche o que a cotação deste projeto não cobriu — nunca
     // sobrescreve um preço que já veio de uma cotação escolhida pra este orçamento.
     const mapaCompleto = new Map(precoMap);
+    // De onde veio cada preço: 'cotacao' (cotação escolhida pra este projeto) | 'lista_empresa' |
+    // 'cotacao_historico' (última cotação de qualquer projeto) | 'manual' | 'sem_preco'.
+    const fontes = new Map([...precoMap.keys()].map(k => [k, 'cotacao']));
     try {
       const { data: mapaEmpresa } = await api.get('/api/v1/produto-empresa/mapa-precos');
       for (const [chave, info] of Object.entries(mapaEmpresa)) {
-        if (!mapaCompleto.has(chave)) mapaCompleto.set(chave, info.preco);
+        if (!mapaCompleto.has(chave)) { mapaCompleto.set(chave, info.preco); fontes.set(chave, info.fonte || 'lista_empresa'); }
       }
     } catch {
       // Sem empresa vinculada ou erro pontual — segue só com o precoMap da cotação
     }
+    const origens = {};   // norm(descricao original) → fonte do preço usado
 
     const buscarPreco = (descricao) => {
       const p = mapaCompleto.get(norm(descricao));
-      if (p == null) semPreco.push(descricao);
+      if (p == null) { semPreco.push(descricao); origens[norm(descricao)] = 'sem_preco'; }
+      else origens[norm(descricao)] = fontes.get(norm(descricao)) || 'lista_empresa';
       return p ?? null;
+    };
+    const precoDoItem = (descricao, precoManual) => {
+      if (precoManual != null) { origens[norm(descricao)] = 'manual'; return precoManual; }
+      return buscarPreco(descricao);
     };
 
     // Correção manual de quantidade (ex: fornecedor vende em pacote — a quantidade
@@ -413,12 +510,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       return !isNaN(manual) && manual > 0 ? manual : calculada;
     };
 
-    // "Usar item substituído nesta proposta" — troca só o texto impresso pelo modelo
-    // que o fornecedor realmente cotou; o projeto (Cards 1-5) continua intocado.
+    // "Mencionar o item ofertado pelo fornecedor" — NUNCA troca a descrição do sistema: ela
+    // continua como nome principal e a oferta do fornecedor entra entre parênteses. O projeto
+    // (Cards 1-5) continua intocado.
     const nomeCorrigido = (descricao) => {
       const key = norm(descricao);
       if (itensSubstituidos[key] && ultimoModeloMapRef.current.has(key)) {
-        return ultimoModeloMapRef.current.get(key);
+        return `${descricao} (oferta: ${ultimoModeloMapRef.current.get(key)})`;
       }
       return descricao;
     };
@@ -442,8 +540,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           item: nomeCorrigido(descricao),
           qtde: qtd,
           detalhe: [m.detalhe || m.descricao, m.area_total ? `${fmtQtd(m.area_total)} m²` : null].filter(Boolean).join(' — '),
-          preco_unitario: precoManual ?? buscarPreco(descricao),
+          preco_unitario: precoDoItem(descricao, precoManual),
           tipo_item: m.tipo_item ?? null,
+          chave: norm(descricao),
         };
       }),
       equipamentos: equipamentosAprovados.map(e => {
@@ -453,9 +552,10 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           id: e.id, item: nomeCorrigido(descricao),
           qtde: qtdCorrigida(descricao, parseFloat(e.qtde ?? 1) || 1),
           detalhe: e.detalhe || '',
-          preco_unitario: precoManual ?? buscarPreco(descricao),
+          preco_unitario: precoDoItem(descricao, precoManual),
           categoria: 'equipamento',
           tipo_item: e.tipo_item ?? null,
+          chave: norm(descricao),
         };
       }),
     };
@@ -464,6 +564,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       const r = await api.post('/api/v1/orcamento', payload);
       setOrcamento(r.data);
       setOrcamentoSig(sigLista);
+      setOrigemPrecos({ usouCotacao: precoMap.size > 0, porItem: origens });
       setItensSemPreco(semPreco);
       // Só acrescenta entrada nova pra item que ficou sem preço — nunca apaga uma
       // correção manual já digitada (ou restaurada do projeto salvo) de um item que
@@ -1365,7 +1466,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
 
       {/* ══ 1. LISTA COM CHECKBOXES ══ */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm print:hidden">
+      <div ref={checklistRef} className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm print:hidden">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-amber-900 font-bold flex items-center gap-2">
             📋 Itens do Dimensionamento — Selecione o que incluir
@@ -1376,6 +1477,41 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             🗑️ LIMPAR TUDO
           </button>
         </div>
+
+        {/* Conferência com as cotações do projeto — a cotação é o retrato da lista que foi pedida ao fornecedor */}
+        {cotacoesDivergentes.length > 0 && (!conferenciaIgnorada || avisoAtalho) && (
+          <div className="mb-5 rounded-xl border border-indigo-300 bg-indigo-50 p-4 text-sm text-indigo-900">
+            <p className="font-bold">
+              {avisoAtalho ? '🔎 Antes de gerar a proposta, confira a seleção de itens' : '🔎 A seleção de itens não bate com a cotação deste projeto'}
+            </p>
+            <p className="text-xs text-indigo-800 mt-1">
+              A cotação guarda a lista que foi enviada ao fornecedor. Qual lista você quer usar?
+            </p>
+            <div className="mt-3 space-y-2">
+              {cotacoesDivergentes.map(({ cot, fora, faltando }) => (
+                <div key={cot.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white/70 rounded-lg border border-indigo-200 px-3 py-2">
+                  <div className="text-xs">
+                    <b className="font-mono">{cot.codigo}</b>
+                    <span className="ml-2 text-slate-500">{cot.status === 'processada' ? 'com preços' : 'aguardando preços'} · {cot.chaves.size} itens</span>
+                    <span className="block text-slate-600 mt-0.5">
+                      {fora > 0 && <>{fora} {fora === 1 ? 'item marcado não está' : 'itens marcados não estão'} nela</>}
+                      {fora > 0 && faltando > 0 && ' · '}
+                      {faltando > 0 && <>{faltando} {faltando === 1 ? 'item desmarcado está' : 'itens desmarcados estão'} nela</>}
+                    </span>
+                  </div>
+                  <button onClick={() => usarListaDaCotacao(cot)} disabled={bloqueadoTrial}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap disabled:opacity-40">
+                    Usar a lista desta cotação
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => { setConferenciaIgnorada(true); setAvisoAtalho(false); }}
+              className="mt-3 text-xs font-bold text-indigo-700 underline">
+              Manter minha seleção atual
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Materiais */}
@@ -1394,6 +1530,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       )}
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.descricao || item.detalhe}</p>
+                    {seloCotacao(descCotMat[i])}
                     {item.tipo_item === 'carga_fluido' && infoEmbalagem?.suficientes.length > 1 && (
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.preventDefault()}>
                         <span className="text-[9px] font-black text-amber-600 uppercase">Embalagem:</span>
@@ -1438,6 +1575,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       {eq.qtde > 1 ? `${eq.qtde}× ` : ''}{eq.nome}
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5">{eq.detalhe}</p>
+                    {seloCotacao(descCotEq[i])}
                   </div>
                   <button onClick={e => { e.preventDefault(); aoRemoverEquipamento(i); }}
                     className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all text-xs" title="Remover">✕</button>
@@ -2083,15 +2221,34 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                 ⚠️ {itensSemPreco.length} {itensSemPreco.length === 1 ? 'item está' : 'itens estão'} sem preço na cotação.
               </span>
             )}
+            {origemPrecos.usouCotacao && itensDeOutraOrigem > 0 && (
+              <span className="block mt-1 font-semibold">
+                ⚠️ {itensDeOutraOrigem} {itensDeOutraOrigem === 1 ? 'item usa' : 'itens usam'} preço que <u>não é da cotação escolhida</u> (catálogo da empresa ou cotação antiga) — confira as etiquetas abaixo.
+              </span>
+            )}
           </p>
           <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
             {(orcamento.detalhamento_itens || []).map((l, i) => {
-              const key = norm(l.item);
+              // Chave ORIGINAL do item (devolvida pelo backend) — não muda se o nome impresso mudar
+              const key = l.chave ?? norm(l.item);
               const modeloSugerido = ultimoModeloMapRef.current.get(key);
+              const fonte = origemPrecos.porItem[key];
+              const origemInfo = ORIGEM_PRECO[fonte];
               return (
                 <div key={i} className="p-2 rounded-lg bg-white/60 border border-amber-100">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-700 flex-1 truncate" title={l.item}>{l.item}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-xs text-slate-700 truncate" title={l.item}>{l.item}</span>
+                      <span className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                        {origemInfo && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${origemInfo.cls}`}
+                            title={origemInfo.dica}>{origemInfo.label}</span>
+                        )}
+                        <span className="text-[10px] text-slate-400 truncate" title={l.detalhe}>
+                          {l.unidade}{l.detalhe ? ` · ${l.detalhe}` : ''}
+                        </span>
+                      </span>
+                    </div>
                     <input type="number" min="0" step="0.01"
                       value={qtdesManuais[key] ?? ''}
                       onChange={e => setQtdesManuais(p => ({ ...p, [key]: e.target.value }))}
@@ -2116,7 +2273,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                         onChange={e => setItensSubstituidos(p => ({ ...p, [key]: e.target.checked }))}
                         disabled={bloqueadoTrial}
                         className="w-3 h-3 accent-indigo-600 flex-shrink-0" />
-                      Fornecedor cotou: <b>{modeloSugerido}</b> — usar este item na proposta ao cliente
+                      Fornecedor ofertou: <b>{modeloSugerido}</b> — mencionar na proposta ao cliente
+                      <span className="text-slate-400">(a descrição do sistema é mantida)</span>
                     </label>
                   )}
                 </div>

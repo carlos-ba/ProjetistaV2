@@ -2337,6 +2337,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Verificação de cotação antes de gerar proposta | ✅ funcional, ajustes pendentes |
 | Revisão manual de quantidade/substituição antes da proposta (Card 6) | ✅ em produção desde 2026-09-02, persistida em `dados_completos`; 2026-10-06: preços manuais não são mais apagados ao gerar |
 | Card 6 — seleção de itens estável (não reseta em reemissão da lista) | ✅ implementado 2026-10-06 — seleção por item e persistida, reset só quando o conteúdo muda, Composição sempre visível com orçamento, faixa "Recalcular orçamento" quando a seleção muda |
+| Card 6 — Entrega 1 "Integridade da proposta" (seleção × cotação, origem do preço, descrição preservada) | ✅ implementado 2026-10-08 — banner pergunta qual lista usar, selos na cotação/fora, origem do preço na Revisão, menção "(oferta: …)" sem trocar a descrição, atalho de Cotações não gera às cegas |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2474,6 +2475,64 @@ marcados, (2) os valores ficaram confusos, (3) a Composição da Proposta
   fluxo exato do painel de Cotações com cotação real (só a geração sem cotação).
 - Sem risco pra dado de usuário: campo novo opcional em `dados_completos`,
   sem migration (só voltar a uma versão antiga ignoraria o campo).
+
+### Card 6 — Entrega 1 "Integridade da proposta" (2026-10-08)
+
+Fruto do levantamento da jornada do usuário (lista → cotação → importação →
+proposta), documentado em `docs/analises/jornada-cotacao-card6-2026-10-08.md`
+(Achados 1, 3 e 4). Primeira de 3 entregas combinadas; as outras duas
+(navegação da proposta — F/G/I; atalho de Cotações — Q/S/T/U) ficam pra depois.
+
+- **Seleção × cotação (A/B)**: a cotação (`cotacao_item`) é o retrato da lista
+  enviada ao fornecedor; a seleção da tela era outro estado, sem vínculo.
+  `GeradorOrcamento.jsx` agora carrega as cotações do projeto
+  (`carregarCotacoesProjeto`: `GET /cotacoes?projeto_id=` + detalhe de cada) e
+  compara com a seleção por `norm(descrição)` (mesma chave que casa preço;
+  `descCotMat`/`descCotEq` replicam a regra de `montarItensCotacao`). Se há
+  diferença, **pergunta** (decisão do usuário, não aplica sozinho): banner no
+  topo da checklist por cotação — "N itens marcados não estão nela / N
+  desmarcados estão" — com **"Usar a lista desta cotação"**
+  (`usarListaDaCotacao`) ou **"Manter minha seleção atual"**. Cada item ganha
+  selo **"na cotação"** / **"fora das cotações"**.
+- **Origem do preço (D)**: `gerarOrcamentoComPrecos` registra a fonte de cada
+  preço (`origemPrecos.porItem`: `cotacao` | `manual` | `lista_empresa` |
+  `cotacao_historico` | `sem_preco`; a fonte do mapa da empresa já vinha em
+  `fonte` de `obter_mapa_precos`). A Revisão mostra um selo por linha e, quando
+  uma cotação foi usada e algum item caiu em `lista_empresa`/`cotacao_historico`,
+  um aviso "N itens usam preço que não é da cotação escolhida" — antes o item
+  esquecido entrava com preço de outra origem em silêncio.
+- **Nunca trocar a descrição do sistema (K/L/M)**: `nomeCorrigido()` mantém a
+  descrição e acrescenta **"(oferta: marca/modelo)"** quando o técnico marca
+  "Fornecedor ofertou: X — mencionar na proposta" (a opção segue desmarcada
+  por padrão; o rótulo deixa claro que a descrição é mantida). Chave estável:
+  `ItemOrcamento.chave`/`ItemDetalhado.chave` (campo **opcional** novo em
+  `schemas/orcamento.py`, ecoado por `services/orcamento.py`) carrega
+  `norm(descrição original)`; a Revisão usa `l.chave ?? norm(l.item)` — o
+  checkbox, a quantidade e o preço manual continuam valendo depois da menção
+  (antes o nome trocado mudava a chave: o checkbox sumia e as correções eram
+  ignoradas). A linha também mostra unidade/detalhe pra itens parecidos se
+  distinguirem.
+- **Atalho Cotações → "Gerar proposta" não gera às cegas (R)**: o efeito de
+  `triggerGerarProposta` chama `iniciarGeracaoPeloAtalho()` — se a seleção
+  diverge de alguma cotação **processada** do projeto, não gera: rola até a
+  checklist e mostra o banner ("Antes de gerar a proposta, confira a seleção");
+  se já bate, gera direto como antes (caminho rápido preservado).
+- **Dispensado (C)**: gravar a seleção junto com a cotação — como a cotação
+  agora é a fonte da seleção (A), o autosave não era necessário.
+- **Não feito de propósito (M, parcial)**: a IA marca `possivel_substituicao`
+  só na importação e isso não é persistido em `cotacao_item`; por isso a opção
+  de mencionar a oferta aparece pra qualquer item com `marca_modelo_cotado`
+  diferente da descrição.
+- Testado na tela real (conta descartável, projeto copiado + cotação de 19 itens
+  criada por API sem 4 itens do projeto): banner e selos corretos; "Usar a lista"
+  desmarca exatamente os 4; Revisão com 19 "cotação"; item remarcado vira "sem
+  preço"; menção entra na proposta sem apagar a descrição e mantém checkbox +
+  qtde/preço manuais (origem "manual"); atalho de Cotações: divergente → pergunta,
+  consistente → gera direto. 36/36 testes e build. **Não testado**: preço vindo
+  da lista de preços da empresa/cotação antiga (só `sem_preco`), e cotação
+  aguardando preços (`enviada`) no banner.
+- Sem risco pra dado de usuário: sem migration; só um campo opcional novo na
+  API de orçamento.
 
 ### Riscos conhecidos
 

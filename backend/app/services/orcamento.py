@@ -37,6 +37,7 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
             detalhe=i.detalhe,
             categoria=i.categoria,
             tipo_item=i.tipo_item,
+            chave=i.chave,
         ))
 
     for i in req.equipamentos:
@@ -58,6 +59,7 @@ async def gerar_orcamento(req: OrcamentoRequest, db: AsyncSession) -> OrcamentoR
             detalhe=i.detalhe,
             categoria=i.categoria or "equipamento",
             tipo_item=i.tipo_item,
+            chave=i.chave,
         ))
 
     return OrcamentoResponse(
