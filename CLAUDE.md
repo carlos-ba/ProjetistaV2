@@ -2343,8 +2343,9 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
 | Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
 | Card 6 — Cabeçalho da proposta com identidade do técnico (logo, nome, contato; cor do logo) | ✅ implementado 2026-10-14 — tela, impressão e PDF; sem identidade mantém o cabeçalho antigo |
-| Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; passos 2 (resumo técnico + motivo da divisão em unidades) e 3 (redação por IA beta) pendentes |
+| Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; o descritivo (passo 4) já está feito e a redação por IA (passo 5) segue pendente |
 | Card 6 — Bloco "Aprovação e Aceite" com responsável e CREA (opcional nas Configurações) | ✅ implementado 2026-10-14 (migration 0045) — passo 3 da proposta técnica; CREA em branco não aparece; espaço de assinatura maior |
+| Card 6 — Descritivo técnico por modelo fixo (objetivo, premissas, carga, solução, motivo da divisão em unidades, margem opcional) | ✅ implementado 2026-10-14 — passo 4 da proposta técnica, sem IA/backend/migration; passo 5 (redação por IA beta) pendente |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2725,6 +2726,45 @@ usuário testando a proposta: o bloco de aceite não identificava o prestador (s
   bloco na tela e **PDF renderizado** (firma + responsável + CREA à direita, datas nos dois
   lados, bloco inteiro na última página). 36/36 testes e build. **Não testado**: CREA em
   branco e cliente com CNPJ pela tela (só leitura de código).
+
+### Card 6 — Descritivo técnico por modelo fixo (2026-10-14)
+
+Passo 4 da tabela combinada da "proposta técnica" (1 cabeçalho, 2 estudo da carga térmica,
+3 aceite + CREA, **4 descritivo técnico por modelo fixo**, 5 redação por IA beta — ainda
+não feito). Texto montado só com fatos que o sistema já tem; **sem IA**, sem backend, sem
+migration.
+
+- **Onde aparece**: tela/impressão e PDF, logo **depois do estudo da carga térmica** e antes
+  do escopo. Seção "Descritivo Técnico" numerada, montada por `montarDescritivoTecnico()`
+  (módulo, `GeradorOrcamento.jsx`): 1 Objetivo, 2 Premissas do projeto, 3 Resultado do
+  estudo de carga térmica (3 maiores parcelas com % + capacidade requerida), 4 Solução
+  adotada (UCs e evaporadores com qtde e kcal/h cada, fluido, T.Evap, T.Cond, motivo da
+  divisão), 5 Margem de segurança (só se ligada), 6 Observações (texto livre). Seção sem
+  dado (ex: sem carga térmica calculada, sem equipamentos) é omitida.
+- **Dados dos equipamentos**: `App.jsx` passa a prop **`equipamentosResumo`** a partir de
+  `inputsEquipamentos` (Card 3: `selecionados`, `fluido`, `evap`, `cond`, `numMaquinas`,
+  `cargaTotal`). Projeto sem equipamentos selecionados → seção 4 não aparece.
+- **Opções na Composição → "Conteúdo da proposta"**: "Incluir descritivo técnico" (padrão
+  **ligado**); o "mostrar a margem de segurança" agora vale para o estudo **e** o descritivo
+  (aparece se qualquer um dos dois estiver ligado); campo "Observações do descritivo".
+  Persistem em `inputs_orcamento` (`incluirDescritivo`, `motivoDivisao`, `motivoTexto`,
+  `obsDescritivo`; campos opcionais — projeto antigo = padrões).
+- **Motivo da divisão em unidades** (só quando `numMaquinas > 1`): escolha do **projetista**,
+  o sistema nunca deduz — "Completar a carga" (texto: carga requerida dividida em N unidades
+  que somadas fornecem X kcal/h), "Redundância (reserva)" (texto com o % **calculado**: com a
+  maior unidade fora, as demais mantêm `(Σ capacidades − maior) / carga requerida`; abaixo de
+  50% aparece aviso âmbar na Composição) ou "Outro motivo" (texto livre, entra verbatim).
+  Sem escolha: aviso âmbar e o descritivo não explica a divisão — **não bloqueia** a emissão.
+- Os textos não afirmam nada que o sistema não comprove (nada de "a maior máquina da série não
+  atende", normas ou garantias).
+- Testado na tela real (conta descartável, projeto de 2 unidades 2×3.238 kcal/h p/ 6.409):
+  3 motivos (redundância deu 50,5%), margem liga/desliga (vírgula decimal "10,0%"),
+  observações multilinha, desligar remove seção e pergunta, salvar persiste no banco; PDF
+  **renderizado** (descritivo logo após o estudo, na página 2). Build ok; backend intocado.
+  **Não testado**: projeto com 1 unidade e projeto sem carga térmica calculada (só leitura de
+  código); Modo Revenda (descritivo depende de `resumoTecnico`, do gabinete).
+- **Pendente (passo 5)**: redação por IA em beta, 2 versões lado a lado (fixa × IA), editável
+  e salva no projeto, só ao clicar, com limite de uso; a IA receberia só estes fatos.
 
 ### Riscos conhecidos
 

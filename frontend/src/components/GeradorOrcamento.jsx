@@ -61,6 +61,85 @@ const montarLinhasEstudoCarga = (r, mostrarMargem) => {
   return linhas;
 };
 
+// ── Descritivo técnico da proposta (modelo fixo, sem IA) ──
+// Só usa fatos que o sistema já tem (gabinete, carga térmica, equipamentos do Card 3). O motivo da divisão em
+// unidades é escolhido pelo projetista — o sistema nunca deduz. Os percentuais de redundância são calculados.
+const fmtKcal = (v) => Math.round(Number(v) || 0).toLocaleString('pt-BR');
+
+const capacidadeInstalada = (equip) => {
+  const caps = [];
+  (equip?.ucs || []).forEach(u => { for (let i = 0; i < (Number(u.qtde) || 0); i++) caps.push(Number(u.cap) || 0); });
+  if (!caps.length) return null;
+  const total = caps.reduce((a, b) => a + b, 0);
+  const maior = Math.max(...caps);
+  const cargaRef = Number(equip.cargaTotal) || 0;
+  return {
+    unidades: caps.length, total, maior,
+    // com a maior unidade fora de operação, quanto da carga requerida as demais ainda cobrem
+    mantidaPct: cargaRef > 0 && caps.length > 1 ? ((total - maior) / cargaRef) * 100 : null,
+  };
+};
+
+const fmtPct = (v) => `${v.toFixed(1).replace('.', ',')}%`;
+
+const montarDescritivoTecnico = ({ resumo, estudo, equip, motivo, motivoTexto, mostrarMargem, obs }) => {
+  const secoes = [];
+  if (resumo) {
+    const prod = resumo.produto ? `, para ${resumo.produto}` : '';
+    secoes.push({ titulo: 'Objetivo', paragrafos: [
+      `Câmara frigorífica de ${fmtQtd(resumo.comprimento)} × ${fmtQtd(resumo.largura)} × ${fmtQtd(resumo.altura)} m${prod}, mantida a ${fmtQtd(resumo.temperatura_interna)} °C, com isolamento em painel ${resumo.nucleo} de ${resumo.espessura} mm.`,
+    ] });
+    const prem = [`temperatura interna de ${fmtQtd(resumo.temperatura_interna)} °C`];
+    if (resumo.temp_amb != null && resumo.temp_amb !== '') prem.push(`temperatura ambiente de ${fmtQtd(resumo.temp_amb)} °C`);
+    if (resumo.produto) prem.push(`produto: ${resumo.produto}`);
+    if (resumo.movimentacao != null && resumo.movimentacao !== '' && Number(resumo.movimentacao) > 0) prem.push(`movimentação de ${fmtQtd(resumo.movimentacao)} kg/dia`);
+    if (resumo.temp_entrada != null && resumo.temp_entrada !== '') prem.push(`temperatura de entrada do produto de ${fmtQtd(resumo.temp_entrada)} °C`);
+    secoes.push({ titulo: 'Premissas do projeto', paragrafos: [`${prem.join('; ')}.`.replace(/^./, c => c.toUpperCase())] });
+  }
+  if (estudo && Number(estudo.carga_total_24h_kcalh) > 0) {
+    const total = Number(estudo.carga_total_24h_kcalh);
+    const maiores = montarFatiasCarga(estudo).sort((a, b) => b.valor - a.valor).slice(0, 3)
+      .map(f => `${f.label.toLowerCase()} (${fmtPct((Number(f.valor) / total) * 100)})`);
+    const p = [`A carga térmica líquida é de ${fmtKcal(total)} kcal/h. As maiores parcelas são ${maiores.join(', ')}.`];
+    const horas = estudo.baseado_em_horas_funcionamento
+      ? `, considerando o compressor operando ${fmtQtd(estudo.baseado_em_horas_funcionamento)} h/dia` : '';
+    p.push(`A capacidade requerida do equipamento é de ${fmtKcal(estudo.capacidade_requerida_equipamento_kcalh)} kcal/h${horas}.`);
+    secoes.push({ titulo: 'Resultado do estudo de carga térmica', paragrafos: p });
+  }
+  if (equip) {
+    const lista = (arr) => arr.map(i => `${i.qtde}× ${i.nome} — ${fmtKcal(i.cap)} kcal/h cada`).join('; ');
+    const p = [];
+    if (equip.ucs?.length) p.push(`Unidades condensadoras: ${lista(equip.ucs)}.`);
+    if (equip.evaps?.length) p.push(`Evaporadores: ${lista(equip.evaps)}.`);
+    const cond = [];
+    if (equip.fluido) cond.push(`fluido refrigerante ${equip.fluido}`);
+    if (equip.tEvap !== '' && equip.tEvap != null) cond.push(`T.Evap de ${fmtQtd(equip.tEvap)} °C`);
+    if (equip.tCond !== '' && equip.tCond != null) cond.push(`T.Cond de ${fmtQtd(equip.tCond)} °C`);
+    if (cond.length) p.push(`Condições de operação: ${cond.join(', ')}.`);
+    const n = equip.numMaquinas || 1;
+    if (n > 1) {
+      const inst = capacidadeInstalada(equip);
+      if (motivo === 'completar') {
+        p.push(`A carga requerida${equip.cargaTotal ? ` de ${fmtKcal(equip.cargaTotal)} kcal/h` : ''} foi dividida em ${n} unidades${inst ? `, que somadas fornecem ${fmtKcal(inst.total)} kcal/h` : ''}, completando a capacidade necessária.`);
+      } else if (motivo === 'redundancia') {
+        p.push(inst?.mantidaPct != null
+          ? `A divisão em ${n} unidades foi adotada como redundância (reserva): com uma unidade fora de operação, as demais mantêm ${fmtPct(inst.mantidaPct)} da carga requerida.`
+          : `A divisão em ${n} unidades foi adotada como redundância (reserva).`);
+      } else if (motivo === 'outro' && (motivoTexto || '').trim()) {
+        p.push(`Motivo da divisão em ${n} unidades: ${motivoTexto.trim().replace(/\.+$/, '')}.`);
+      }
+    }
+    if (p.length) secoes.push({ titulo: 'Solução adotada', paragrafos: p });
+  }
+  if (mostrarMargem && estudo && Number(estudo.carga_total_24h_kcalh) > 0) {
+    secoes.push({ titulo: 'Margem de segurança', paragrafos: [
+      `Foi aplicada margem de segurança de ${String(estudo.fator_seguranca_aplicado).replace(".", ",")} sobre a carga térmica líquida, resultando em ${fmtKcal(estudo.carga_total_com_seguranca_kcalh)} kcal/h.`,
+    ] });
+  }
+  if ((obs || '').trim()) secoes.push({ titulo: 'Observações', paragrafos: obs.trim().split(/\n+/) });
+  return secoes;
+};
+
 // ── Cabeçalho da proposta: cor de destaque tirada do logo do cliente ──
 // Lê o PNG num canvas pequeno, ignora transparência/branco/cinzas e fica com a cor saturada mais frequente;
 // escurece até ter contraste mínimo sobre o branco. Sem cor útil (logo preto e branco) → null (usa o neutro).
@@ -146,7 +225,7 @@ const COR_BLOCO_PADRAO = { dot: 'bg-slate-400', texto: 'text-slate-500', rgb: [1
 const COR_MAO_DE_OBRA = { dot: 'bg-rose-500', texto: 'text-rose-700', rgb: [225, 29, 72] };
 const corDoBloco = (nome) => CORES_BLOCO[nome] || COR_BLOCO_PADRAO;
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, estudoCarga = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, estudoCarga = null, equipamentosResumo = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -314,6 +393,11 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // Estudo da carga térmica na proposta (tabela + pizza): ligado por padrão; a margem de segurança só aparece se o técnico pedir
   const [incluirEstudoCarga,     setIncluirEstudoCarga]     = useState(iv.incluirEstudoCarga ?? true);
   const [mostrarMargemEstudo,    setMostrarMargemEstudo]    = useState(iv.mostrarMargemEstudo ?? false);
+  // Descritivo técnico (modelo fixo): ligado por padrão; o motivo da divisão em unidades é escolha do projetista
+  const [incluirDescritivo,      setIncluirDescritivo]      = useState(iv.incluirDescritivo ?? true);
+  const [motivoDivisao,          setMotivoDivisao]          = useState(iv.motivoDivisao ?? '');
+  const [motivoTexto,            setMotivoTexto]            = useState(iv.motivoTexto ?? '');
+  const [obsDescritivo,          setObsDescritivo]          = useState(iv.obsDescritivo ?? '');
   const [modoFaturamento,        setModoFaturamento]        = useState(iv.modoFaturamento ?? 'empreitada'); // 'empreitada' | 'venda_direta'
   const [custos, setCustos] = useState(iv.custos ?? { mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
   const [margemMateriais, setMargemMateriais] = useState(iv.margemMateriais ?? 25);
@@ -463,13 +547,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     if (onValoresChange) onValoresChange({
       dadosCliente,
       incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo,
+      incluirDescritivo, motivoDivisao, motivoTexto, obsDescritivo,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca,
       itensDesmarcados: { materiais: [...materiaisDesmarcados], equipamentos: [...equipamentosDesmarcados] },
     });
-  }, [dadosCliente, incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo, modoFaturamento,
+  }, [dadosCliente, incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo, incluirDescritivo, motivoDivisao, motivoTexto, obsDescritivo, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
       exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca, materiaisDesmarcados, equipamentosDesmarcados]);
@@ -525,6 +610,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     return fatias.length ? gerarImagemPizzaCarga(fatias) : null;
   }, [estudoCarga, estudoDisponivel]);
   const linhasEstudo = estudoDisponivel ? montarLinhasEstudoCarga(estudoCarga, mostrarMargemEstudo) : [];
+  // Descritivo técnico: aparece quando há resumo do gabinete; seções sem dado (ex: sem carga/equipamentos) são omitidas
+  const unidadesDescritivo = equipamentosResumo?.numMaquinas ?? 1;
+  const instaladaDescritivo = equipamentosResumo ? capacidadeInstalada(equipamentosResumo) : null;
+  const motivoPendente = unidadesDescritivo > 1 && (!motivoDivisao || (motivoDivisao === 'outro' && !motivoTexto.trim()));
+  const secoesDescritivo = incluirDescritivo && resumoTecnico
+    ? montarDescritivoTecnico({
+        resumo: resumoTecnico, estudo: estudoDisponivel ? estudoCarga : null, equip: equipamentosResumo,
+        motivo: motivoDivisao, motivoTexto, mostrarMargem: mostrarMargemEstudo, obs: obsDescritivo,
+      })
+    : [];
   const notaCompressorEstudo = estudoDisponivel && estudoCarga.baseado_em_horas_funcionamento
     ? `Capacidade requerida considerando o compressor operando ${fmtQtd(estudoCarga.baseado_em_horas_funcionamento)} h/dia.` : '';
   const temIdentidade = !!(identidadeProposta?.proposta_nome || identidadeProposta?.proposta_logo_base64 || contatoCabecalho);
@@ -1204,6 +1299,27 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
           y += 4;
         }
         y += 6;
+      }
+
+      // ── Descritivo técnico ───────────────────────────────────────────
+      if (secoesDescritivo.length) {
+        checar(40);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+        txt('DESCRITIVO TÉCNICO', ML, y); pdf.setTextColor(0); y += 5;
+        secoesDescritivo.forEach((s, si) => {
+          checar(16);
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 41, 59);
+          txt(`${si + 1}. ${s.titulo}`, ML, y); y += 4.5;
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(51, 65, 85);
+          s.paragrafos.forEach(par => {
+            const ls = pdf.splitTextToSize(par, CW);
+            checar(ls.length * 3.8 + 2);
+            pdf.text(ls, ML, y); y += ls.length * 3.8 + 1.5;
+          });
+          y += 2;
+        });
+        pdf.setTextColor(0);
+        y += 4;
       }
 
       // ── Escopo ────────────────────────────────────────────────────────
@@ -2266,15 +2382,57 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       <input type="checkbox" checked={incluirEstudoCarga} onChange={e => setIncluirEstudoCarga(e.target.checked)} className="accent-indigo-600" />
                       Incluir estudo da carga térmica
                     </label>
-                    {incluirEstudoCarga && (
-                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 ml-4">
-                        <input type="checkbox" checked={mostrarMargemEstudo} onChange={e => setMostrarMargemEstudo(e.target.checked)} className="accent-indigo-600" />
-                        mostrar a margem de segurança
-                      </label>
-                    )}
                   </>
                 )}
+                {resumoTecnico && (
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                    <input type="checkbox" checked={incluirDescritivo} onChange={e => setIncluirDescritivo(e.target.checked)} className="accent-indigo-600" />
+                    Incluir descritivo técnico
+                  </label>
+                )}
+                {estudoDisponivel && (incluirEstudoCarga || incluirDescritivo) && (
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 ml-4">
+                    <input type="checkbox" checked={mostrarMargemEstudo} onChange={e => setMostrarMargemEstudo(e.target.checked)} className="accent-indigo-600" />
+                    mostrar a margem de segurança
+                  </label>
+                )}
               </div>
+              {incluirDescritivo && resumoTecnico && (
+                <div className="mt-3 space-y-3">
+                  {unidadesDescritivo > 1 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Por que a carga foi dividida em {unidadesDescritivo} unidades?</label>
+                      <select value={motivoDivisao} onChange={e => setMotivoDivisao(e.target.value)}
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 text-sm bg-white">
+                        <option value="">— escolha o motivo —</option>
+                        <option value="completar">Completar a carga</option>
+                        <option value="redundancia">Redundância (reserva)</option>
+                        <option value="outro">Outro motivo</option>
+                      </select>
+                      {motivoDivisao === 'outro' && (
+                        <input type="text" value={motivoTexto} onChange={e => setMotivoTexto(e.target.value)} maxLength={300}
+                          placeholder="Descreva o motivo (aparece na proposta)"
+                          className="w-full h-9 px-3 rounded-lg border border-slate-300 text-sm bg-white" />
+                      )}
+                      {motivoDivisao === 'redundancia' && instaladaDescritivo?.mantidaPct != null && (
+                        <p className={`text-[11px] ${instaladaDescritivo.mantidaPct < 50 ? 'text-amber-700 font-bold' : 'text-slate-500'}`}>
+                          Com uma unidade fora de operação, as demais mantêm {fmtPct(instaladaDescritivo.mantidaPct)} da carga requerida
+                          {instaladaDescritivo.mantidaPct < 50 ? ' — pouco para chamar de redundância; confira antes de emitir.' : '.'}
+                        </p>
+                      )}
+                      {motivoPendente && (
+                        <p className="text-[11px] text-amber-700 font-bold">Escolha o motivo da divisão — sem ele o descritivo não explica por que são {unidadesDescritivo} unidades.</p>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Observações do descritivo (opcional)</label>
+                    <textarea value={obsDescritivo} onChange={e => setObsDescritivo(e.target.value)} rows={2} maxLength={800}
+                      placeholder="Texto livre que entra no final do descritivo técnico"
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2842,6 +3000,23 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                   </tbody>
                 </table>
                 {notaCompressorEstudo && <p className="text-[11px] text-slate-500 italic mt-3">{notaCompressorEstudo}</p>}
+              </div>
+            )}
+
+            {/* Descritivo técnico */}
+            {secoesDescritivo.length > 0 && (
+              <div className="border border-slate-200 rounded-xl p-5 bg-white print:break-inside-avoid">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Descritivo Técnico</h4>
+                <div className="space-y-4">
+                  {secoesDescritivo.map((s, si) => (
+                    <div key={si}>
+                      <p className="text-xs font-black text-slate-800 mb-1">{si + 1}. {s.titulo}</p>
+                      {s.paragrafos.map((par, pi) => (
+                        <p key={pi} className="text-sm text-slate-700 leading-relaxed">{par}</p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

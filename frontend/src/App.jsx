@@ -1059,6 +1059,17 @@ function AppContent({ catalogo }) {
                 embalagensFluido={catalogo.embalagensFluido}
                 onAbrirClassificacoes={() => setMostrandoClassificacao(true)}
                 estudoCarga={inputsCargaTermica?.resultado ?? null}
+                equipamentosResumo={inputsEquipamentos?.selecionados?.length ? {
+                  fluido: inputsEquipamentos.fluido,
+                  tEvap: inputsEquipamentos.evap,
+                  tCond: inputsEquipamentos.cond,
+                  numMaquinas: Number(inputsEquipamentos.numMaquinas) || 1,
+                  cargaTotal: Number(inputsEquipamentos.cargaTotal) || null,
+                  ucs: inputsEquipamentos.selecionados.filter(s => s.categoria === 'Unidade Condensadora')
+                    .map(s => ({ nome: s.nome, qtde: Number(s.qtde) || 1, cap: Number(s.capacidade_real) || 0 })),
+                  evaps: inputsEquipamentos.selecionados.filter(s => s.categoria === 'Evaporadora')
+                    .map(s => ({ nome: s.nome, qtde: Number(s.qtde) || 1, cap: Number(s.capacidade_real) || 0 })),
+                } : null}
                 resumoTecnico={dadosDoGabinete ? {
                   comprimento: dadosDoGabinete.comprimento,
                   largura: dadosDoGabinete.largura,
