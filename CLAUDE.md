@@ -2341,6 +2341,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Entrega 1 "Integridade da proposta" (seleção × cotação, origem do preço, descrição preservada) | ✅ implementado 2026-10-08 — banner pergunta qual lista usar, selos na cotação/fora, origem do preço na Revisão, menção "(oferta: …)" sem trocar a descrição, atalho de Cotações não gera às cegas |
 | Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
 | Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
+| Card 6 — Cabeçalho da proposta com identidade do técnico (logo, nome, contato; cor do logo) | ✅ implementado 2026-10-14 — tela, impressão e PDF; sem identidade mantém o cabeçalho antigo |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2621,6 +2622,42 @@ O resto do fluxo (materiais, equipamentos, Revisão, conferência) estava corret
   qtde cotada 15; complementos cadastrados com 1 un): proposta "15 un — R$ 1.500,00" e
   "15 un — R$ 1.800,00"; "Painéis de Piso" com qtde cotada 7 e sistema 5 continuou em 5.
   36/36 testes e build. Sem migration, sem alterar dado salvo.
+
+### Card 6 — Cabeçalho da proposta com a identidade do técnico (2026-10-14)
+
+Pedido do usuário: o cabeçalho da proposta mostrava o **nome do cliente** em letras
+grandes e a identidade configurada (Configurações → Identidade da Proposta) só aparecia
+numa faixa pequena do PDF — na tela/impressão não aparecia nada. Novo cabeçalho, igual
+na tela, na impressão e no PDF (`GeradorOrcamento.jsx`; sem backend nem migration):
+
+- **Cabeçalho claro** (fundo branco, não escuro): decisão de design — logos costumam ser
+  desenhados para fundo claro e a faixa escura/colorida imprime pesado. Esquerda: logo +
+  nome da firma (destaque) + "contato · (11) 94070-9757"; direita: emissão/validade;
+  abaixo de uma linha: "PROPOSTA TÉCNICA COMERCIAL" + a descrição do objeto
+  (`resumoObjeto`, inalterada). **Dados do cliente** seguem na caixa logo abaixo.
+- **Cor de destaque tirada do logo** (barra no topo + título): `extrairCorDestaque()`
+  lê o PNG num canvas de até 64px, ignora transparência/quase-branco/quase-preto/cinzas
+  (saturação < 0,25), agrupa em baldes de cor e fica com o mais frequente; escurece até
+  contraste ≥ 3 sobre o branco (`garantirContrasteSobreBranco`). Sem cor útil (logo preto
+  e branco) → `COR_DESTAQUE_PADRAO` (slate-700). **Calculada a cada abertura, sem gravar
+  nada** — se um dia precisar de escolha manual, vira campo opcional nas Configurações
+  (aí sim com coluna nova).
+- **Sem identidade preenchida** (`temIdentidade` falso: sem nome, logo nem contato):
+  mantém o cabeçalho escuro antigo com o nome do cliente — nada quebra pra quem não
+  configurou. Telefone formatado por `fmtTelefoneBR` (10/11 dígitos).
+- **PDF (`gerarPDF`, jsPDF)**: barra de 3mm na cor do logo; logo encaixado sem distorcer
+  em até 34×17mm (largura/altura lidas do IHDR do PNG, como antes); a **faixa de identidade
+  antiga e o rodapé "Contato: …" saíram** (o contato agora está no cabeçalho).
+- A impressão usa o mesmo bloco da tela (`printColorAdjust: exact` pra a barra colorida
+  sair); o "PDF" por captura de tela (html2canvas) herda o cabeçalho novo.
+- **Fora do escopo**: a janela "Propostas comerciais" do painel de Cotações
+  (`PropostaComercial.jsx`) tem cabeçalho próprio e não foi alterada.
+- Testado: conta descartável com logo PNG azul-petróleo transparente — cor extraída
+  idêntica à do logo (rgb 14,94,112), barra/título nessa cor, fundo branco, logo
+  carregado, contato formatado; PDF capturado e **renderizado** (cabeçalho como desenhado,
+  sem sobreposição); sem identidade → cabeçalho escuro antigo. 36/36 testes e build.
+  **Não testado**: impressão real pelo navegador e logos sem cor (só o fallback por
+  leitura do código).
 
 ### Riscos conhecidos
 

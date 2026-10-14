@@ -35,6 +35,61 @@ const marcaDoTextoLegado = (texto) => {
   return marca.join(' ');
 };
 
+// ── Cabeçalho da proposta: cor de destaque tirada do logo do cliente ──
+// Lê o PNG num canvas pequeno, ignora transparência/branco/cinzas e fica com a cor saturada mais frequente;
+// escurece até ter contraste mínimo sobre o branco. Sem cor útil (logo preto e branco) → null (usa o neutro).
+const COR_DESTAQUE_PADRAO = [51, 65, 85]; // slate-700
+const luminanciaRel = ([r, g, b]) => {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+};
+const garantirContrasteSobreBranco = (rgb) => {
+  let c = rgb;
+  for (let i = 0; i < 12 && 1.05 / (luminanciaRel(c) + 0.05) < 3; i++) c = c.map(v => Math.round(v * 0.85));
+  return c;
+};
+const extrairCorDestaque = (dataUrl) => new Promise((resolve) => {
+  try {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const T = 64;
+        const k = Math.min(1, T / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+        const baldes = new Map();
+        for (let i = 0; i < data.length; i += 4) {
+          const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+          if (a < 128) continue;
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          if (max > 240 && min > 215) continue;                // quase branco
+          if (max < 25) continue;                              // quase preto
+          if (max === 0 || (max - min) / max < 0.25) continue; // cinza/sem cor
+          const chave = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+          const e = baldes.get(chave) || { n: 0, r: 0, g: 0, b: 0 };
+          e.n++; e.r += r; e.g += g; e.b += b; baldes.set(chave, e);
+        }
+        let melhor = null;
+        baldes.forEach(e => { if (!melhor || e.n > melhor.n) melhor = e; });
+        resolve(melhor && melhor.n >= 8
+          ? garantirContrasteSobreBranco([Math.round(melhor.r / melhor.n), Math.round(melhor.g / melhor.n), Math.round(melhor.b / melhor.n)])
+          : null);
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  } catch { resolve(null); }
+});
+const fmtTelefoneBR = (t) => {
+  const d = String(t || '').replace(/\D/g, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return d || '';
+};
+
 // ── Origem do preço de cada item (Revisão) ──
 const ORIGEM_PRECO = {
   cotacao:           { label: 'cotação',          cls: 'bg-emerald-100 text-emerald-700', dica: 'Preço da cotação escolhida para este projeto' },
@@ -402,6 +457,21 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   useEffect(() => {
     api.get('/api/v1/configuracoes/identidade-proposta').then(r => setIdentidadeProposta(r.data)).catch(() => {});
   }, []);
+  // Cor de destaque do cabeçalho da proposta, extraída do logo (null = usa o neutro)
+  const [corDestaqueLogo, setCorDestaqueLogo] = useState(null);
+  useEffect(() => {
+    const logo = identidadeProposta?.proposta_logo_base64;
+    if (!logo) { setCorDestaqueLogo(null); return; }
+    let cancelado = false;
+    extrairCorDestaque(logo).then(c => { if (!cancelado) setCorDestaqueLogo(c); });
+    return () => { cancelado = true; };
+  }, [identidadeProposta?.proposta_logo_base64]);
+  const corDestaque = corDestaqueLogo || COR_DESTAQUE_PADRAO;
+  const corDestaqueCss = `rgb(${corDestaque.join(',')})`;
+  const contatoCabecalho = [identidadeProposta?.proposta_contato_nome, fmtTelefoneBR(identidadeProposta?.proposta_contato_telefone)]
+    .filter(Boolean).join(' · ');
+  // Só usa o cabeçalho novo se o técnico configurou alguma identidade; senão, mantém o cabeçalho antigo (nome do cliente)
+  const temIdentidade = !!(identidadeProposta?.proposta_nome || identidadeProposta?.proposta_logo_base64 || contatoCabecalho);
 
   // Extrai bitola do nome do item: "Tubo Cobre 1/2\" (Líquido)" → "1/2\""
   const extrairBitola = (nomeItem) => {
@@ -897,6 +967,51 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       const wrap = (t, x, yy, maxW) => { const ls = pdf.splitTextToSize(String(t ?? ''), maxW); pdf.text(ls, x, yy); return ls.length; };
 
       // ── Cabeçalho ──────────────────────────────────────────────────────
+      // Com identidade configurada (Configurações → Identidade da Proposta): cabeçalho claro — barra na cor do
+      // logo, logo + nome da firma + contato à esquerda, emissão/validade à direita, título e descrição abaixo.
+      // Sem identidade: o cabeçalho escuro de sempre (nome do cliente).
+      const valData = new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR');
+      if (temIdentidade) {
+        const [cr, cg, cb] = corDestaque;
+        pdf.setFillColor(cr, cg, cb); pdf.rect(0, 0, PW, 3, 'F');
+        let ix = ML;
+        if (identidadeProposta?.proposta_logo_base64) {
+          try {
+            // PNG sempre (redimensionarLogo) — largura/altura do cabeçalho IHDR, encaixa sem distorcer em 34x17mm
+            const b64 = identidadeProposta.proposta_logo_base64.split(',')[1] || '';
+            const bin = atob(b64.slice(0, 40));
+            const imgW = ((bin.charCodeAt(16) << 24) | (bin.charCodeAt(17) << 16) | (bin.charCodeAt(18) << 8) | bin.charCodeAt(19)) >>> 0;
+            const imgH = ((bin.charCodeAt(20) << 24) | (bin.charCodeAt(21) << 16) | (bin.charCodeAt(22) << 8) | bin.charCodeAt(23)) >>> 0;
+            const maxW = 34, maxH = 17;
+            const escala = (imgW > 0 && imgH > 0) ? Math.min(maxW / imgW, maxH / imgH) : 1;
+            const w = imgW > 0 ? imgW * escala : maxH;
+            const h = imgH > 0 ? imgH * escala : maxH;
+            pdf.addImage(identidadeProposta.proposta_logo_base64, 'PNG', ML, 9 + (maxH - h) / 2, w, h);
+            ix = ML + w + 5;
+          } catch { /* base64 corrompido/formato inesperado — segue sem o logo */ }
+        }
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFontSize(16); pdf.setFont('helvetica', 'bold');
+        if (identidadeProposta?.proposta_nome) txt(identidadeProposta.proposta_nome, ix, 16);
+        if (contatoCabecalho) {
+          pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
+          txt(contatoCabecalho, ix, identidadeProposta?.proposta_nome ? 22 : 16);
+        }
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(130);
+        txt('EMISSÃO', MR - 30, 11, { align: 'right' });
+        txt('VALIDADE', MR, 11, { align: 'right' });
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(15, 23, 42);
+        txt(new Date().toLocaleDateString('pt-BR'), MR - 30, 16, { align: 'right' });
+        txt(valData, MR, 16, { align: 'right' });
+        pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.2); pdf.line(ML, 30, MR, 30);
+        pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(cr, cg, cb);
+        txt('PROPOSTA TÉCNICA COMERCIAL', ML, 36);
+        pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80);
+        const objLinhas = pdf.splitTextToSize(resumoObjeto || '', CW);
+        pdf.text(objLinhas, ML, 41.5);
+        pdf.setTextColor(0, 0, 0);
+        y = 41.5 + objLinhas.length * 4 + 8;
+      } else {
       pdf.setFillColor(15, 23, 42);
       pdf.rect(0, 0, PW, 38, 'F');
       pdf.setTextColor(255, 255, 255);
@@ -913,42 +1028,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       txt('VALIDADE', MR, 10, { align: 'right' });
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
       txt(new Date().toLocaleDateString('pt-BR'), MR - 30, 15, { align: 'right' });
-      const valData = new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR');
       txt(valData, MR, 15, { align: 'right' });
       pdf.setTextColor(0, 0, 0);
       y = 46;
-
-      // ── Identidade da Proposta — logo/nome do técnico que emite ────────
-      // Faixa própria abaixo do cabeçalho escuro, só aparece com algo preenchido
-      // (Configurações → Identidade da Proposta); nunca sobrescreve o cabeçalho existente.
-      if (identidadeProposta?.proposta_logo_base64 || identidadeProposta?.proposta_nome) {
-        const idY = 40, idH = 14;
-        pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.2); pdf.rect(ML, idY, CW, idH);
-        let ix = ML + 2;
-        if (identidadeProposta.proposta_logo_base64) {
-          try {
-            // A imagem sai sempre em PNG do redimensionarLogo() — lê largura/altura
-            // direto do cabeçalho IHDR (bytes 16-23) pra caber sem distorcer numa
-            // caixa de até 22×10mm, sem precisar de <img> assíncrono.
-            const b64 = identidadeProposta.proposta_logo_base64.split(',')[1] || '';
-            const bin = atob(b64.slice(0, 40));
-            const imgW = ((bin.charCodeAt(16) << 24) | (bin.charCodeAt(17) << 16) | (bin.charCodeAt(18) << 8) | bin.charCodeAt(19)) >>> 0;
-            const imgH = ((bin.charCodeAt(20) << 24) | (bin.charCodeAt(21) << 16) | (bin.charCodeAt(22) << 8) | bin.charCodeAt(23)) >>> 0;
-            const maxW = 22, maxH = 10;
-            const escala = (imgW > 0 && imgH > 0) ? Math.min(maxW / imgW, maxH / imgH) : 1;
-            const w = imgW > 0 ? imgW * escala : maxH;
-            const h = imgH > 0 ? imgH * escala : maxH;
-            pdf.addImage(identidadeProposta.proposta_logo_base64, 'PNG', ix, idY + (idH - h) / 2, w, h);
-            ix += w + 3;
-          }
-          catch { /* base64 corrompido/formato inesperado — segue sem o logo */ }
-        }
-        if (identidadeProposta.proposta_nome) {
-          pdf.setFontSize(11); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30);
-          txt(identidadeProposta.proposta_nome, ix, idY + 9);
-          pdf.setTextColor(0);
-        }
-        y = idY + idH + 4;
       }
 
       // ── Dados do cliente ──────────────────────────────────────────────
@@ -1208,17 +1290,6 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
       txt('Aprovação do cliente', ML, y + 8);
       txt('Data: _____ / _____ / _________', MR - halfAce, y + 8);
-
-      // ── Rodapé — contato do técnico que emitiu (Identidade da Proposta) ─
-      const contatoProposta = [identidadeProposta?.proposta_contato_nome, identidadeProposta?.proposta_contato_telefone]
-        .filter(Boolean);
-      if (contatoProposta.length > 0) {
-        checar(16);
-        y += 16;
-        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(120);
-        txt(`Contato: ${contatoProposta.join(' · ')}`, ML, y);
-        pdf.setTextColor(0);
-      }
 
       pdf.save(`Proposta_${(dadosCliente.nome || 'Camara').replace(/\s+/g, '_')}.pdf`);
       marcarGerada('proposta');
@@ -2495,7 +2566,42 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       {orcamento && !modoEngenharia && (
         <div ref={propostaRef} className="bg-white border-2 border-slate-900 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-700 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
 
-          {/* Cabeçalho */}
+          {/* Cabeçalho — com identidade configurada (nome da firma/logo/contato): cabeçalho claro com a cor do logo;
+              sem identidade: o cabeçalho escuro de sempre (nome do cliente) */}
+          {temIdentidade ? (
+            <div className="bg-white px-8 pt-6 pb-5 border-b border-slate-200"
+              style={{ borderTop: `8px solid ${corDestaqueCss}`, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+              <div className="flex justify-between items-start gap-6">
+                <div className="flex items-center gap-4 min-w-0">
+                  {identidadeProposta?.proposta_logo_base64 && (
+                    <img src={identidadeProposta.proposta_logo_base64} alt="Logo" className="h-16 max-w-[170px] object-contain flex-shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    {identidadeProposta?.proposta_nome && (
+                      <h3 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">{identidadeProposta.proposta_nome}</h3>
+                    )}
+                    {contatoCabecalho && <p className="text-sm text-slate-500 mt-0.5">{contatoCabecalho}</p>}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 space-y-1">
+                  <div>
+                    <p className="text-[9px] text-slate-400 uppercase font-bold">Emissão</p>
+                    <p className="text-sm font-bold text-slate-800">{new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-slate-400 uppercase font-bold">Validade</p>
+                    <p className="text-sm font-bold text-slate-800">
+                      {new Date(Date.now() + (parseInt(cond.validade_dias) || 10) * 86400000).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: corDestaqueCss }}>Proposta Técnica Comercial</p>
+                <p className="text-slate-600 text-sm mt-1">{resumoObjeto}</p>
+              </div>
+            </div>
+          ) : (
           <div className="bg-slate-900 text-white px-8 py-6 print:bg-white print:text-slate-900 print:border-b-2 print:border-slate-900 print:px-0">
             <div className="flex justify-between items-start">
               <div>
@@ -2517,6 +2623,8 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               </div>
             </div>
           </div>
+
+          )}
 
           <div className="p-8 space-y-10 print:px-0 print:py-6">
 
