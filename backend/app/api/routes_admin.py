@@ -49,6 +49,7 @@ class EmpresaUpdate(BaseModel):
     status_assinatura: str | None = None
     assinatura_fim: date | None = None
     recursos_avancados_habilitados: bool | None = None
+    ia_descritivo_habilitado: bool | None = None
 
 
 class CadastroPorDia(BaseModel):
@@ -93,6 +94,7 @@ class EmpresaOut(BaseModel):
     assinatura_inicio: date | None
     assinatura_fim: date | None
     recursos_avancados_habilitados: bool = False
+    ia_descritivo_habilitado: bool = False
     total_usuarios: int = 0
 
     model_config = {"from_attributes": True}

@@ -66,5 +66,9 @@ class Usuario(Base, TimestampMixin):
     def empresa_recursos_avancados_habilitados(self) -> bool:
         return bool(self.empresa and self.empresa.recursos_avancados_habilitados)
 
+    @property
+    def empresa_ia_descritivo_habilitado(self) -> bool:
+        return bool(self.empresa and self.empresa.ia_descritivo_habilitado)
+
     projetos: Mapped[List["Projeto"]] = relationship(back_populates="owner")
     clientes: Mapped[List["Cliente"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

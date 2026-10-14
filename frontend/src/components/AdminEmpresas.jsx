@@ -84,10 +84,11 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
   const salvarEmpresa = async () => {
     setSalvando(true); setErro('');
     try {
-      const { id, nome, cnpj, plano, status_assinatura, assinatura_fim, recursos_avancados_habilitados } = editando;
+      const { id, nome, cnpj, plano, status_assinatura, assinatura_fim, recursos_avancados_habilitados, ia_descritivo_habilitado } = editando;
       await api.patch(`/api/v1/admin/empresas/${id}`, {
         nome, cnpj, plano, status_assinatura, assinatura_fim: assinatura_fim || null,
         recursos_avancados_habilitados: !!recursos_avancados_habilitados,
+        ia_descritivo_habilitado: !!ia_descritivo_habilitado,
       });
       setEditando(null); await carregar(); aviso('Empresa atualizada.');
     } catch (e) { setErro(msgErro(e, 'Erro ao salvar.')); }
@@ -278,6 +279,12 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                       checked={!!editando.recursos_avancados_habilitados}
                       onChange={ev => setEditando(v => ({ ...v, recursos_avancados_habilitados: ev.target.checked }))} />
                     Recursos avançados (Classificação de Itens / Catálogo de Preços)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                    <input type="checkbox" className="rounded border-slate-300"
+                      checked={!!editando.ia_descritivo_habilitado}
+                      onChange={ev => setEditando(v => ({ ...v, ia_descritivo_habilitado: ev.target.checked }))} />
+                    Redação por IA do descritivo técnico (beta)
                   </label>
                   <p className="text-[10px] text-slate-400 leading-snug">
                     <b>Plano</b> é só o produto contratado (nunca é "trial" — todo cadastro já nasce

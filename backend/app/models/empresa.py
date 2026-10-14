@@ -48,6 +48,13 @@ class Empresa(Base, TimestampMixin):
         Boolean, default=False, server_default="false"
     )
 
+    # Redação por IA do descritivo técnico da proposta (beta fechado) — o superadmin
+    # liga por empresa; no futuro vira benefício do plano premium. Ao contrário do
+    # flag acima, esta trava deve ser verificada TAMBÉM no backend (custo por chamada).
+    ia_descritivo_habilitado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+
     # Identidade da proposta ao cliente (Card 6) — editável por qualquer membro
     # (não é área sensível de conta, é o próprio técnico personalizando o que
     # entrega pro próprio cliente). `proposta_nome` é independente de `nome`

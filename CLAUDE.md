@@ -1428,6 +1428,30 @@ na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
 
 ---
 
+## Redação por IA do descritivo técnico — flag por empresa (2026-10-14)
+
+Pré-requisito do passo 5 da "proposta técnica" (redação por IA em beta, **ainda não
+implementada**): o usuário quis um controle no painel Administração pra decidir **quem**
+usa, porque se a funcionalidade se provar útil ela vira benefício do plano premium.
+
+- **`Empresa.ia_descritivo_habilitado`** (boolean, default `false`, migration 0046, aditiva —
+  sem risco pra dado existente). Nasce desligado pra toda empresa; só o
+  `superadmin_icenexus` liga, no formulário de editar empresa (`AdminEmpresas.jsx`, checkbox
+  "Redação por IA do descritivo técnico (beta)" abaixo de "Recursos avançados").
+- **Por empresa, não por usuário** — mesmo molde de `recursos_avancados_habilitados`. Hoje 1
+  conta = 1 empresa (self-serve), então na prática é por usuário; com equipe, vale pra todos.
+- Exposto em `/me` como `empresa_ia_descritivo_habilitado` (property em `Usuario` →
+  `UserOut`); `EmpresaUpdate`/`EmpresaOut` (`routes_admin.py`) ganharam o campo.
+- **Diferença importante em relação a "recursos avançados"**: aquele só esconde menu no
+  frontend. **Este deve ser verificado também no backend** na rota de geração (cada geração
+  custa uma chamada de IA) — a rota ainda não existe; quando for criada, checar
+  `empresa.ia_descritivo_habilitado` e devolver 403 se desligado.
+- Hoje **não há nenhum efeito visível pro usuário** — nada no Card 6 lê o flag ainda.
+- Testado: API (nasce `false`, PATCH liga/desliga, aparece no `/me`, não mexe em
+  `recursos_avancados_habilitados`, PATCH sem o campo não altera), checkbox na tela do
+  painel (via Chrome headless/CDP) salvando só na empresa editada, migration
+  upgrade/downgrade/upgrade, 36/36 testes e build.
+
 ## Administração — Relatórios (em produção desde 2026-09-11)
 
 Pedido do usuário: visibilidade sobre a base de empresas (quantas em cada
@@ -1619,7 +1643,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0045)
+## Banco de Dados — Migrations (0001→0046)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -1668,6 +1692,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0044 | `cotacao_item.marca_cotada`/`codigo_fabricante_cotado`/`possivel_substituicao` (nullable) — separa marca, código do fabricante e sinal de substituição da IA (ver "Card 6 — Marca × possível substituição") |
 | 0043 | Campo `cotacao_item.qtde_cotada` (nullable) — quantidade que o fornecedor cotou, lida do PDF na importação por IA e ajustável na conferência |
 | 0045 | Campo `empresa.proposta_crea` (nullable, String 60) — CREA do engenheiro responsável, exibido no bloco "Aprovação e Aceite" da proposta |
+| 0046 | Campo `empresa.ia_descritivo_habilitado` (boolean, default false) — libera a redação por IA do descritivo técnico (beta fechado), ligado pelo superadmin por empresa |
 
 ---
 
@@ -2346,6 +2371,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; o descritivo (passo 4) já está feito e a redação por IA (passo 5) segue pendente |
 | Card 6 — Bloco "Aprovação e Aceite" com responsável e CREA (opcional nas Configurações) | ✅ implementado 2026-10-14 (migration 0045) — passo 3 da proposta técnica; CREA em branco não aparece; espaço de assinatura maior |
 | Card 6 — Descritivo técnico por modelo fixo (objetivo, premissas, carga, solução, motivo da divisão em unidades, margem opcional) | ✅ implementado 2026-10-14 — passo 4 da proposta técnica, sem IA/backend/migration; passo 5 (redação por IA beta) pendente |
+| Redação por IA do descritivo técnico — flag por empresa no painel Administração | ✅ implementado 2026-10-14 (migration 0046) — só o flag; a rota/botão de IA (passo 5) ainda não existem |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |

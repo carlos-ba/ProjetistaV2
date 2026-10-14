@@ -78,6 +78,7 @@ class UserOut(BaseModel):
     empresa_assinatura_fim: date | None = None
     empresa_trial_expirado: bool = False
     empresa_recursos_avancados_habilitados: bool = False
+    empresa_ia_descritivo_habilitado: bool = False
 
     model_config = {"from_attributes": True}
 
