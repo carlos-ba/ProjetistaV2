@@ -1059,6 +1059,7 @@ function AppContent({ catalogo }) {
                 embalagensFluido={catalogo.embalagensFluido}
                 onAbrirClassificacoes={() => setMostrandoClassificacao(true)}
                 estudoCarga={inputsCargaTermica?.resultado ?? null}
+                iaDescritivoHabilitado={!!user?.empresa_ia_descritivo_habilitado}
                 equipamentosResumo={inputsEquipamentos?.selecionados?.length ? {
                   fluido: inputsEquipamentos.fluido,
                   tEvap: inputsEquipamentos.evap,

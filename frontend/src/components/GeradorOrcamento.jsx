@@ -61,6 +61,9 @@ const montarLinhasEstudoCarga = (r, mostrarMargem) => {
   return linhas;
 };
 
+// Limite de gerações por IA por projeto (beta; o teto por hora/empresa fica no backend)
+const LIMITE_IA_POR_PROJETO = 5;
+
 // ── Descritivo técnico da proposta (modelo fixo, sem IA) ──
 // Só usa fatos que o sistema já tem (gabinete, carga térmica, equipamentos do Card 3). O motivo da divisão em
 // unidades é escolhido pelo projetista — o sistema nunca deduz. Os percentuais de redundância são calculados.
@@ -225,7 +228,7 @@ const COR_BLOCO_PADRAO = { dot: 'bg-slate-400', texto: 'text-slate-500', rgb: [1
 const COR_MAO_DE_OBRA = { dot: 'bg-rose-500', texto: 'text-rose-700', rgb: [225, 29, 72] };
 const corDoBloco = (nome) => CORES_BLOCO[nome] || COR_BLOCO_PADRAO;
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, estudoCarga = null, equipamentosResumo = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, estudoCarga = null, equipamentosResumo = null, iaDescritivoHabilitado = false, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -398,6 +401,15 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [motivoDivisao,          setMotivoDivisao]          = useState(iv.motivoDivisao ?? '');
   const [motivoTexto,            setMotivoTexto]            = useState(iv.motivoTexto ?? '');
   const [obsDescritivo,          setObsDescritivo]          = useState(iv.obsDescritivo ?? '');
+  // Redação por IA (beta, só empresas com o flag ligado no painel Administração): texto gerado/editado,
+  // qual versão vai na proposta, nº de gerações usadas, números suspeitos e a assinatura dos fatos na geração
+  const [textoIa,                setTextoIa]                = useState(iv.textoIa ?? '');
+  const [usarTextoIa,            setUsarTextoIa]            = useState(iv.usarTextoIa ?? false);
+  const [iaGeracoes,             setIaGeracoes]             = useState(iv.iaGeracoes ?? 0);
+  const [iaAvisos,               setIaAvisos]               = useState(iv.iaAvisos ?? []);
+  const [iaAssinatura,           setIaAssinatura]           = useState(iv.iaAssinatura ?? '');
+  const [iaGerando,              setIaGerando]              = useState(false);
+  const [iaErro,                 setIaErro]                 = useState('');
   const [modoFaturamento,        setModoFaturamento]        = useState(iv.modoFaturamento ?? 'empreitada'); // 'empreitada' | 'venda_direta'
   const [custos, setCustos] = useState(iv.custos ?? { mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
   const [margemMateriais, setMargemMateriais] = useState(iv.margemMateriais ?? 25);
@@ -548,13 +560,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       dadosCliente,
       incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo,
       incluirDescritivo, motivoDivisao, motivoTexto, obsDescritivo,
+      textoIa, usarTextoIa, iaGeracoes, iaAvisos, iaAssinatura,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca,
       itensDesmarcados: { materiais: [...materiaisDesmarcados], equipamentos: [...equipamentosDesmarcados] },
     });
-  }, [dadosCliente, incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo, incluirDescritivo, motivoDivisao, motivoTexto, obsDescritivo, modoFaturamento,
+  }, [dadosCliente, incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo, incluirDescritivo, motivoDivisao, motivoTexto, obsDescritivo, textoIa, usarTextoIa, iaGeracoes, iaAvisos, iaAssinatura, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
       exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca, materiaisDesmarcados, equipamentosDesmarcados]);
@@ -620,6 +633,30 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         motivo: motivoDivisao, motivoTexto, mostrarMargem: mostrarMargemEstudo, obs: obsDescritivo,
       })
     : [];
+  // Versão que vai na proposta: o texto da IA (revisado/editado pelo técnico) SÓ se ele escolheu — senão o modelo fixo.
+  // Não depende do flag: texto já gerado e escolhido continua valendo mesmo se o flag for desligado depois.
+  const textoIaAtivo = incluirDescritivo && usarTextoIa && textoIa.trim() ? textoIa.trim() : '';
+  const secoesRender = textoIaAtivo
+    ? [{ titulo: null, paragrafos: textoIaAtivo.split(/\n+/).map(p => p.trim()).filter(Boolean) }]
+    : secoesDescritivo;
+  const iaDesatualizada = !!textoIa.trim() && !!iaAssinatura && iaAssinatura !== JSON.stringify(secoesDescritivo);
+  const gerarDescritivoIa = async () => {
+    setIaErro(''); setIaGerando(true);
+    try {
+      const r = await api.post('/api/v1/ia/descritivo', {
+        secoes: secoesDescritivo.map(s => ({ titulo: s.titulo, paragrafos: s.paragrafos })),
+      });
+      setTextoIa(r.data.texto || '');
+      setIaAvisos(r.data.numeros_fora_dos_fatos || []);
+      setIaAssinatura(JSON.stringify(secoesDescritivo));
+      setIaGeracoes(n => n + 1);
+      setUsarTextoIa(false); // nova geração exige nova escolha deliberada
+    } catch (e) {
+      setIaErro(e?.response?.data?.detail || 'Não foi possível gerar o texto agora. Tente novamente.');
+    } finally {
+      setIaGerando(false);
+    }
+  };
   const notaCompressorEstudo = estudoDisponivel && estudoCarga.baseado_em_horas_funcionamento
     ? `Capacidade requerida considerando o compressor operando ${fmtQtd(estudoCarga.baseado_em_horas_funcionamento)} h/dia.` : '';
   const temIdentidade = !!(identidadeProposta?.proposta_nome || identidadeProposta?.proposta_logo_base64 || contatoCabecalho);
@@ -1302,14 +1339,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       }
 
       // ── Descritivo técnico ───────────────────────────────────────────
-      if (secoesDescritivo.length) {
+      if (secoesRender.length) {
         checar(40);
         pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
         txt('DESCRITIVO TÉCNICO', ML, y); pdf.setTextColor(0); y += 5;
-        secoesDescritivo.forEach((s, si) => {
+        secoesRender.forEach((s, si) => {
           checar(16);
           pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 41, 59);
-          txt(`${si + 1}. ${s.titulo}`, ML, y); y += 4.5;
+          if (s.titulo) { txt(`${si + 1}. ${s.titulo}`, ML, y); y += 4.5; }
           pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(51, 65, 85);
           s.paragrafos.forEach(par => {
             const ls = pdf.splitTextToSize(par, CW);
@@ -2431,6 +2468,76 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       placeholder="Texto livre que entra no final do descritivo técnico"
                       className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white" />
                   </div>
+
+                  {iaDescritivoHabilitado && secoesDescritivo.length > 0 && (
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-[10px] font-bold text-violet-700 uppercase">
+                          Redação por IA <span className="ml-1 px-1.5 py-0.5 rounded bg-violet-200 text-violet-800 normal-case">beta</span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">{iaGeracoes}/{LIMITE_IA_POR_PROJETO} gerações neste projeto</span>
+                          <button type="button" onClick={gerarDescritivoIa}
+                            disabled={iaGerando || iaGeracoes >= LIMITE_IA_POR_PROJETO || motivoPendente || bloqueadoTrial}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                            {iaGerando ? 'Gerando…' : (textoIa.trim() ? 'Gerar de novo' : '✨ Gerar com IA')}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        A IA só reescreve os dados do projeto acima — não recebe preços nem dados do cliente. O texto nunca entra
+                        na proposta sozinho: confira, edite se precisar e escolha a versão.
+                      </p>
+                      {motivoPendente && (
+                        <p className="text-[11px] text-amber-700 font-bold">Escolha o motivo da divisão em unidades antes de gerar o texto.</p>
+                      )}
+                      {iaErro && <p className="text-[11px] text-red-600 font-bold">{iaErro}</p>}
+
+                      {textoIa.trim() && (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Modelo fixo</p>
+                              <div className="h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-600 space-y-2">
+                                {secoesDescritivo.map((s, si) => (
+                                  <div key={si}>
+                                    <p className="font-bold text-slate-700">{si + 1}. {s.titulo}</p>
+                                    {s.paragrafos.map((par, pi) => <p key={pi}>{par}</p>)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-violet-700 uppercase mb-1">Versão da IA (editável)</p>
+                              <textarea value={textoIa} onChange={e => setTextoIa(e.target.value)}
+                                className="w-full h-64 px-2 py-2 rounded-lg border border-violet-300 bg-white text-[11px] text-slate-700 leading-relaxed" />
+                            </div>
+                          </div>
+                          {iaAvisos.length > 0 && (
+                            <p className="text-[11px] text-amber-700 font-bold">
+                              Atenção: a IA escreveu número(s) que não estão nos dados do projeto ({iaAvisos.join(', ')}) — confira ou apague antes de usar.
+                            </p>
+                          )}
+                          {iaDesatualizada && (
+                            <p className="text-[11px] text-amber-700 font-bold">
+                              Os dados do projeto mudaram depois que este texto foi gerado — gere de novo ou confira o texto.
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-700">
+                            <span className="font-bold text-[10px] uppercase text-slate-500">Na proposta usar:</span>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input type="radio" name="versaoDescritivo" checked={!usarTextoIa} onChange={() => setUsarTextoIa(false)} className="accent-indigo-600" />
+                              Modelo fixo
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input type="radio" name="versaoDescritivo" checked={usarTextoIa} onChange={() => setUsarTextoIa(true)} className="accent-violet-600" />
+                              Versão da IA
+                            </label>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3004,13 +3111,13 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             )}
 
             {/* Descritivo técnico */}
-            {secoesDescritivo.length > 0 && (
+            {secoesRender.length > 0 && (
               <div className="border border-slate-200 rounded-xl p-5 bg-white print:break-inside-avoid">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Descritivo Técnico</h4>
                 <div className="space-y-4">
-                  {secoesDescritivo.map((s, si) => (
+                  {secoesRender.map((s, si) => (
                     <div key={si}>
-                      <p className="text-xs font-black text-slate-800 mb-1">{si + 1}. {s.titulo}</p>
+                      {s.titulo && <p className="text-xs font-black text-slate-800 mb-1">{si + 1}. {s.titulo}</p>}
                       {s.paragrafos.map((par, pi) => (
                         <p key={pi} className="text-sm text-slate-700 leading-relaxed">{par}</p>
                       ))}

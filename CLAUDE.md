@@ -1430,8 +1430,7 @@ na memória, e `DESIGN_MULTITENANCY_ASSINATURA_2026-07-28.md` (seção 4.3).
 
 ## Redação por IA do descritivo técnico — flag por empresa (2026-10-14)
 
-Pré-requisito do passo 5 da "proposta técnica" (redação por IA em beta, **ainda não
-implementada**): o usuário quis um controle no painel Administração pra decidir **quem**
+Controle do passo 5 da "proposta técnica" (redação por IA em beta, ver seção seguinte): o usuário quis um controle no painel Administração pra decidir **quem**
 usa, porque se a funcionalidade se provar útil ela vira benefício do plano premium.
 
 - **`Empresa.ia_descritivo_habilitado`** (boolean, default `false`, migration 0046, aditiva —
@@ -1443,14 +1442,60 @@ usa, porque se a funcionalidade se provar útil ela vira benefício do plano pre
 - Exposto em `/me` como `empresa_ia_descritivo_habilitado` (property em `Usuario` →
   `UserOut`); `EmpresaUpdate`/`EmpresaOut` (`routes_admin.py`) ganharam o campo.
 - **Diferença importante em relação a "recursos avançados"**: aquele só esconde menu no
-  frontend. **Este deve ser verificado também no backend** na rota de geração (cada geração
-  custa uma chamada de IA) — a rota ainda não existe; quando for criada, checar
-  `empresa.ia_descritivo_habilitado` e devolver 403 se desligado.
-- Hoje **não há nenhum efeito visível pro usuário** — nada no Card 6 lê o flag ainda.
+  frontend. **Este é verificado também no backend** na rota de geração (cada geração custa
+  uma chamada de IA): `empresa.ia_descritivo_habilitado` desligado → 403, sem chamar a IA.
+- Lido no Card 6 (`iaDescritivoHabilitado`, prop vinda de `user.empresa_ia_descritivo_habilitado`)
+  e **verificado também no backend** (`routes_ia.py`).
 - Testado: API (nasce `false`, PATCH liga/desliga, aparece no `/me`, não mexe em
   `recursos_avancados_habilitados`, PATCH sem o campo não altera), checkbox na tela do
   painel (via Chrome headless/CDP) salvando só na empresa editada, migration
   upgrade/downgrade/upgrade, 36/36 testes e build.
+
+## Redação por IA do descritivo técnico — rota e tela (2026-10-14)
+
+Passo 5 da "proposta técnica". Só empresas com `ia_descritivo_habilitado` (seção acima).
+**Sem migration**; usa a `ANTHROPIC_API_KEY` que já existe (importação de cotação em PDF).
+
+- **Backend**: `POST /api/v1/ia/descritivo` (`routes_ia.py`) + `services/ia_descritivo.py`.
+  Recebe as **seções do descritivo de modelo fixo** já montadas no frontend (titulo +
+  parágrafos) — a IA só reescreve esses fatos; **não recebe preços nem dados do cliente**.
+  Chamada assíncrona (`AsyncAnthropic`, modelo `claude-sonnet-5-5`, ~1.000 tokens de saída),
+  texto corrido em 3–5 parágrafos, sem markdown. O prompt de sistema proíbe inventar número,
+  modelo, fabricante, norma, garantia, prazo, preço, vantagem, motivo ou finalidade (ex: não
+  dizer "armazenamento" se os fatos só dizem "para <produto>" — achado na 1ª chamada real,
+  regra apertada). Respostas: 403 (flag desligado/sem empresa), 422 (payload inválido: 1–10
+  seções, ≤20 parágrafos, ≤1500 caracteres cada), 429 (teto), 503 (`ANTHROPIC_API_KEY`
+  ausente), 502 (falha da IA — mensagem genérica, nunca vaza detalhe).
+- **Validação determinística** (`numeros_fora_dos_fatos`): todo número do texto da IA é
+  comparado aos números dos fatos (ignora separador de milhar/decimal e ".0"; ignora inteiros
+  de 1 dígito); o que não existir nos fatos volta em `numeros_fora_dos_fatos` e vira aviso
+  âmbar na tela. Rede de proteção, não garantia — o técnico revisa.
+- **Teto**: 20 gerações/hora/empresa, **em memória** (Render roda 1 processo,
+  `WEB_CONCURRENCY=1`; zera num restart) — só proteção contra loop/abuso do beta. **O limite
+  de 5 gerações por projeto é do frontend** (contador `iaGeracoes`, persistido) — burlável;
+  medição persistente de uso (tabela + migration) fica pra quando a IA for liberada pra um plano.
+- **Tela** (`GeradorOrcamento.jsx`, Composição → "Conteúdo da proposta", dentro do descritivo):
+  bloco "Redação por IA (beta)" com botão "✨ Gerar com IA"/"Gerar de novo" (desabilitado:
+  gerando, 5/5, motivo da divisão pendente, trial vencido) e, depois de gerar, **duas versões
+  lado a lado** — modelo fixo (somente leitura) × versão da IA (textarea editável) — e a
+  escolha "Na proposta usar: Modelo fixo | Versão da IA". **Nasce em "Modelo fixo"; uma nova
+  geração volta pra "Modelo fixo"** (exige nova escolha deliberada). Avisos: números fora dos
+  dados e "dados mudaram depois da geração" (`iaAssinatura` = JSON das seções no momento da
+  geração).
+- **Proposta (tela e PDF)**: com "Versão da IA" escolhida, a seção "Descritivo Técnico" mostra o
+  texto corrido (sem títulos numerados) no lugar das seções do modelo fixo (`secoesRender`).
+  O render **não depende do flag** — texto já escolhido continua valendo se o flag for
+  desligado depois (os controles somem, o conteúdo emitido não muda).
+- **Persistência** em `inputs_orcamento` (campos opcionais, sem migration): `textoIa`,
+  `usarTextoIa`, `iaGeracoes`, `iaAvisos`, `iaAssinatura`.
+- **Testes**: `tests/test_ia_descritivo.py` (7, com dublê no lugar da IA — a suíte nunca gasta
+  crédito): 403 sem flag e sem chamar a IA, 200 com flag, sem token, payload inválido, teto 429,
+  falha da IA sem vazar detalhe, validação de números. 43/43 no total. Teste real: 2 chamadas
+  de IA (serviço e tela), texto com todos os números corretos; fluxo na tela via Chrome
+  headless (gerar, lado a lado, escolher IA, PDF renderizado, salvar → o banco guarda
+  `usarTextoIa`/`iaGeracoes`/`textoIa`).
+- **Não testado**: erro da IA/rede fora do ar pela tela (só no teste automatizado); Modo
+  Revenda (o descritivo depende do resumo do gabinete); ambiente sem `ANTHROPIC_API_KEY` (503).
 
 ## Administração — Relatórios (em produção desde 2026-09-11)
 
@@ -1725,6 +1770,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | `/api/v1/propostas/*` | GET/POST | Proposta comercial PDF |
 | `/api/v1/configuracoes/*` | GET/POST/PATCH | Perfis de montagem (tipo filtro, visor, trechos) + identidade da proposta ao cliente (nome/logo/contato) |
 | `/api/webhooks/themembers/checkout` | POST | Webhook do Checkout TheMembers — sem JWT, **sem validação de assinatura/token** (decisão consciente do usuário desde 2026-09-10); único gate é `THEMEMBERS_WEBHOOK_ENABLED` |
+| `/api/v1/ia/descritivo` | POST | Redação por IA do descritivo técnico da proposta (beta) — exige `empresa.ia_descritivo_habilitado`, 403 sem ele |
 | `/api/seed/*` | POST | Seed de dados (dev/setup) |
 | `/health` ou `/api/v1/health` | GET | Health check |
 
@@ -2368,10 +2414,11 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
 | Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
 | Card 6 — Cabeçalho da proposta com identidade do técnico (logo, nome, contato; cor do logo) | ✅ implementado 2026-10-14 — tela, impressão e PDF; sem identidade mantém o cabeçalho antigo |
-| Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; o descritivo (passo 4) já está feito e a redação por IA (passo 5) segue pendente |
+| Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; o descritivo (passo 4) e a redação por IA (passo 5) já estão feitos |
 | Card 6 — Bloco "Aprovação e Aceite" com responsável e CREA (opcional nas Configurações) | ✅ implementado 2026-10-14 (migration 0045) — passo 3 da proposta técnica; CREA em branco não aparece; espaço de assinatura maior |
 | Card 6 — Descritivo técnico por modelo fixo (objetivo, premissas, carga, solução, motivo da divisão em unidades, margem opcional) | ✅ implementado 2026-10-14 — passo 4 da proposta técnica, sem IA/backend/migration; passo 5 (redação por IA beta) pendente |
-| Redação por IA do descritivo técnico — flag por empresa no painel Administração | ✅ implementado 2026-10-14 (migration 0046) — só o flag; a rota/botão de IA (passo 5) ainda não existem |
+| Redação por IA do descritivo técnico — flag por empresa no painel Administração | ✅ implementado 2026-10-14 (migration 0046) |
+| Card 6 — Redação por IA do descritivo técnico (beta, 2 versões lado a lado) | ✅ implementado 2026-10-14 — passo 5 da proposta técnica; só empresas com o flag, trava também no backend; sem migration |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |

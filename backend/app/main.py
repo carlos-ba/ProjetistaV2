@@ -59,6 +59,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_embalagem_fluido import router as embalagem_fluido_router
 from app.api.routes_produto_empresa import router as produto_empresa_router
 from app.api.routes_webhooks_themembers import router as webhooks_themembers_router
+from app.api.routes_ia import router as ia_router
 
 app = FastAPI(
     title="Projetista V2 API",
@@ -101,3 +102,4 @@ app.include_router(admin_router)
 app.include_router(embalagem_fluido_router)
 app.include_router(produto_empresa_router)
 app.include_router(webhooks_themembers_router)
+app.include_router(ia_router)
