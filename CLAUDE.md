@@ -1619,7 +1619,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0044)
+## Banco de Dados — Migrations (0001→0045)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -1667,6 +1667,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0042 | Copia `volume_interno_kg` → `carga_refrigerante_kg` nos 13 evaporadores Mipal Mi BX (linha antiga) — nomenclatura antiga confirmada pelo usuário, mesmo padrão da Elgin (0041) |
 | 0044 | `cotacao_item.marca_cotada`/`codigo_fabricante_cotado`/`possivel_substituicao` (nullable) — separa marca, código do fabricante e sinal de substituição da IA (ver "Card 6 — Marca × possível substituição") |
 | 0043 | Campo `cotacao_item.qtde_cotada` (nullable) — quantidade que o fornecedor cotou, lida do PDF na importação por IA e ajustável na conferência |
+| 0045 | Campo `empresa.proposta_crea` (nullable, String 60) — CREA do engenheiro responsável, exibido no bloco "Aprovação e Aceite" da proposta |
 
 ---
 
@@ -2343,6 +2344,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
 | Card 6 — Cabeçalho da proposta com identidade do técnico (logo, nome, contato; cor do logo) | ✅ implementado 2026-10-14 — tela, impressão e PDF; sem identidade mantém o cabeçalho antigo |
 | Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; passos 2 (resumo técnico + motivo da divisão em unidades) e 3 (redação por IA beta) pendentes |
+| Card 6 — Bloco "Aprovação e Aceite" com responsável e CREA (opcional nas Configurações) | ✅ implementado 2026-10-14 (migration 0045) — passo 3 da proposta técnica; CREA em branco não aparece; espaço de assinatura maior |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2695,6 +2697,34 @@ o estudo da carga térmica que já existia só no relatório do Modo Engenharia.
   migration, sem alterar dado salvo.
 - **Pendente (passos 2 e 3)** e pergunta aberta: o estudo/resumo faz sentido no
   **Modo Revenda**?
+
+### Card 6 — Bloco "Aprovação e Aceite" com responsável e CREA (2026-10-14)
+
+Passo 3 da tabela combinada da "proposta técnica" (1 cabeçalho, 2 estudo da carga
+térmica, **3 aceite + CREA**, 4 resumo técnico, 5 redação por IA beta). Achado do
+usuário testando a proposta: o bloco de aceite não identificava o prestador (só
+"Prestador de Serviços" genérico) e o espaço para assinar era curto.
+
+- **Configurações → Identidade da Proposta**: novo campo opcional **"CREA do engenheiro
+  responsável"** (texto livre, ex: `CREA-BA 12345/D` — o formato varia por estado).
+  **Migration 0045** (`empresa.proposta_crea`, nullable, aditiva — sem risco pra dado
+  existente). `IdentidadePropostaOut`/`Update` ganharam o campo (max 60, strip, vazio →
+  `null`). Em branco, **nada aparece** na proposta.
+- **Lado do prestador** (tela e PDF, `aceitePrestador` em `GeradorOrcamento.jsx`): firma
+  (`proposta_nome`; se não houver firma, usa o responsável) + responsável
+  (`proposta_contato_nome`) + CREA (se preenchido; `fmtCrea` antepõe "CREA" se o usuário
+  digitou só `BA 12345/D`) + "Prestador de serviços" + data. Sem identidade nenhuma →
+  mantém "Prestador de Serviços" genérico.
+- **Lado do cliente**: nome + "CNPJ/CPF" (só se informado) + "Aprovação do cliente" + data.
+  **Data nos dois lados.**
+- **Espaço de assinatura maior** (~18 mm acima da linha no PDF, `mt-14` na tela) e bloco
+  inteiro na mesma página (`checar(52)` no PDF, `print:break-inside-avoid` na tela).
+- Fora do escopo por pedido: CNPJ da firma, segunda assinatura/responsável técnico extra,
+  CREA no cabeçalho.
+- Testado: API (salva, strip, vazio→null, 61 caracteres → 422), campo em Configurações,
+  bloco na tela e **PDF renderizado** (firma + responsável + CREA à direita, datas nos dois
+  lados, bloco inteiro na última página). 36/36 testes e build. **Não testado**: CREA em
+  branco e cliente com CNPJ pela tela (só leitura de código).
 
 ### Riscos conhecidos
 

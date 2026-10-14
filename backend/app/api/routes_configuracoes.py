@@ -182,6 +182,7 @@ class IdentidadePropostaOut(BaseModel):
     proposta_logo_base64: str | None = None
     proposta_contato_nome: str | None = None
     proposta_contato_telefone: str | None = None
+    proposta_crea: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -191,6 +192,13 @@ class IdentidadePropostaUpdate(BaseModel):
     proposta_logo_base64: str | None = Field(None, max_length=LOGO_BASE64_MAX_CHARS)
     proposta_contato_nome: str | None = Field(None, max_length=150)
     proposta_contato_telefone: str | None = None
+    proposta_crea: str | None = Field(None, max_length=60)
+
+    @field_validator("proposta_crea")
+    @classmethod
+    def crea_limpo(cls, v: str | None) -> str | None:
+        # Texto livre (o formato varia por estado: "CREA-BA 12345/D"); em branco = não aparece na proposta
+        return v.strip() or None if v else None
 
     @field_validator("proposta_contato_telefone")
     @classmethod

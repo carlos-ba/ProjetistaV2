@@ -182,7 +182,7 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
 
   // ── Identidade da Proposta ──────────────────────────────────────────
   const [identidade, setIdentidade] = useState({
-    proposta_nome: '', proposta_logo_base64: '', proposta_contato_nome: '', proposta_contato_telefone: '',
+    proposta_nome: '', proposta_logo_base64: '', proposta_contato_nome: '', proposta_contato_telefone: '', proposta_crea: '',
   });
   const [salvandoIdentidade, setSalvandoIdentidade] = useState(false);
   const [erroIdentidade, setErroIdentidade] = useState('');
@@ -199,6 +199,7 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
         proposta_logo_base64: r.data.proposta_logo_base64 ?? '',
         proposta_contato_nome: r.data.proposta_contato_nome ?? '',
         proposta_contato_telefone: r.data.proposta_contato_telefone ?? '',
+        proposta_crea: r.data.proposta_crea ?? '',
       };
       setIdentidade(dados);
       setIdentidadeExistente(Object.values(dados).some(v => v));
@@ -360,6 +361,20 @@ export default function ConfiguracoesPage({ onFechar, onPerfilAtivo }) {
                     onChange={e => setIdentidade(v => ({ ...v, proposta_contato_telefone: e.target.value }))}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">CREA do engenheiro responsável (opcional)</label>
+                <input
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#7B2D8B]"
+                  placeholder="CREA-BA 12345/D"
+                  maxLength={60}
+                  value={identidade.proposta_crea}
+                  onChange={e => setIdentidade(v => ({ ...v, proposta_crea: e.target.value }))}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Aparece na assinatura da proposta, abaixo do nome do responsável. Em branco, não aparece nada.
+                </p>
               </div>
 
               {erroIdentidade && <p className="text-xs text-red-500">{erroIdentidade}</p>}

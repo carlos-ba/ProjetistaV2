@@ -109,6 +109,12 @@ const extrairCorDestaque = (dataUrl) => new Promise((resolve) => {
     img.src = dataUrl;
   } catch { resolve(null); }
 });
+// CREA em texto livre: se o usuário digitou só o número/UF ("BA 12345/D"), antepõe "CREA"
+const fmtCrea = (t) => {
+  const v = String(t || '').trim();
+  if (!v) return '';
+  return /^crea/i.test(v) ? v : `CREA ${v}`;
+};
 const fmtTelefoneBR = (t) => {
   const d = String(t || '').replace(/\D/g, '');
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
@@ -500,6 +506,17 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const contatoCabecalho = [identidadeProposta?.proposta_contato_nome, fmtTelefoneBR(identidadeProposta?.proposta_contato_telefone)]
     .filter(Boolean).join(' · ');
   // Só usa o cabeçalho novo se o técnico configurou alguma identidade; senão, mantém o cabeçalho antigo (nome do cliente)
+  // Lado do prestador no bloco "Aprovação e Aceite": firma (ou o responsável, se não houver firma), responsável e CREA
+  const aceitePrestador = (() => {
+    const firma = (identidadeProposta?.proposta_nome || '').trim();
+    const resp = (identidadeProposta?.proposta_contato_nome || '').trim();
+    return {
+      titulo: firma || resp || 'Prestador de Serviços',
+      responsavel: firma && resp ? resp : '',
+      crea: fmtCrea(identidadeProposta?.proposta_crea),
+      identificado: !!(firma || resp),
+    };
+  })();
   // Estudo da carga térmica: só quando o Card 2 trouxe o detalhamento por componente
   const estudoDisponivel = !!(estudoCarga && Number(estudoCarga.carga_total_24h_kcalh) > 0);
   const pizzaEstudo = useMemo(() => {
@@ -1352,19 +1369,31 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       });
 
       // ── Aceite ────────────────────────────────────────────────────────
-      checar(28);
+      checar(52); // bloco inteiro na mesma página (espaço pra assinar + identificação dos dois lados)
       pdf.setDrawColor(200); pdf.line(ML, y, MR, y); y += 10;
       pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
-      txt('APROVAÇÃO E ACEITE', ML, y); pdf.setTextColor(0); y += 10;
+      txt('APROVAÇÃO E ACEITE', ML, y); pdf.setTextColor(0); y += 18; // ~18mm acima da linha pra assinatura/carimbo
       const halfAce = CW / 2 - 5;
-      pdf.setDrawColor(0); pdf.line(ML, y, ML + halfAce, y);
-      pdf.line(MR - halfAce, y, MR, y);
-      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold');
-      txt(dadosCliente.nome || 'Cliente', ML, y + 4);
-      txt('Prestador de Serviços', MR - halfAce, y + 4);
+      const xDir = MR - halfAce;
+      pdf.setDrawColor(0); pdf.line(ML, y, ML + halfAce, y); pdf.line(xDir, y, MR, y);
+      // Cliente (esquerda)
+      let yl = y + 4;
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+      txt(dadosCliente.nome || 'Cliente', ML, yl); yl += 3.6;
+      if (dadosCliente.cnpj) { pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80); txt(`CNPJ/CPF: ${dadosCliente.cnpj}`, ML, yl); yl += 3.4; }
       pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
-      txt('Aprovação do cliente', ML, y + 8);
-      txt('Data: _____ / _____ / _________', MR - halfAce, y + 8);
+      txt('Aprovação do cliente', ML, yl); yl += 5;
+      txt('Data: _____ / _____ / _________', ML, yl);
+      // Prestador (direita): firma, responsável, CREA (só se preenchido)
+      let yr = y + 4;
+      pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+      txt(aceitePrestador.titulo, xDir, yr); yr += 3.6;
+      if (aceitePrestador.responsavel) { pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(60); txt(aceitePrestador.responsavel, xDir, yr); yr += 3.4; }
+      if (aceitePrestador.crea) { pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80); txt(aceitePrestador.crea, xDir, yr); yr += 3.4; }
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100);
+      if (aceitePrestador.identificado) { txt('Prestador de serviços', xDir, yr); yr += 5; } else { yr += 1.6; }
+      txt('Data: _____ / _____ / _________', xDir, yr);
+      pdf.setTextColor(0);
 
       pdf.save(`Proposta_${(dadosCliente.nome || 'Camara').replace(/\s+/g, '_')}.pdf`);
       marcarGerada('proposta');
@@ -2998,16 +3027,21 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             {/* Aceite */}
             <div className="pt-4 border-t border-slate-200">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Aprovação e Aceite</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                <div className="space-y-1">
-                  <div className="h-px bg-slate-900 w-full mt-8" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 print:break-inside-avoid">
+                <div className="space-y-0.5">
+                  <div className="h-px bg-slate-900 w-full mt-14" />
                   <p className="text-xs font-bold text-slate-700 mt-1">{dadosCliente.nome || 'Cliente'}</p>
+                  {dadosCliente.cnpj && <p className="text-[10px] text-slate-500">CNPJ/CPF: {dadosCliente.cnpj}</p>}
                   <p className="text-[9px] text-slate-400">Aprovação do cliente</p>
+                  <p className="text-[9px] text-slate-400 pt-1">Data: _____ / _____ / _________</p>
                 </div>
-                <div className="space-y-1">
-                  <div className="h-px bg-slate-900 w-full mt-8" />
-                  <p className="text-xs font-bold text-slate-700 mt-1">Prestador de Serviços</p>
-                  <p className="text-[9px] text-slate-400">Data: _____ / _____ / _________</p>
+                <div className="space-y-0.5">
+                  <div className="h-px bg-slate-900 w-full mt-14" />
+                  <p className="text-xs font-bold text-slate-700 mt-1">{aceitePrestador.titulo}</p>
+                  {aceitePrestador.responsavel && <p className="text-[11px] text-slate-600">{aceitePrestador.responsavel}</p>}
+                  {aceitePrestador.crea && <p className="text-[10px] text-slate-500">{aceitePrestador.crea}</p>}
+                  {aceitePrestador.identificado && <p className="text-[9px] text-slate-400">Prestador de serviços</p>}
+                  <p className="text-[9px] text-slate-400 pt-1">Data: _____ / _____ / _________</p>
                 </div>
               </div>
             </div>

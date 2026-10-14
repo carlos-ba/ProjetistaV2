@@ -56,6 +56,8 @@ class Empresa(Base, TimestampMixin):
     proposta_logo_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     proposta_contato_nome: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     proposta_contato_telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # CREA do engenheiro responsável pela proposta (texto livre, opcional) — aparece no bloco de aceite
+    proposta_crea: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
 
     usuarios: Mapped[List["Usuario"]] = relationship(back_populates="empresa")
 
