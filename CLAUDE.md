@@ -2340,6 +2340,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — seleção de itens estável (não reseta em reemissão da lista) | ✅ implementado 2026-10-06 — seleção por item e persistida, reset só quando o conteúdo muda, Composição sempre visível com orçamento, faixa "Recalcular orçamento" quando a seleção muda |
 | Card 6 — Entrega 1 "Integridade da proposta" (seleção × cotação, origem do preço, descrição preservada) | ✅ implementado 2026-10-08 — banner pergunta qual lista usar, selos na cotação/fora, origem do preço na Revisão, menção "(oferta: …)" sem trocar a descrição, atalho de Cotações não gera às cegas |
 | Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
+| Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2591,6 +2592,35 @@ valia de novo para uma cotação nova.)
   migration downgrade/upgrade ok. **Não testado**: a conferência da importação com
   um PDF novo pela tela (só a gravação via API).
 - Sem risco pra dado de usuário: colunas novas opcionais, nada existente é tocado.
+
+### Card 6 — Complemento digitado à mão usa a quantidade informada na importação (2026-10-14)
+
+Achado do usuário (Achado 7 de `docs/analises/jornada-cotacao-card6-2026-10-08.md`):
+complementos digitados à mão no Card 6 (ex: "Infraestrutura elétrica" / "mecânica",
+15 m cada) normalmente **não vêm no PDF** do fornecedor. Na conferência da importação
+o usuário informa **quantidade e preço unitário** — mas a proposta saía com "1 un".
+O resto do fluxo (materiais, equipamentos, Revisão, conferência) estava correto e
+**não foi alterado**.
+
+- **Regra**: total = **preço unitário da cotação × quantidade**, sempre, na unidade
+  em que foi cotado (por metro → valor por metro; por unidade; por pacote).
+- **Correção, só complementos** (`GeradorOrcamento.jsx`): `_gerarComCotacoes` guarda em
+  `ultimoQtdeComplementoRef` a `qtde_cotada` dos itens `tipo_item === 'Complemento'`
+  (da cotação que deu o preço); `qtdeComplementoEfetiva(c)` usa essa quantidade quando o
+  preço do complemento vem da cotação (não foi digitado na própria caixa de
+  complementos) — senão, a do complemento. Aplicada em todos os pontos que exibem ou
+  somam complemento: total, `calcFinanceiro`, PDF, Lista de Engenharia (xlsx), resumo
+  da caixa e proposta na tela.
+- **Não mudou**: itens normais seguem usando a quantidade calculada (a "Qtde cotada" é
+  só informativa pra eles); a Revisão não lista complementos; a conferência é a mesma.
+  A **unidade** impressa continua sendo a do complemento no Card 6 (cadastrado como
+  "un" sai "15 un"; como "m", "15 m").
+- Uma 1ª tentativa generalizou a regra pra todos os itens e foi **desfeita** a pedido —
+  o usuário só relatou o caso do complemento; não estender sem ele pedir.
+- Testado na tela real (conta descartável, cotação com os 2 complementos a R$ 100/120 e
+  qtde cotada 15; complementos cadastrados com 1 un): proposta "15 un — R$ 1.500,00" e
+  "15 un — R$ 1.800,00"; "Painéis de Piso" com qtde cotada 7 e sistema 5 continuou em 5.
+  36/36 testes e build. Sem migration, sem alterar dado salvo.
 
 ### Riscos conhecidos
 

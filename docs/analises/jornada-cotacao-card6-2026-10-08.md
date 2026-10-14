@@ -423,6 +423,72 @@ aditiva autorizada. Implementado como Entrega 1b (ver tabela de andamento).
 
 ---
 
+## Achado 7 — Complemento de 15 m volta como "1 un": a quantidade digitada na conferência não vale
+
+### O que o usuário fez e viu (relato de 2026-10-14)
+
+Na lista nova, acrescentou dois **complementos** livres — "Infraestrutura elétrica" e
+"Infraestrutura mecânica", **15 metros** cada. Gerou a planilha de cotação e importou
+o PDF do fornecedor (Brasifrio): os dois **não estavam no PDF**, e a conferência os
+mostrou corretamente como não encontrados. Ele **corrigiu na própria conferência**,
+digitando **quantidade e valor**. Ao gerar a proposta, o item entrou **como unidade
+unitária (1 un)**, sem usar a quantidade que digitou.
+
+### Verificação (reproduzida na tela real, 2026-10-14)
+
+Cotação de teste com os dois complementos, preço R$ 100,00 e R$ 120,00, "Qtde cotada" 15,
+projeto copiado, proposta gerada:
+
+| Como o complemento está cadastrado no Card 6 | O que a proposta mostra |
+|---|---|
+| **15 m** (quantidade 15, unidade m) | "15 m — R$ 1.500,00" e "15 m — R$ 1.800,00" ✅ |
+| **1 un** (quantidade padrão; os "15 metros" só no texto ou na cabeça) | "**1 un — R$ 100,00**" e "**1 un — R$ 120,00**" ❌ |
+
+Ou seja, **é possível, e o resultado é exatamente o relatado** quando o complemento
+está com a quantidade padrão (1 un).
+
+### Causa
+
+1. **"Qtde cotada" é só informativa** (decisão da entrega de 2026-10-06): grava em
+   `cotacao_item.qtde_cotada` e nunca altera a quantidade da proposta. Mas a tela de
+   conferência mostra o campo logo ao lado do preço, destaca em âmbar quando difere
+   do pedido ("pedido: 1 un") — **parece que digitar ali corrige a quantidade**. Não
+   corrige.
+2. **O preço do fornecedor é sempre por unidade** ("Preço unitário") e o total é
+   `preço × quantidade do complemento` (`precoComplemento(c) × c.qtde`). Com o
+   complemento em 1 un, o total é só o preço.
+3. **Os complementos não aparecem na "Revisão antes de gerar a proposta"** — ela
+   lista só `orcamento.detalhamento_itens` (materiais + equipamentos); complemento
+   vai direto da lista do Card 6 para a proposta (`complementosPreenchidos`). Então
+   **não existe nenhum lugar, depois da importação, para corrigir quantidade/preço
+   de um complemento** sem voltar à caixa de complementos e editar à mão.
+4. Em item que **não veio no PDF**, o sistema não tem ao que se agarrar: a
+   conferência não deixa claro que o valor digitado é **por unidade** nem em qual
+   unidade (m, un).
+
+### Escopo da correção (definido pelo usuário em 2026-10-14)
+
+**Tudo o mais estava correto** — materiais, equipamentos, Revisão e conferência não
+devem mudar. O único problema era o **complemento digitado à mão** que não vem no PDF do
+fornecedor: ao importar, o usuário informa **quantidade e preço unitário** na
+conferência e esses dados não chegavam à proposta (vinha "1 un").
+
+Regra confirmada: **total = preço unitário da cotação × quantidade**, sempre, na unidade
+em que foi cotado (por metro → valor por metro; por unidade; por pacote).
+
+**Correção aplicada (somente complementos):** quando o preço do complemento vem da
+cotação (e não foi digitado na própria caixa de complementos) e a importação trouxe
+uma quantidade (`qtde_cotada`), essa quantidade vale na proposta, no PDF, na Lista de
+Engenharia e no total. Nada mais foi alterado: itens normais continuam usando a
+quantidade calculada (a "Qtde cotada" segue só informativa pra eles), a Revisão e a
+tela de conferência ficam como estavam.
+
+> Uma 1ª tentativa (2026-10-14) mexeu além do pedido (quantidade da cotação valendo pra
+> todos os itens, complementos na Revisão, novos rótulos) e foi **desfeita** — fica
+> registrado pra não repetir o excesso de escopo.
+
+---
+
 ## Plano de correção e andamento
 
 Combinado com o usuário em 2026-10-08: corrigir em **3 entregas**, cada uma testada

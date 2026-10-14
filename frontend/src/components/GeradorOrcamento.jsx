@@ -207,6 +207,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [marcasManuais,       setMarcasManuais]       = useState(initialValues?.marcasManuais ?? {});
   const [mostrarMarca,        setMostrarMarca]        = useState(initialValues?.mostrarMarca ?? {});
   const ultimoPrecoMapRef = useRef(new Map()); // guarda precoMap da última geração
+  // norm(descrição) → quantidade que o fornecedor/usuário informou na importação — SÓ pra complementos
+  // (itens digitados à mão no Card 6, que normalmente nem vêm no PDF do fornecedor)
+  const ultimoQtdeComplementoRef = useRef(new Map());
   // norm(desc) → { marca, codigo, combinado, substituicao, obs } da última cotação usada (oferta do fornecedor)
   const ultimoOfertaMapRef = useRef(new Map());
   const [dadosCliente, setDadosCliente] = useState(
@@ -654,12 +657,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     const cotacoesData = await Promise.all(ids.map(id => api.get(`/api/v1/cotacoes/${id}`)));
     const precoMap = new Map();
     const ofertaMap = new Map(); // norm(descrição do projeto) → oferta do fornecedor (marca, código, substituição)
+    const qtdeComplemento = new Map();
     for (const r of cotacoesData) {
       for (const item of (r.data.itens || [])) {
         if (item.preco_unitario != null && item.preco_unitario > 0) {
           const key = norm(item.descricao);
           if (!precoMap.has(key) || item.preco_unitario < precoMap.get(key)) {
             precoMap.set(key, item.preco_unitario);
+            // Complemento: preço unitário e quantidade vêm juntos da cotação (total = preço × quantidade)
+            if (item.tipo_item === 'Complemento' && Number(item.qtde_cotada) > 0) qtdeComplemento.set(key, Number(item.qtde_cotada));
+            else qtdeComplemento.delete(key);
           }
         }
         // Cotações anteriores à migration 0044 só têm o texto combinado — a marca vem dele (heurística)
@@ -676,6 +683,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       }
     }
     ultimoPrecoMapRef.current = precoMap;
+    ultimoQtdeComplementoRef.current = qtdeComplemento;
     ultimoOfertaMapRef.current = ofertaMap;
     await gerarOrcamentoComPrecos(precoMap, precosManuals);
   };
@@ -729,10 +737,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // vindo da cotação (precoMap por descrição). Corrige complementos cotados que apareciam "a cotação".
   const precoComplemento = (c) =>
     parseFloat(c.preco_unit) || ultimoPrecoMapRef.current.get(norm(c.descricao)) || 0;
+  // Quantidade do complemento: se o preço veio da cotação (e não foi digitado no próprio complemento) e na
+  // importação foi informada uma quantidade, vale ela — total = preço unitário × quantidade. Senão, a do complemento.
+  const qtdeComplementoEfetiva = (c) => {
+    const cotada = !(parseFloat(c.preco_unit) > 0) ? ultimoQtdeComplementoRef.current.get(norm(c.descricao)) : null;
+    return cotada != null && cotada > 0 ? cotada : (parseFloat(c.qtde) || 1);
+  };
 
   // ── Total dos complementos ────────────────────────────────────────────
   const totalComplementos = complementosPreenchidos.reduce((s, c) => {
-    const q = parseFloat(c.qtde) || 1;
+    const q = qtdeComplementoEfetiva(c);
     return s + precoComplemento(c) * q;
   }, 0);
 
@@ -805,7 +819,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
     });
     // Complementos: cada um vai para o bloco da classificação escolhida (default "Outros")
     complementosPreenchidos.forEach(c => {
-      const custo = precoComplemento(c) * (parseFloat(c.qtde) || 1);
+      const custo = precoComplemento(c) * qtdeComplementoEfetiva(c);
       if (custo <= 0) return;
       const bloco = classIndex.blocoDoItem({ classificacao_id: c.classificacao_id });
       blocosMatMap[bloco] = (blocosMatMap[bloco] || 0) + custo;
@@ -1093,9 +1107,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             const pc = precoComplemento(c);
             pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
             txt(c.descricao, ML, y);
-            txt(`${fmtQtd(c.qtde)} ${c.unidade}`, MR - 25, y, { align: 'right' });
+            txt(`${fmtQtd(qtdeComplementoEfetiva(c))} ${c.unidade}`, MR - 25, y, { align: 'right' });
             if (modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco') { /* sem valor */ }
-            else if (pc > 0) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(pc * (parseFloat(c.qtde) || 1) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
+            else if (pc > 0) { pdf.setFont('helvetica', 'bold'); txt(`R$ ${fmt(pc * qtdeComplementoEfetiva(c) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`, MR, y, { align: 'right' }); }
             else { pdf.setFont('helvetica', 'italic'); pdf.setTextColor(150); txt('A cotação', MR, y, { align: 'right' }); pdf.setTextColor(0); }
             y += 6;
           });
@@ -1237,7 +1251,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       });
     });
     complementos.filter(c => c.descricao).forEach(c => {
-      linhas.push({ codigo: '', item: c.descricao, detalhe: '', qtde: c.qtde || 1, unidade: c.unidade || 'un', tipo: 'Complemento' });
+      linhas.push({ codigo: '', item: c.descricao, detalhe: '', qtde: qtdeComplementoEfetiva(c), unidade: c.unidade || 'un', tipo: 'Complemento' });
     });
     return linhas;
   };
@@ -1815,9 +1829,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     <div key={i} className="flex items-center justify-between px-4 py-2">
                       <span className="text-sm text-slate-700 font-medium truncate">{c.descricao}</span>
                       <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0 text-right whitespace-nowrap">
-                        {fmtQtd(c.qtde)} {c.unidade}
+                        {fmtQtd(qtdeComplementoEfetiva(c))} {c.unidade}
                         {precoComplemento(c) > 0
-                          ? ` · R$ ${(precoComplemento(c) * (parseFloat(c.qtde) || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                          ? ` · R$ ${(precoComplemento(c) * qtdeComplementoEfetiva(c)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                           : ' · a cotação'}
                       </span>
                     </div>
@@ -2639,12 +2653,12 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                       {complementosPreenchidos.map((c, i) => (
                         <div key={i} className="flex justify-between items-start">
                           <div className="flex-1 font-bold text-slate-800 text-sm">{c.descricao}</div>
-                          <div className="w-24 text-center text-sm text-slate-600 font-medium">{fmtQtd(c.qtde)} {c.unidade}</div>
+                          <div className="w-24 text-center text-sm text-slate-600 font-medium">{fmtQtd(qtdeComplementoEfetiva(c))} {c.unidade}</div>
                           <div className="w-32 text-right font-black text-slate-900 text-sm">
                             {modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco'
                               ? null
                               : precoComplemento(c) > 0
-                                ? `R$ ${fmt(precoComplemento(c) * (parseFloat(c.qtde) || 1) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`
+                                ? `R$ ${fmt(precoComplemento(c) * qtdeComplementoEfetiva(c) * (modoFaturamento === 'empreitada' ? cf.fatorMateriais : 1))}`
                                 : <span className="text-slate-400 font-normal italic text-xs">A cotação</span>}
                           </div>
                         </div>
