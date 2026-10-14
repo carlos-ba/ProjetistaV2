@@ -10,11 +10,11 @@ const fmtQtd = (v, casas = 2) => Number(v ?? 0).toLocaleString('pt-BR', { maximu
 // mesma técnica já usada em VisualizadorProjeto.jsx pra planta do gabinete),
 // devolve PNG base64 pronto pra `pdf.addImage`. Círculo à esquerda, legenda
 // com valor + percentual à direita — cabe direto na largura do PDF.
-const CORES_CARGA = {
+export const CORES_CARGA = {
   conducao: '#7B2D8B', infiltracao: '#3B82F6', produto: '#F59E0B',
   respiracao: '#10B981', iluminacao: '#FBBF24', pessoas: '#EF4444', motores: '#6366F1',
 };
-const gerarImagemPizzaCarga = (fatias) => {
+export const gerarImagemPizzaCarga = (fatias) => {
   const H = 480, W = 1150;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -38,7 +38,7 @@ const gerarImagemPizzaCarga = (fatias) => {
   const larguraDisponivel = W - lx - 30 - 12; // menos o quadrinho de cor + respiro na borda
   ctx.textBaseline = 'middle';
   fatias.forEach(f => {
-    const pct = ((f.valor / total) * 100).toFixed(1);
+    const pct = ((f.valor / total) * 100).toFixed(1).replace('.', ',');
     const texto = `${f.label} — ${Math.round(f.valor).toLocaleString('pt-BR')} kcal/h (${pct}%)`;
     // Reduz a fonte até caber na largura disponível — evita texto cortado
     // quando o rótulo + valor fica comprido (ex: "Condução Térmica").

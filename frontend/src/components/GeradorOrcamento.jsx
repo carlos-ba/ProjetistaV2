@@ -4,6 +4,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import ModalCotacaoFornecedor from './ModalCotacaoFornecedor';
+import { gerarImagemPizzaCarga, CORES_CARGA } from './CalculadoraCargaTermica';
 
 // ── Linha de complemento em branco ───────────────────────────────────────
 const novoComplemento = () => ({ descricao: '', qtde: 1, unidade: 'un', preco_unit: '', classificacao_id: null });
@@ -33,6 +34,31 @@ const marcaDoTextoLegado = (texto) => {
   const marca = [];
   for (const t of termos) { if (/\d/.test(t)) break; marca.push(t); }
   return marca.join(' ');
+};
+
+// ── Estudo da carga térmica na proposta ──
+// Mesmos componentes/cores/pizza do relatório do Modo Engenharia (CalculadoraCargaTermica.jsx).
+const montarFatiasCarga = (r) => [
+  { label: 'Condução Térmica', valor: r.carga_conducao_kcalh, cor: CORES_CARGA.conducao },
+  { label: 'Infiltração', valor: r.carga_infiltracao_kcalh, cor: CORES_CARGA.infiltracao },
+  { label: 'Produto/Movimentação', valor: r.carga_produto_kcalh, cor: CORES_CARGA.produto },
+  { label: 'Respiração', valor: r.carga_respiracao_kcalh, cor: CORES_CARGA.respiracao },
+  { label: 'Iluminação', valor: r.carga_iluminacao_kcalh, cor: CORES_CARGA.iluminacao },
+  { label: 'Pessoas', valor: r.carga_pessoas_kcalh, cor: CORES_CARGA.pessoas },
+  { label: 'Motores/Outros', valor: r.carga_motores_kcalh, cor: CORES_CARGA.motores },
+].filter(f => Number(f.valor) > 0);
+
+// Linhas da tabela do estudo. A margem de segurança só vira linha própria se o técnico pedir; sem ela, a
+// "capacidade requerida" já embute margem + tempo de compressor (nota explica o tempo de compressor).
+const montarLinhasEstudoCarga = (r, mostrarMargem) => {
+  const total = Number(r.carga_total_24h_kcalh) || 0;
+  const linhas = montarFatiasCarga(r).map(f => ({ label: f.label, valor: Number(f.valor), pct: total > 0 ? (Number(f.valor) / total) * 100 : null }));
+  linhas.push({ label: 'Carga térmica líquida (24h)', valor: total, destaque: true });
+  if (mostrarMargem) {
+    linhas.push({ label: `Margem de segurança (${String(r.fator_seguranca_aplicado).replace('.', ',')})`, valor: (Number(r.carga_total_com_seguranca_kcalh) || 0) - total });
+  }
+  linhas.push({ label: 'Capacidade requerida do equipamento', valor: Number(r.capacidade_requerida_equipamento_kcalh) || 0, destaque: true });
+  return linhas;
 };
 
 // ── Cabeçalho da proposta: cor de destaque tirada do logo do cliente ──
@@ -114,7 +140,7 @@ const COR_BLOCO_PADRAO = { dot: 'bg-slate-400', texto: 'text-slate-500', rgb: [1
 const COR_MAO_DE_OBRA = { dot: 'bg-rose-500', texto: 'text-rose-700', rgb: [225, 29, 72] };
 const corDoBloco = (nome) => CORES_BLOCO[nome] || COR_BLOCO_PADRAO;
 
-const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
+const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar, projetoAtual = null, onClienteChange, initialValues, onValoresChange, aoConfirmar, onAbrirPainelCotacoes, resumoTecnico = null, estudoCarga = null, triggerGerarProposta = 0, onSalvarProjeto, onSalvarComo, classificacoes = null, modoEngenharia = false, embalagensFluido = [], onAbrirClassificacoes = null, bloqueadoTrial = false }) => {
   const projetoSalvo = !!projetoAtual?.id;
   const propostaRef = useRef(null);
 
@@ -279,6 +305,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   // ── Configurações da proposta ─────────────────────────────────────────
   const iv = initialValues || {};
   const [incluirResumoTecnico,   setIncluirResumoTecnico]   = useState(iv.incluirResumoTecnico ?? true);
+  // Estudo da carga térmica na proposta (tabela + pizza): ligado por padrão; a margem de segurança só aparece se o técnico pedir
+  const [incluirEstudoCarga,     setIncluirEstudoCarga]     = useState(iv.incluirEstudoCarga ?? true);
+  const [mostrarMargemEstudo,    setMostrarMargemEstudo]    = useState(iv.mostrarMargemEstudo ?? false);
   const [modoFaturamento,        setModoFaturamento]        = useState(iv.modoFaturamento ?? 'empreitada'); // 'empreitada' | 'venda_direta'
   const [custos, setCustos] = useState(iv.custos ?? { mo_paineis: '', mo_refrigeracao: '', locomocao: '', despesas: '', outros: '' });
   const [margemMateriais, setMargemMateriais] = useState(iv.margemMateriais ?? 25);
@@ -427,14 +456,14 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   useEffect(() => {
     if (onValoresChange) onValoresChange({
       dadosCliente,
-      incluirResumoTecnico,
+      incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo,
       modoFaturamento, custos, margemMateriais, margemServicos, imposto,
       apresentacao, exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond,
       baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca,
       itensDesmarcados: { materiais: [...materiaisDesmarcados], equipamentos: [...equipamentosDesmarcados] },
     });
-  }, [dadosCliente, incluirResumoTecnico, modoFaturamento,
+  }, [dadosCliente, incluirResumoTecnico, incluirEstudoCarga, mostrarMargemEstudo, modoFaturamento,
       custos, margemMateriais, margemServicos, imposto, apresentacao,
       exibicaoMateriais, listaEmpreitada, moSeparada, resumoObjeto, cond, baseCotacao, complementos,
       precosManuals, qtdesManuais, itensSubstituidos, marcasManuais, mostrarMarca, materiaisDesmarcados, equipamentosDesmarcados]);
@@ -471,6 +500,16 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const contatoCabecalho = [identidadeProposta?.proposta_contato_nome, fmtTelefoneBR(identidadeProposta?.proposta_contato_telefone)]
     .filter(Boolean).join(' · ');
   // Só usa o cabeçalho novo se o técnico configurou alguma identidade; senão, mantém o cabeçalho antigo (nome do cliente)
+  // Estudo da carga térmica: só quando o Card 2 trouxe o detalhamento por componente
+  const estudoDisponivel = !!(estudoCarga && Number(estudoCarga.carga_total_24h_kcalh) > 0);
+  const pizzaEstudo = useMemo(() => {
+    if (!estudoDisponivel) return null;
+    const fatias = montarFatiasCarga(estudoCarga);
+    return fatias.length ? gerarImagemPizzaCarga(fatias) : null;
+  }, [estudoCarga, estudoDisponivel]);
+  const linhasEstudo = estudoDisponivel ? montarLinhasEstudoCarga(estudoCarga, mostrarMargemEstudo) : [];
+  const notaCompressorEstudo = estudoDisponivel && estudoCarga.baseado_em_horas_funcionamento
+    ? `Capacidade requerida considerando o compressor operando ${fmtQtd(estudoCarga.baseado_em_horas_funcionamento)} h/dia.` : '';
   const temIdentidade = !!(identidadeProposta?.proposta_nome || identidadeProposta?.proposta_logo_base64 || contatoCabecalho);
 
   // Extrai bitola do nome do item: "Tubo Cobre 1/2\" (Líquido)" → "1/2\""
@@ -1112,6 +1151,42 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
         const imgX = ML + (CW - imgW) / 2;
         pdf.addImage(dadosAutomaticos.imagem_projeto, 'PNG', imgX, y, imgW, 65);
         y += 70;
+      }
+
+      // ── Estudo da carga térmica ──────────────────────────────────────
+      if (incluirEstudoCarga && estudoDisponivel) {
+        checar(95);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100);
+        txt('ESTUDO DA CARGA TÉRMICA', ML, y); pdf.setTextColor(0); y += 4;
+        if (pizzaEstudo) {
+          const imgW = CW; const imgH = imgW * (480 / 1150);
+          pdf.addImage(pizzaEstudo, 'PNG', ML, y, imgW, imgH);
+          y += imgH + 4;
+        }
+        const colValor = MR - 45, colPct = MR - 2;
+        pdf.setFillColor(30, 58, 95); pdf.rect(ML, y, CW, 6, 'F');
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255);
+        txt('COMPONENTE', ML + 2, y + 4); txt('kcal/h', colValor + 22, y + 4, { align: 'right' }); txt('% DA CARGA', colPct, y + 4, { align: 'right' });
+        pdf.setTextColor(0); y += 6;
+        linhasEstudo.forEach((l, idx) => {
+          checar(7);
+          if (l.destaque) { pdf.setFillColor(236, 253, 245); pdf.rect(ML, y, CW, 7, 'F'); }
+          else if (idx % 2 === 0) { pdf.setFillColor(248, 250, 252); pdf.rect(ML, y, CW, 7, 'F'); }
+          pdf.setFontSize(7.5); pdf.setFont('helvetica', l.destaque ? 'bold' : 'normal');
+          txt(l.label, ML + 2, y + 4.5);
+          txt(Math.round(l.valor).toLocaleString('pt-BR'), colValor + 22, y + 4.5, { align: 'right' });
+          if (l.pct != null) txt(`${l.pct.toFixed(1).replace('.', ',')}%`, colPct, y + 4.5, { align: 'right' });
+          y += 7;
+        });
+        if (notaCompressorEstudo) {
+          checar(10);
+          y += 3;
+          pdf.setFontSize(7); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(100);
+          txt(notaCompressorEstudo, ML, y);
+          pdf.setTextColor(0);
+          y += 4;
+        }
+        y += 6;
       }
 
       // ── Escopo ────────────────────────────────────────────────────────
@@ -2156,6 +2231,20 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                     Incluir resumo técnico
                   </label>
                 )}
+                {estudoDisponivel && (
+                  <>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                      <input type="checkbox" checked={incluirEstudoCarga} onChange={e => setIncluirEstudoCarga(e.target.checked)} className="accent-indigo-600" />
+                      Incluir estudo da carga térmica
+                    </label>
+                    {incluirEstudoCarga && (
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 ml-4">
+                        <input type="checkbox" checked={mostrarMargemEstudo} onChange={e => setMostrarMargemEstudo(e.target.checked)} className="accent-indigo-600" />
+                        mostrar a margem de segurança
+                      </label>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2697,6 +2786,33 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Planta Técnica da Câmara Frigorífica</h4>
                 <img src={dadosAutomaticos.imagem_projeto} alt="Planta" className="max-h-[300px] mx-auto object-contain print:max-h-[400px]" />
+              </div>
+            )}
+
+            {/* Estudo da carga térmica */}
+            {incluirEstudoCarga && estudoDisponivel && (
+              <div className="border border-slate-200 rounded-xl p-5 bg-white print:break-inside-avoid">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Estudo da Carga Térmica</h4>
+                {pizzaEstudo && <img src={pizzaEstudo} alt="Distribuição da carga térmica por componente" className="w-full max-w-3xl mx-auto" />}
+                <table className="w-full text-sm mt-4">
+                  <thead>
+                    <tr className="text-[9px] uppercase tracking-widest text-slate-400 border-b border-slate-200">
+                      <th className="text-left py-1.5 font-black">Componente</th>
+                      <th className="text-right py-1.5 font-black">kcal/h</th>
+                      <th className="text-right py-1.5 font-black w-24">% da carga</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linhasEstudo.map((l, i) => (
+                      <tr key={i} className={l.destaque ? 'bg-emerald-50 font-bold text-slate-900' : 'text-slate-700'}>
+                        <td className="py-1.5 px-1">{l.label}</td>
+                        <td className="py-1.5 text-right">{Math.round(l.valor).toLocaleString('pt-BR')}</td>
+                        <td className="py-1.5 text-right text-slate-500">{l.pct != null ? `${l.pct.toFixed(1).replace('.', ',')}%` : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {notaCompressorEstudo && <p className="text-[11px] text-slate-500 italic mt-3">{notaCompressorEstudo}</p>}
               </div>
             )}
 

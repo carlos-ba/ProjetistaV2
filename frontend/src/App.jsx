@@ -1058,6 +1058,7 @@ function AppContent({ catalogo }) {
                 classificacoes={classificacoes}
                 embalagensFluido={catalogo.embalagensFluido}
                 onAbrirClassificacoes={() => setMostrandoClassificacao(true)}
+                estudoCarga={inputsCargaTermica?.resultado ?? null}
                 resumoTecnico={dadosDoGabinete ? {
                   comprimento: dadosDoGabinete.comprimento,
                   largura: dadosDoGabinete.largura,

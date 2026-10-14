@@ -2342,6 +2342,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Marca × possível substituição (marca editável, código interno, substituição só quando a IA sinaliza) | ✅ implementado 2026-10-08 (migration 0044) — a descrição do sistema nunca é trocada; aviso "correções pendentes" na Revisão |
 | Card 6 — Complemento digitado à mão usa a quantidade informada na importação | ✅ implementado 2026-10-14 — só complementos (preço unitário × quantidade da cotação); nenhum outro item mudou |
 | Card 6 — Cabeçalho da proposta com identidade do técnico (logo, nome, contato; cor do logo) | ✅ implementado 2026-10-14 — tela, impressão e PDF; sem identidade mantém o cabeçalho antigo |
+| Card 6 — Estudo da carga térmica na proposta (pizza + tabela, margem opcional) | ✅ implementado 2026-10-14 — passo 1 da proposta técnica; passos 2 (resumo técnico + motivo da divisão em unidades) e 3 (redação por IA beta) pendentes |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2658,6 +2659,42 @@ na tela, na impressão e no PDF (`GeradorOrcamento.jsx`; sem backend nem migrati
   sem sobreposição); sem identidade → cabeçalho escuro antigo. 36/36 testes e build.
   **Não testado**: impressão real pelo navegador e logos sem cor (só o fallback por
   leitura do código).
+
+### Card 6 — Estudo da carga térmica na proposta (2026-10-14)
+
+Passo 1 de 3 da "proposta técnica" combinada com o usuário (os outros: resumo técnico por
+modelo fixo com motivo da divisão em unidades + margem opcional; depois redação por IA
+em beta, com 2 versões lado a lado). Idéia dele: dar autoridade técnica à proposta com
+o estudo da carga térmica que já existia só no relatório do Modo Engenharia.
+
+- **Onde aparece**: tela/impressão e PDF, **depois da planta técnica e antes do escopo**
+  ("Está incluído") e da lista de itens. No PDF cai na 2ª página (`checar(95)`).
+- **Conteúdo**: pizza (a mesma do Modo Engenharia) + tabela "Componente / kcal/h / % da
+  carga" (só componentes > 0), "Carga térmica líquida (24h)" e "Capacidade requerida do
+  equipamento"; nota "Capacidade requerida considerando o compressor operando N h/dia"
+  (explica por que a capacidade requerida > carga líquida: margem × 24/horas de
+  funcionamento — ex: 4.369 → 6.409 com 10% e 18 h).
+- **Opções na Composição → "Conteúdo da proposta"** (só aparecem se há detalhamento):
+  `incluirEstudoCarga` (padrão **ligado**) e `mostrarMargemEstudo` (padrão **desligado**)
+  — com a margem ligada entra a linha "Margem de segurança (10,0%)"; desligada, o estudo
+  não cita a margem. Persistem em `inputs_orcamento` (campos opcionais).
+- **Dados**: `inputsCargaTermica.resultado` (o `CargaTermicaResponse` completo, que o
+  Card 2 já salva no `dados_completos`) passa por `App.jsx` como prop **`estudoCarga`**.
+  Projeto sem esse detalhamento (nunca calculou o Card 2) → seção e opções não aparecem.
+  `montarFatiasCarga`/`montarLinhasEstudoCarga` (módulo) montam fatias e linhas;
+  `pizzaEstudo` é um `useMemo` do PNG.
+- **Reuso do Card 2**: `CalculadoraCargaTermica.jsx` agora **exporta** `CORES_CARGA` e
+  `gerarImagemPizzaCarga`; a legenda da pizza passou a usar **vírgula decimal**
+  ("20,2%") — afeta também o relatório do Modo Engenharia (só formato).
+- **Detalhe a observar**: a tabela mostra inteiros ("6.409"), a caixa verde "Carga
+  Térmica Calculada" mostra "6.408,58" — mesmo número, arredondamento diferente.
+- Testado na tela real (conta descartável, projeto com carga térmica salva): seção com 3
+  componentes + % + nota; margem liga/desliga a linha; desligar o estudo remove a seção
+  e a opção de margem; salvar persiste as 2 opções; PDF capturado e **renderizado**
+  (pizza + tabela + nota antes do escopo). 36/36 testes e build. Sem backend, sem
+  migration, sem alterar dado salvo.
+- **Pendente (passos 2 e 3)** e pergunta aberta: o estudo/resumo faz sentido no
+  **Modo Revenda**?
 
 ### Riscos conhecidos
 
