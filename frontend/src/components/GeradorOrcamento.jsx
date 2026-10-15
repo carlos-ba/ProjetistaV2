@@ -345,6 +345,31 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   const [origemPrecos, setOrigemPrecos] = useState({ usouCotacao: false, porItem: {} }); // fonte do preço de cada item do orçamento atual
   const itensDeOutraOrigem = Object.values(origemPrecos.porItem)
     .filter(f => f === 'lista_empresa' || f === 'cotacao_historico').length;
+  // Conferência ANTES de emitir (só pra quem projeta — nunca vai pra proposta do cliente): item sem preço nenhum
+  // sai como "A cotar"; item com preço que NÃO é da cotação escolhida (catálogo/cotação antiga) é só sinalizado.
+  const fonteDoItem = (l) => origemPrecos.porItem[l.chave ?? norm(l.item)];
+  const itemSemPreco = (l) => fonteDoItem(l) === 'sem_preco';
+  const itensConferencia = (orcamento?.detalhamento_itens || []).reduce((acc, l) => {
+    const f = fonteDoItem(l);
+    acc.total++;
+    if (f === 'sem_preco') acc.semPreco.push(l);
+    else if (origemPrecos.usouCotacao && (f === 'lista_empresa' || f === 'cotacao_historico')) acc.referencia.push({ l, fonte: f });
+    else if (f === 'cotacao') acc.cotados++;
+    return acc;
+  }, { total: 0, cotados: 0, semPreco: [], referencia: [] });
+  // Quem projeta decide: com item sem preço, pergunta antes de imprimir/baixar/enviar (não bloqueia).
+  const confirmarEmissao = () => {
+    const n = itensConferencia.semPreco.length;
+    if (n === 0) return true;
+    const nomes = itensConferencia.semPreco.slice(0, 12).map(l => `• ${l.item}`).join('\n');
+    const mais = n > 12 ? `\n… e mais ${n - 12}` : '';
+    const ref = itensConferencia.referencia.length;
+    return window.confirm(
+      `${n} ${n === 1 ? 'item está' : 'itens estão'} SEM PREÇO de cotação e ${n === 1 ? 'sairá' : 'sairão'} como "A cotar" na proposta ao cliente:\n\n${nomes}${mais}`
+      + (ref > 0 ? `\n\nAlém disso, ${ref} ${ref === 1 ? 'item usa' : 'itens usam'} preço de referência (não da cotação).` : '')
+      + '\n\nEmitir mesmo assim?'
+    );
+  };
   const [erro,        setErro]         = useState(null);
   const [loading,      setLoading]      = useState(false);
 
@@ -1409,11 +1434,21 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
             if (l.detalhe) { checar(4); pdf.text(pdf.splitTextToSize(l.detalhe, CW - 55), ML, y + nL.length * 4); }
             pdf.setFontSize(8); pdf.setTextColor(0);
             txt(`${fmtQtd(l.quantidade)} ${l.unidade}`, MR - 25, y, { align: 'right' });
+            const impACotar = () => {
+              pdf.setFont('helvetica', 'italic'); pdf.setTextColor(120);
+              txt('A cotar', MR, y, { align: 'right' });
+              pdf.setTextColor(0);
+            };
             if (modoFaturamento === 'venda_direta') {
               if (exibicaoMateriais === 'itemizado') {
-                pdf.setFont('helvetica', 'bold');
-                txt(`R$ ${fmt(l.custo_total_rs ?? 0)}`, MR, y, { align: 'right' });
+                if (itemSemPreco(l)) impACotar();
+                else {
+                  pdf.setFont('helvetica', 'bold');
+                  txt(`R$ ${fmt(l.custo_total_rs ?? 0)}`, MR, y, { align: 'right' });
+                }
               }
+            } else if (itemSemPreco(l)) {
+              impACotar();
             } else {
               pdf.setFont('helvetica', 'bold');
               txt(`R$ ${fmt((l.custo_total_rs ?? 0) * cf.fatorMateriais)}`, MR, y, { align: 'right' });
@@ -1836,6 +1871,7 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
   ];
 
   const enviarWhatsApp = () => {
+    if (!confirmarEmissao()) return;
     const msg = encodeURIComponent(`Olá ${dadosCliente.contato || dadosCliente.nome || 'Cliente'}!\n\nOrçamento câmara frigorífica:\n*Total: R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\nEnvio o PDF em anexo.`);
     const tel = (dadosCliente.celular || '').replace(/\D/g, '');
     window.open(tel ? `https://api.whatsapp.com/send?phone=55${tel}&text=${msg}` : `https://api.whatsapp.com/send?text=${msg}`, '_blank');
@@ -2949,6 +2985,42 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
       {orcamento && !modoEngenharia && (
         <div ref={propostaRef} className="bg-white border-2 border-slate-900 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-700 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
 
+          {/* Conferência pra quem projeta — NÃO sai na impressão nem no PDF, nunca chega ao cliente */}
+          {(itensConferencia.semPreco.length > 0 || itensConferencia.referencia.length > 0) && (
+            <div className="print:hidden p-4 space-y-3 bg-slate-50 border-b-2 border-slate-900">
+              {itensConferencia.semPreco.length > 0 && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-300">
+                  <p className="text-sm font-black text-red-700">
+                    ⛔ Proposta incompleta — {itensConferencia.semPreco.length} {itensConferencia.semPreco.length === 1 ? 'item' : 'itens'} sem preço de cotação
+                  </p>
+                  {origemPrecos.usouCotacao && (
+                    <p className="text-xs text-red-700 mt-0.5">A cotação cobriu {itensConferencia.cotados} de {itensConferencia.total} itens da lista.</p>
+                  )}
+                  <ul className="text-xs text-red-800 mt-2 list-disc pl-5 space-y-0.5 max-h-40 overflow-y-auto">
+                    {itensConferencia.semPreco.map((l, i) => <li key={i}>{l.item}</li>)}
+                  </ul>
+                  <p className="text-[11px] text-red-700 mt-2">
+                    Esses itens saem como <b>"A cotar"</b> e o total <b>não</b> os inclui. Se a proposta não deve ir assim, aguarde o preço do
+                    fornecedor e gere de novo. Este aviso aparece só aqui — não vai para o cliente.
+                  </p>
+                </div>
+              )}
+              {itensConferencia.referencia.length > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300">
+                  <p className="text-sm font-black text-amber-800">
+                    ⚠️ {itensConferencia.referencia.length} {itensConferencia.referencia.length === 1 ? 'item usa' : 'itens usam'} preço de referência, não da cotação
+                  </p>
+                  <ul className="text-xs text-amber-900 mt-2 list-disc pl-5 space-y-0.5 max-h-40 overflow-y-auto">
+                    {itensConferencia.referencia.map(({ l, fonte }, i) => (
+                      <li key={i}>{l.item} <span className="font-bold">— {ORIGEM_PRECO[fonte].label}</span></li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-amber-800 mt-2">Esses valores entram no total. Confira se ainda valem antes de emitir.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Cabeçalho — com identidade configurada (nome da firma/logo/contato): cabeçalho claro com a cor do logo;
               sem identidade: o cabeçalho escuro de sempre (nome do cliente) */}
           {temIdentidade ? (
@@ -3163,20 +3235,41 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                         {cat}
                       </h4>
                       <div className="space-y-3">
-                        {itens.map((l, i) => (
+                        {itens.map((l, i) => {
+                          const fonteL = fonteDoItem(l);
+                          const semPrecoL = fonteL === 'sem_preco';
+                          const refL = origemPrecos.usouCotacao && (fonteL === 'lista_empresa' || fonteL === 'cotacao_historico');
+                          const semColunaPreco = modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco';
+                          return (
                           <div key={i} className="flex justify-between items-start">
                             <div className="flex-1">
                               <div className="font-bold text-slate-800 text-sm leading-tight">{l.item}</div>
                               {l.detalhe && <div className="text-xs text-slate-400 mt-0.5">{l.detalhe}</div>}
+                              {/* Etiquetas SÓ pra quem projeta — somem na impressão/PDF e nunca chegam ao cliente */}
+                              {semPrecoL && (
+                                <span className="print:hidden inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                                  ⛔ sem preço de cotação — sai como "A cotar"
+                                </span>
+                              )}
+                              {refL && (
+                                <span className="print:hidden inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                  ⚠️ preço de referência ({ORIGEM_PRECO[fonteL].label}) — não é da cotação
+                                </span>
+                              )}
                             </div>
                             <div className="w-24 text-center text-sm text-slate-600 font-medium">{fmtQtd(l.quantidade)} {l.unidade}</div>
                             <div className="w-32 text-right font-black text-slate-900 text-sm">
-                              {modoFaturamento === 'venda_direta'
-                                ? (exibicaoMateriais === 'sem_preco' ? null : `R$ ${fmt(l.custo_total_rs ?? 0)}`)
-                                : `R$ ${fmt((l.custo_total_rs ?? 0) * cf.fatorMateriais)}`}
+                              {semColunaPreco
+                                ? null
+                                : semPrecoL
+                                  ? <span className="text-slate-400 font-normal italic text-xs">A cotar</span>
+                                  : modoFaturamento === 'venda_direta'
+                                    ? `R$ ${fmt(l.custo_total_rs ?? 0)}`
+                                    : `R$ ${fmt((l.custo_total_rs ?? 0) * cf.fatorMateriais)}`}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )
@@ -3332,9 +3425,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
 
           {/* Ações */}
           <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-center gap-4 print:hidden">
-            <button onClick={() => window.print()} className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-300 transition-all">Imprimir 🖨️</button>
+            <button onClick={() => { if (confirmarEmissao()) window.print(); }} className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-300 transition-all">Imprimir 🖨️</button>
             <div className="flex flex-col items-center gap-1">
-              <button onClick={gerarPDF} disabled={loading} className={`px-6 py-2 text-white rounded-lg font-bold transition-all disabled:bg-slate-300 ${
+              <button onClick={() => { if (confirmarEmissao()) gerarPDF(); }} disabled={loading} className={`px-6 py-2 text-white rounded-lg font-bold transition-all disabled:bg-slate-300 ${
                 estaDesatualizada('proposta') ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-300' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
                 {loading ? 'Gerando...' : (estaDesatualizada('proposta') ? '🔄 Atualizar PDF' : 'Baixar PDF 📥')}
               </button>

@@ -2419,6 +2419,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Card 6 — Descritivo técnico por modelo fixo (objetivo, premissas, carga, solução, motivo da divisão em unidades, margem opcional) | ✅ implementado 2026-10-14 — passo 4 da proposta técnica, sem IA/backend/migration; passo 5 (redação por IA beta) pendente |
 | Redação por IA do descritivo técnico — flag por empresa no painel Administração | ✅ implementado 2026-10-14 (migration 0046) |
 | Card 6 — Redação por IA do descritivo técnico (beta, 2 versões lado a lado) | ✅ implementado 2026-10-14 — passo 5 da proposta técnica; só empresas com o flag, trava também no backend; sem migration |
+| Card 6 — Item não cotado: alerta só pro projetista + "A cotar" na proposta do cliente + confirmação ao emitir | ✅ implementado 2026-10-15 — só frontend; achado: botão "Imprimir" provavelmente não imprime (wizard em `print:hidden` no App.jsx), não corrigido |
 | Importação de cotação em PDF via IA (com apelidos por fornecedor) | ✅ em produção desde 2026-09-01; 2026-10-06: prazo (lido errado do CST) saiu do fluxo de PDF, entrou "Qtde cotada" (migration 0043) + rótulos fixos na conferência |
 | Marca IceNexus no cabeçalho das planilhas (Cotação + Lista de Engenharia) | ✅ em produção desde 2026-09-14 — reaproveita linha já existente, sem inserir linha nova |
 | Proposta com preços da cotação (via preco_unitario) | ✅ |
@@ -2838,6 +2839,51 @@ migration.
   código); Modo Revenda (descritivo depende de `resumoTecnico`, do gabinete).
 - **Pendente (passo 5)**: redação por IA em beta, 2 versões lado a lado (fixa × IA), editável
   e salva no projeto, só ao clicar, com limite de uso; a IA receberia só estes fatos.
+
+### Card 6 — Item não cotado: alerta pra quem projeta + "A cotar" pro cliente (2026-10-15)
+
+Achado do usuário: pediu cotação, o fornecedor devolveu a lista **com itens a menos**; a IA casou
+certo o que veio, mas a proposta saiu **sem os itens não cotados** (como "R$ 0,00") — quem emite
+podia achar que a cotação estava completa. Regra do usuário: a proposta deve ser **igual à lista**;
+o alerta é **só pra quem projeta** (nunca pro cliente); preço que não é da cotação (catálogo/cotação
+antiga) também é sinalizado; **quem projeta decide** emitir ou esperar o preço do fornecedor.
+Só frontend (`GeradorOrcamento.jsx`), sem migration, sem alterar dado salvo.
+
+- **Causa**: a confirmação da importação marca a cotação `processada` com 1 item atualizado
+  (`routes_cotacao.py`), item sem preço vai ao backend como `null` → custo 0
+  (`orcamento.py`) e a proposta imprimia `R$ 0,00`; o único aviso (Revisão: "N itens sem preço")
+  é painel interno, fácil de não ver. Item não cotado **com preço de catálogo/cotação antiga**
+  saía como se fosse da cotação (só a Revisão avisava).
+- **Origem do preço por item** reaproveitada (`origemPrecos.porItem`: `sem_preco` | `cotacao` |
+  `manual` | `lista_empresa` | `cotacao_historico`, chave `l.chave ?? norm(l.item)`) →
+  `itensConferencia` (`semPreco`, `referencia`, `cotados`, `total`).
+- **Só pro projetista (tudo `print:hidden`, fora do PDF)**: no topo da proposta, faixa **vermelha**
+  "⛔ Proposta incompleta — N itens sem preço de cotação" (com "A cotação cobriu X de Y itens" e a
+  lista) e faixa **âmbar** "N itens usam preço de referência, não da cotação" (com a origem de cada
+  um); etiqueta vermelha/âmbar em cada linha. A âmbar **só aparece quando a proposta usou uma
+  cotação** (gerar direto pelo catálogo não marca tudo de âmbar).
+- **Pro cliente (tela impressa e PDF)**: item sem preço sai **"A cotar"** em itálico cinza (no lugar
+  de R$ 0,00; nos 2 modos — faturamento direto itemizado e empreitada). Item de preço de
+  referência sai com o valor normal, sem marca. O total continua sem os itens "A cotar".
+- **Confirmação ao emitir** (`confirmarEmissao`): Imprimir, Baixar PDF e WhatsApp perguntam
+  ("N itens estão SEM PREÇO… sairão como 'A cotar'… Emitir mesmo assim?", com a lista e, se houver,
+  a contagem de itens de referência) **só quando há item sem preço**; "não" cancela, "sim" segue.
+  Não bloqueia — a decisão é de quem projeta.
+- **Fora de escopo, por decisão**: complementos digitados à mão sem preço (já imprimem "A cotação",
+  não entram na contagem); aviso numa janela *antes* de gerar (a faixa aparece logo depois de gerar);
+  marca de "cotação parcial" persistida na cotação (derivado em tempo real, sem coluna).
+- **Achado, NÃO corrigido (anterior a esta mudança)**: o wizard inteiro, **incluindo o Card 6**, está
+  dentro de `<div className="space-y-4 print:hidden">` no `App.jsx` desde a "fase 1" — então o botão
+  **"Imprimir 🖨️" (`window.print()`) provavelmente não imprime a proposta**; o caminho que funciona
+  é **Baixar PDF**. Isso invalida o que as seções do cabeçalho e do estudo dizem sobre "impressão usa
+  o mesmo bloco da tela" (nunca foi testada impressão real). As classes `print:hidden` novas foram
+  validadas emulando mídia de impressão com esse wrapper removido só no teste. Decidir com o usuário
+  se vale corrigir o "Imprimir".
+- Testado (conta descartável, cotação processada com 4 de 23 itens sem preço, 1 deles com preço de
+  catálogo, via Chrome headless/CDP): faixas 3 vermelhos + 1 âmbar com "cobriu 19 de 23"; "A cotar"
+  ×3 na tela e no PDF; PDF **sem** nenhum texto interno; confirmação responde "não" → nada emitido,
+  "sim" → emite; build ok. **Não testado**: modos "descritivo sem preço"/"somente totais" (só leitura
+  de código), backend não tocado (suíte não rodada).
 
 ### Riscos conhecidos
 
