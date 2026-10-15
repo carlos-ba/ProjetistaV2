@@ -2778,7 +2778,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
               const fonte = origemPrecos.porItem[key];
               const origemInfo = ORIGEM_PRECO[fonte];
               return (
-                <div key={i} className="p-2 rounded-lg bg-white/60 border border-amber-100">
+                <div key={i} className={`p-2 rounded-lg border ${fonte === 'sem_preco'
+                  ? 'bg-yellow-100 border-yellow-400 ring-1 ring-yellow-300'
+                  : 'bg-white/60 border-amber-100'}`}>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 min-w-0">
                       <span className="block text-xs text-slate-700 truncate" title={l.item}>{l.item}</span>
@@ -3241,7 +3243,9 @@ const GeradorOrcamento = ({ dadosAutomaticos, aoRemoverEquipamento, aoReiniciar,
                           const refL = origemPrecos.usouCotacao && (fonteL === 'lista_empresa' || fonteL === 'cotacao_historico');
                           const semColunaPreco = modoFaturamento === 'venda_direta' && exibicaoMateriais === 'sem_preco';
                           return (
-                          <div key={i} className="flex justify-between items-start">
+                          <div key={i} className={`flex justify-between items-start ${semPrecoL
+                            ? 'bg-yellow-100 border-l-4 border-yellow-500 rounded-r-lg px-3 py-2 -mx-3 print:bg-transparent print:border-0 print:rounded-none print:px-0 print:py-0 print:mx-0'
+                            : ''}`}>
                             <div className="flex-1">
                               <div className="font-bold text-slate-800 text-sm leading-tight">{l.item}</div>
                               {l.detalhe && <div className="text-xs text-slate-400 mt-0.5">{l.detalhe}</div>}

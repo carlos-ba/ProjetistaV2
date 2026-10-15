@@ -2865,6 +2865,13 @@ Só frontend (`GeradorOrcamento.jsx`), sem migration, sem alterar dado salvo.
 - **Pro cliente (tela impressa e PDF)**: item sem preço sai **"A cotar"** em itálico cinza (no lugar
   de R$ 0,00; nos 2 modos — faturamento direto itemizado e empreitada). Item de preço de
   referência sai com o valor normal, sem marca. O total continua sem os itens "A cotar".
+- **Fundo amarelo na linha do item sem preço** (pedido do usuário, 2026-10-15), só pra quem projeta:
+  na **Revisão** (`bg-yellow-100 border-yellow-400 ring-1`, é nessa lista que o campo de preço aparece
+  zerado) e na **proposta na tela** (`bg-yellow-100` + barra `border-l-4 border-yellow-500`, com
+  `print:bg-transparent print:border-0 print:p-0` — **não sai na impressão nem no PDF**). Só o item
+  *sem preço nenhum*; item de preço de referência segue só com a etiqueta âmbar (sem fundo) pra não
+  se confundir. Testado: 3 linhas amarelas na Revisão e 3 na proposta (de 23), 0 na emulação de
+  impressão.
 - **Confirmação ao emitir** (`confirmarEmissao`): Imprimir, Baixar PDF e WhatsApp perguntam
   ("N itens estão SEM PREÇO… sairão como 'A cotar'… Emitir mesmo assim?", com a lista e, se houver,
   a contagem de itens de referência) **só quando há item sem preço**; "não" cancela, "sim" segue.
