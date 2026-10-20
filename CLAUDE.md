@@ -201,7 +201,8 @@ m², sem cálculo real) por uma lista de itens de verdade, resolvida dentro de
   margem de segurança do Card 2).
 - **Rebite:** metros lineares totais × 1000 ÷ 200, × 2 (duas linhas por perfil).
 - **Parafuso+Bucha:** só no Perfil U (piso) — metros lineares × 1000 ÷ 500
-  (uma linha só).
+  (uma linha só). **Desde 2026-10-20 o U do piso (e portanto o parafuso+bucha) só existe quando o
+  piso NÃO é em painel** — ver seção "Kit de Montagem — regras de piso e Perfil T" abaixo.
 - **Selante/Rebite/Parafuso+Bucha são catálogos pequenos de propósito**
   (cadastro simples: fabricante + código + descrição, ~1 linha cada, sem
   seleção por especificação) — decisão consciente de não construir
@@ -216,6 +217,52 @@ m², sem cálculo real) por uma lista de itens de verdade, resolvida dentro de
 - **Catálogo real em produção desde 2026-09-01** (migration 0029): 91 perfis
   MBP Isoblock + Selante/Rebite/Parafuso+Bucha com fabricante "Genérico" (sem
   fornecedor específico definido ainda).
+
+---
+
+## Card 1 — Kit de Montagem — regras de piso e Perfil T (2026-10-20)
+
+Pedido do usuário depois de uma análise completa da jornada do kit (feita pra servir de molde
+a um novo desenvolvimento com as mesmas premissas). Duas correções de regra; o resto da jornada
+foi confirmado como estava. Só backend (`kit_montagem.py` + 1 linha em `routes_gabinete.py`), sem
+migration, sem alterar dado salvo.
+
+- **Perfil U do piso só quando o piso NÃO é em painel** (`tipo_piso`, agora parâmetro de
+  `calcular_kit_montagem`): piso **convencional** (apoiado ou rebaixado, com placas de isolamento)
+  ou **sem piso** → U do perímetro do piso como sempre (+ parafuso+bucha). Piso **em painel** → **não
+  gera U nem parafuso+bucha** (o parafuso só acompanha o U do piso; U manual ainda conta); o acabamento
+  parede × painel de piso segue a regra do **Ângulo Externo sobreposto**: o Ângulo Externo soma **uma
+  volta extra no perímetro do piso** (2C+2L) — arredondado junto, uma vez só. As **4 subidas
+  verticais continuam como antes** (altura da parede + espessura do teto; o usuário não pediu mudar).
+  O detalhe da linha avisa "(inclui a volta do piso em painel)". O U de acabamento de porta não muda.
+- **Perfil T entra em selante e rebite**: seus metros **reais** (barras × comprimento) somam em
+  `metros_perfis_totais`, igual aos demais perfis (selante: ×2 ÷ rendimento; rebite: 2 linhas a cada
+  200 mm). **Não** entra no parafuso+bucha (só do U). Implementação: o bloco do Perfil T passou a ser
+  calculado **antes** do selante/rebite; o item continua aparecendo na lista na mesma posição de sempre
+  (depois do parafuso+bucha, antes da barra roscada).
+- **Confirmado sem mudança** (premissas do kit a replicar): tudo arredonda **pra cima em barras
+  inteiras primeiro** e as contas derivadas usam o metro das barras compradas; selante =
+  ⌈(metros de perfil×2 + área de painéis×0,145) ÷ rendimento × (1 + fator de segurança)⌉ (fator só no
+  selante, só no Card 1, independente da margem do Card 2); **a área do selante inclui paredes, teto,
+  piso em painel e painéis extras, e NÃO inclui as placas de isolamento do piso convencional nem as
+  portas** (isolamento de piso convencional é outro tipo de isolamento, sem selante); perfis extras
+  manuais somam nos metros de selante/rebite (e no parafuso se forem U) com quantidade de barras
+  digitada; catálogo vazio → item some + aviso no banner vermelho do Card 1.
+- **Exemplo de conferência** (câmara 5×4×3 m, painel PIR 70 mm, barras de 3 m; API real): **piso em
+  painel** → Ângulo Externo 16 barras (47,72 m), Interno 10, **sem U, sem parafuso**, selante 16,
+  rebite 780; **convencional/sem piso** → Externo 10, Interno 10, U 6, parafuso 36, selante 16, rebite
+  780. **Perfil T** (largura 10 m, auto-portância 7 m, 1 linha, 1 barra de 6 m): selante 23→24,
+  rebite 1140→1200 (+60), parafuso 60 inalterado.
+- **Testes**: `backend/tests/test_kit_montagem.py` (**primeiro teste do kit**, 5 casos: piso em
+  painel sem U/parafuso e com volta extra, convencional e sem piso com U/parafuso, Perfil T em
+  selante/rebite e fora do parafuso, totais com piso em painel) — rodam contra o catálogo real do banco
+  local; suíte total 48/48. Texto de ajuda do Card 1 atualizado (frontend).
+- **Efeito pro usuário**: projetos salvos só mudam de quantidade ao **Recalcular** (sem retroatividade);
+  quem tem piso em painel verá o Externo subir e U/parafuso sumirem; cotação já enviada com a lista
+  antiga passa a divergir da lista nova (a Revisão do Card 6 sinaliza). Catálogo do Perfil T ainda com
+  código de fabricante placeholder (pendência antiga, não afeta quantidade).
+- **Observação aberta**: a lista do kit não tem tratamento próprio pra "piso rebaixado × apoiado" no U
+  (ambos geram o mesmo U do perímetro) — não foi pedido mudar.
 
 ---
 
@@ -2378,7 +2425,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Painel lateral — "Equipamentos Selecionados" fixo | ✅ em produção desde 2026-09-10 — UC/Evaporadora do Card 3 visíveis em qualquer card, não só enquanto o Card 3 está aberto |
 | Autenticação JWT | ✅ |
 | Gabinete + painéis PIR Kingspan + portas | ✅ |
-| Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01 |
+| Card 1 — Kit de Montagem (perfis/selante/rebite/parafuso+bucha) | ✅ em produção desde 2026-09-01, catálogo real (91 perfis MBP Isoblock) desde 2026-09-01; 2026-10-20: U do piso/parafuso só sem piso em painel (piso em painel soma volta no Ângulo Externo) e Perfil T entra em selante/rebite — implementado, testes novos (`test_kit_montagem.py`) |
 | Card 1 — Barreira de Vapor (Lona Val Film/Fita Branca/Lona) | ✅ em produção desde 2026-09-02, fórmulas confirmadas com o autor da planilha de referência |
 | Card 1 — Painéis de Teto/Piso divididos pela auto-portância | ✅ em produção desde 2026-09-10 — largura maior que o vão máximo do painel divide em pedaços iguais, catálogo 100% completo pra essa regra |
 | Card 1 — Modo Revenda — corte sob medida por barra | ✅ em produção desde 2026-09-17 — checkbox por barra na sobra: marcado compra só a metragem líquida (sobra com o fornecedor), não marcado compra a barra 12m inteira (sobra vira estoque não controlado pelo sistema); zero mudança de backend |

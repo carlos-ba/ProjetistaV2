@@ -1053,8 +1053,9 @@ const CalculadoraGabinete = ({ aoFinalizar, fabricantes = [], portasCatalogo = [
           </h3>
           <p className="text-xs text-slate-500 mb-3">
             Perfil Ângulo Externo, Ângulo Interno e U são selecionados automaticamente pela
-            geometria do gabinete. Use esta seção só para perfil Liso, Z, ou variações de medida
-            fora do padrão de {configuracoesMontagem?.largura_aba_padrao_mm ?? 40}mm.
+            geometria do gabinete (o U do piso só entra quando o piso não é em painel — com piso em
+            painel o acabamento é o Ângulo Externo). Use esta seção só para perfil Liso, Z, ou
+            variações de medida fora do padrão de {configuracoesMontagem?.largura_aba_padrao_mm ?? 40}mm.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3 mb-3">

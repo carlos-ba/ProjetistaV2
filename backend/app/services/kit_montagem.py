@@ -68,6 +68,7 @@ async def calcular_kit_montagem(
     largura_painel: float,
     linhas_sustentacao_perfil_t: int = 0,
     portas_perfil_u: list[PortaPerfilU] | None = None,
+    tipo_piso: str = "nenhum",
 ) -> tuple[list[MaterialExtra], list[str]]:
     itens: list[MaterialExtra] = []
     avisos: list[str] = []
@@ -80,6 +81,12 @@ async def calcular_kit_montagem(
     # Ângulo Externo: perímetro do teto + 4 subidas (altura da parede + espessura do teto)
     subida_ext = comp_parede_m + (espessura_painel_mm / 1000.0)
     necessario_ext = perimetro_m + 4 * subida_ext
+    # Piso em painel (2026-10-20): o acabamento entre parede e painel de piso segue a regra do Ângulo Externo
+    # sobreposto — soma mais uma volta (perímetro do piso). Nesse caso NÃO entra o Perfil U do piso (abaixo).
+    # As 4 subidas verticais continuam como antes.
+    piso_em_painel = tipo_piso == "painel"
+    if piso_em_painel:
+        necessario_ext += perimetro_m
     alvo_aba2_ext = aba + espessura_painel_mm
     perfil, exato = await _buscar_perfil(db, "Ângulo Externo", aba, medida_2_min=alvo_aba2_ext)
     if not perfil:
@@ -99,7 +106,8 @@ async def calcular_kit_montagem(
             unidade="barra",
             detalhe=(
                 f"{aba}x{perfil.medida_2_mm}x{perfil.comprimento_mm}mm — "
-                f"{necessario_ext:.2f}m necessários ({perfil.codigo_fabricante}){aviso}"
+                f"{necessario_ext:.2f}m necessários{' (inclui a volta do piso em painel)' if piso_em_painel else ''} "
+                f"({perfil.codigo_fabricante}){aviso}"
             ),
             tipo_item="perfil_angulo_externo",
         ))
@@ -128,32 +136,34 @@ async def calcular_kit_montagem(
             tipo_item="perfil_angulo_interno",
         ))
 
-    # U: perímetro do piso, sem subidas
-    necessario_u = perimetro_m
-    alvo_alma_u = espessura_painel_mm
-    perfil, exato = await _buscar_perfil(db, "U", aba, medida_2_min=alvo_alma_u, medida_3=aba)
-    if not perfil:
-        avisos.append(
-            f"Nenhum Perfil U com aba {aba}mm e alma ≥ {alvo_alma_u:.0f}mm no catálogo — item não incluído na lista. "
-            f"Cadastre o perfil ou adicione manualmente."
-        )
-    if perfil:
-        compr_m = perfil.comprimento_mm / 1000.0
-        barras = math.ceil(necessario_u / compr_m)
-        metros_perfis_totais += barras * compr_m
-        metros_perfil_u += barras * compr_m
-        aviso = "" if exato else f" — sem medida exata (alma ideal {alvo_alma_u:.0f}mm), usado {perfil.medida_2_mm}mm"
-        itens.append(MaterialExtra(
-            item="Perfil U",
-            qtd=f"{barras} barra(s)",
-            quantidade=float(barras),
-            unidade="barra",
-            detalhe=(
-                f"{aba}x{perfil.medida_2_mm}x{aba}x{perfil.comprimento_mm}mm — "
-                f"{necessario_u:.2f}m necessários ({perfil.codigo_fabricante}){aviso}"
-            ),
-            tipo_item="perfil_u",
-        ))
+    # U: perímetro do piso, sem subidas — só quando o piso NÃO é em painel (convencional apoiado/rebaixado
+    # com placas de isolamento, ou sem piso). Com piso em painel o acabamento é o Ângulo Externo (acima).
+    if not piso_em_painel:
+        necessario_u = perimetro_m
+        alvo_alma_u = espessura_painel_mm
+        perfil, exato = await _buscar_perfil(db, "U", aba, medida_2_min=alvo_alma_u, medida_3=aba)
+        if not perfil:
+            avisos.append(
+                f"Nenhum Perfil U com aba {aba}mm e alma ≥ {alvo_alma_u:.0f}mm no catálogo — item não incluído na lista. "
+                f"Cadastre o perfil ou adicione manualmente."
+            )
+        if perfil:
+            compr_m = perfil.comprimento_mm / 1000.0
+            barras = math.ceil(necessario_u / compr_m)
+            metros_perfis_totais += barras * compr_m
+            metros_perfil_u += barras * compr_m
+            aviso = "" if exato else f" — sem medida exata (alma ideal {alvo_alma_u:.0f}mm), usado {perfil.medida_2_mm}mm"
+            itens.append(MaterialExtra(
+                item="Perfil U",
+                qtd=f"{barras} barra(s)",
+                quantidade=float(barras),
+                unidade="barra",
+                detalhe=(
+                    f"{aba}x{perfil.medida_2_mm}x{aba}x{perfil.comprimento_mm}mm — "
+                    f"{necessario_u:.2f}m necessários ({perfil.codigo_fabricante}){aviso}"
+                ),
+                tipo_item="perfil_u",
+            ))
 
     # U de acabamento da abertura das portas (2026-10-05): só pras linhas de
     # porta marcadas no Card 1 (fabricante não manda o perfil no conjunto).
@@ -225,6 +235,49 @@ async def calcular_kit_montagem(
             tipo_item="perfil_manual",
         ))
 
+    # Perfil T: sustenta o teto dividido pela auto-portância (2026-09-10) — 1
+    # linha de Perfil T por junta interna entre pedaços de teto ao longo de
+    # todo o comprimento da câmara (as 2 pontas da largura apoiam direto na
+    # parede, só as juntas internas precisam). linhas_sustentacao_perfil_t
+    # já vem calculado (num_pecas_teto - 1) de calculos_gabinete.py — 0
+    # quando o teto não foi dividido (largura já cabe na auto-portância).
+    # 2026-10-20: calculado ANTES do selante e do rebite porque o Perfil T também é
+    # selado e rebitado — seus metros reais (barras × comprimento) somam em
+    # metros_perfis_totais, como os demais perfis (parafuso+bucha continua só do U).
+    # O item entra na lista mais abaixo, na mesma posição de sempre.
+    metros_perfil_t_real = 0.0
+    item_perfil_t: MaterialExtra | None = None
+    if linhas_sustentacao_perfil_t > 0:
+        necessario_perfil_t = comprimento * linhas_sustentacao_perfil_t
+        perfil_t = (await db.execute(
+            select(PerfilMetalico)
+            .where(PerfilMetalico.tipo == "T")
+            .order_by(PerfilMetalico.comprimento_mm.desc())
+            .limit(1)
+        )).scalars().first()
+        if not perfil_t:
+            avisos.append(
+                "Nenhum Perfil T cadastrado no catálogo — item não incluído na lista. "
+                "Cadastre o perfil ou adicione manualmente."
+            )
+        if perfil_t:
+            compr_m = perfil_t.comprimento_mm / 1000.0
+            barras_t = math.ceil(necessario_perfil_t / compr_m)
+            metros_perfil_t_real = barras_t * compr_m
+            metros_perfis_totais += metros_perfil_t_real
+            item_perfil_t = MaterialExtra(
+                item="Perfil T",
+                qtd=f"{barras_t} barra(s)",
+                quantidade=float(barras_t),
+                unidade="barra",
+                detalhe=(
+                    f"{perfil_t.medida_1_mm}x{perfil_t.medida_2_mm}x{perfil_t.medida_3_mm}x{perfil_t.comprimento_mm}mm — "
+                    f"{necessario_perfil_t:.2f}m necessários, {linhas_sustentacao_perfil_t} linha(s) de sustentação "
+                    f"({perfil_t.codigo_fabricante})"
+                ),
+                tipo_item="perfil_t",
+            )
+
     # Selante de PU: (perfis×2 + painéis×0,145) ÷ rendimento, com fator de segurança
     rendimento = rendimento_selante_m_por_embalagem or 12.0
     consumo_perfis_emb = (metros_perfis_totais * 2) / rendimento
@@ -276,42 +329,8 @@ async def calcular_kit_montagem(
             tipo_item="parafuso_bucha",
         ))
 
-    # Perfil T: sustenta o teto dividido pela auto-portância (2026-09-10) — 1
-    # linha de Perfil T por junta interna entre pedaços de teto ao longo de
-    # todo o comprimento da câmara (as 2 pontas da largura apoiam direto na
-    # parede, só as juntas internas precisam). linhas_sustentacao_perfil_t
-    # já vem calculado (num_pecas_teto - 1) de calculos_gabinete.py — 0
-    # quando o teto não foi dividido (largura já cabe na auto-portância).
-    metros_perfil_t_real = 0.0
-    if linhas_sustentacao_perfil_t > 0:
-        necessario_perfil_t = comprimento * linhas_sustentacao_perfil_t
-        perfil_t = (await db.execute(
-            select(PerfilMetalico)
-            .where(PerfilMetalico.tipo == "T")
-            .order_by(PerfilMetalico.comprimento_mm.desc())
-            .limit(1)
-        )).scalars().first()
-        if not perfil_t:
-            avisos.append(
-                "Nenhum Perfil T cadastrado no catálogo — item não incluído na lista. "
-                "Cadastre o perfil ou adicione manualmente."
-            )
-        if perfil_t:
-            compr_m = perfil_t.comprimento_mm / 1000.0
-            barras_t = math.ceil(necessario_perfil_t / compr_m)
-            metros_perfil_t_real = barras_t * compr_m
-            itens.append(MaterialExtra(
-                item="Perfil T",
-                qtd=f"{barras_t} barra(s)",
-                quantidade=float(barras_t),
-                unidade="barra",
-                detalhe=(
-                    f"{perfil_t.medida_1_mm}x{perfil_t.medida_2_mm}x{perfil_t.medida_3_mm}x{perfil_t.comprimento_mm}mm — "
-                    f"{necessario_perfil_t:.2f}m necessários, {linhas_sustentacao_perfil_t} linha(s) de sustentação "
-                    f"({perfil_t.codigo_fabricante})"
-                ),
-                tipo_item="perfil_t",
-            ))
+    if item_perfil_t:
+        itens.append(item_perfil_t)
 
     # Barra Roscada 3/8 (sustentação do Perfil T): 1 kit a cada largura de
     # painel de parede, ao longo do metro REAL de Perfil T comprado (barras
