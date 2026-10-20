@@ -108,6 +108,23 @@ SECRET_KEY=...
 | GitHub | https://github.com/carlos-ba/ProjetistaV2 |
 | Site institucional | https://icenexus.com.br (hub do ecossistema + `/projeto-camara-fria` com planos/preços) — código em `site-ecosistema/` neste repo desde 2026-08-24, Next.js, deploy Vercel próprio (`icenexus-site`) |
 
+### Hospedagem, DNS e e-mail (conferido por consulta ao DNS público em 2026-10-20)
+
+A hospedagem do sistema **não** passa pela Hostinger — ela é o **registro do domínio, o DNS e o
+e-mail**; quem serve as páginas e a API são Vercel e Render.
+
+| Função | Quem | Evidência |
+|---|---|---|
+| Domínio `icenexus.com.br` + servidores de DNS | **Hostinger** | NS `atlas.dns-parking.com` / `hyperion.dns-parking.com` |
+| E-mail (`contato@icenexus.com.br`, SMTP `smtp.hostinger.com:465`) | **Hostinger** | MX `mx1/mx2.hostinger.com`; SPF e DKIM (seletor `hostingermail1`) no mesmo DNS |
+| App `camara-fria.icenexus.com.br` | **Vercel** | CNAME → `*.vercel-dns-017.com` |
+| Site institucional `icenexus.com.br` | **Vercel** (projeto `icenexus-site`) | registro A `216.198.79.1` |
+| API | **Render** | `projetista-v2-api-alt.onrender.com` (não passa pelo DNS do domínio) |
+
+- Mudar apontamento de subdomínio, SPF/DKIM ou qualquer registro = **painel da Hostinger**.
+- Dependência: domínio vencido ou Hostinger fora do ar derruba o acesso pelo nome e o e-mail transacional
+  (verificação de conta, redefinição de senha). Vencimento do domínio/plano **não verificado** (só o painel mostra).
+
 ---
 
 ## Estrutura do Wizard (6 Cards)
