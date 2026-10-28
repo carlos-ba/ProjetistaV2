@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID, uuid4
 from typing import List, Optional
 
-from sqlalchemy import String, Date, Boolean, Text
+from sqlalchemy import String, Date, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -54,6 +54,12 @@ class Empresa(Base, TimestampMixin):
     ia_descritivo_habilitado: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+
+    # Checkpoint comercial do trial novo (painel Administração, 2026-10-28): vazio = o superadmin ainda
+    # não abriu/anotou os dados desse lead (bolinha vermelha); preenchido = já tratado (verde). Só muda
+    # por clique manual dele. Sem timezone, valor em UTC (padrão do projeto). Cadastro público deixa
+    # vazio; empresa criada pelo superadmin e empresas anteriores à 0047 já nascem preenchidas.
+    lead_tratado_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Identidade da proposta ao cliente (Card 6) — editável por qualquer membro
     # (não é área sensível de conta, é o próprio técnico personalizando o que

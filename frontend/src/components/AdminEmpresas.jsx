@@ -95,6 +95,18 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
     finally { setSalvando(false); }
   };
 
+  // Checkpoint comercial do trial novo: só o clique do superadmin muda (nunca abrir a equipe ou editar).
+  const leadPendente = (e) => e.status_assinatura === 'trial' && !e.lead_tratado_em;
+  const pendentes = empresas.filter(leadPendente).length;
+
+  const alternarLead = async (e) => {
+    setErro('');
+    try {
+      const { data } = await api.patch(`/api/v1/admin/empresas/${e.id}`, { lead_tratado: leadPendente(e) });
+      setEmpresas(lista => lista.map(x => x.id === e.id ? { ...x, lead_tratado_em: data.lead_tratado_em } : x));
+    } catch (err) { setErro(msgErro(err, 'Erro ao atualizar o sinalizador.')); }
+  };
+
   const abrirEquipe = async (id) => {
     if (expandida === id) { setExpandida(null); return; }
     setExpandida(id); setErro('');
@@ -178,6 +190,12 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
           <button onClick={() => setAba('empresas')}
             className={`px-5 py-2.5 text-xs font-bold transition-colors ${aba === 'empresas' ? 'bg-white text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}>
             Empresas
+            {pendentes > 0 && (
+              <span title={`${pendentes} trial(s) novo(s) ainda não tratado(s)`}
+                className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black">
+                {pendentes}
+              </span>
+            )}
           </button>
           <button onClick={() => setAba('relatorios')}
             className={`px-5 py-2.5 text-xs font-bold transition-colors ${aba === 'relatorios' ? 'bg-white text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}>
@@ -304,6 +322,11 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                 <div className="p-4 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      {e.status_assinatura === 'trial' && (
+                        <span data-testid="lead-bolinha" data-lead={leadPendente(e) ? 'pendente' : 'tratado'}
+                          title={leadPendente(e) ? 'Trial novo — dados ainda não anotados' : 'Trial já tratado'}
+                          className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${leadPendente(e) ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                      )}
                       <p className="font-bold text-slate-800">{e.nome}</p>
                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${badgeStatus(e.status_assinatura)}`}>
                         {e.status_assinatura}
@@ -317,6 +340,14 @@ export default function AdminEmpresas({ aberto, aoFechar }) {
                     </p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
+                    {e.status_assinatura === 'trial' && (
+                      <button onClick={() => alternarLead(e)}
+                        className={leadPendente(e)
+                          ? 'text-[10px] px-2.5 py-1 rounded-lg bg-red-50 text-red-700 font-bold border border-red-200 hover:bg-red-100'
+                          : 'text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50'}>
+                        {leadPendente(e) ? 'Marcar como tratado' : 'Desfazer'}
+                      </button>
+                    )}
                     <button onClick={() => abrirEquipe(e.id)}
                       className="text-[10px] px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 hover:bg-indigo-100">
                       {expandida === e.id ? 'Fechar' : 'Equipe'}

@@ -31,6 +31,11 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 PAPEIS_PERMITIDOS = (PAPEL_ADMIN, PAPEL_MEMBRO)
 
 
+def _agora_utc_naive() -> datetime:
+    """Colunas de data/hora do projeto não têm timezone; o valor gravado é sempre UTC."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 # ── Schemas ─────────────────────────────────────────────────────────────────
 
 class EmpresaCreate(BaseModel):
@@ -50,6 +55,9 @@ class EmpresaUpdate(BaseModel):
     assinatura_fim: date | None = None
     recursos_avancados_habilitados: bool | None = None
     ia_descritivo_habilitado: bool | None = None
+    # Checkpoint comercial do trial novo: True grava "agora" (tratado), False limpa (volta a pendente).
+    # Não é coluna — o PATCH traduz para `lead_tratado_em`.
+    lead_tratado: bool | None = None
 
 
 class CadastroPorDia(BaseModel):
@@ -95,9 +103,17 @@ class EmpresaOut(BaseModel):
     assinatura_fim: date | None
     recursos_avancados_habilitados: bool = False
     ia_descritivo_habilitado: bool = False
+    lead_tratado_em: datetime | None = None
     total_usuarios: int = 0
 
     model_config = {"from_attributes": True}
+
+    @field_validator("lead_tratado_em")
+    @classmethod
+    def _marca_utc(cls, v: datetime | None) -> datetime | None:
+        # Coluna sem timezone, valor gravado em UTC: marcar explícito pro navegador não ler como horário local
+        # (mesma causa do "há -1 dias" da Atividade de Usuários, 2026-09-16).
+        return v.replace(tzinfo=timezone.utc) if v is not None and v.tzinfo is None else v
 
 
 class UsuarioCreate(BaseModel):
@@ -318,7 +334,8 @@ async def criar_empresa(
     db: AsyncSession = Depends(get_db),
     _: UserOut = Depends(exigir_superadmin),
 ):
-    empresa = Empresa(**payload.model_dump())
+    # Empresa criada à mão na implantação não é lead de cadastro público: nasce já "tratada".
+    empresa = Empresa(**payload.model_dump(), lead_tratado_em=_agora_utc_naive())
     db.add(empresa)
     await db.commit()
     await db.refresh(empresa)
@@ -333,7 +350,12 @@ async def atualizar_empresa(
     _: UserOut = Depends(exigir_superadmin),
 ):
     empresa = await _obter_empresa(db, empresa_id)
-    for campo, valor in payload.model_dump(exclude_unset=True).items():
+    dados = payload.model_dump(exclude_unset=True)
+    if "lead_tratado" in dados:
+        tratado = dados.pop("lead_tratado")
+        if tratado is not None:
+            empresa.lead_tratado_em = _agora_utc_naive() if tratado else None
+    for campo, valor in dados.items():
         setattr(empresa, campo, valor)
     await db.commit()
     await db.refresh(empresa)

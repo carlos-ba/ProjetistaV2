@@ -1675,6 +1675,37 @@ salvos) pra entender engajamento — 3ª aba em Administração, ao lado de
 
 ---
 
+## Administração — Sinalizador de trial novo (implementado 2026-10-28, spec em `specs/001-sinalizador-trial-novo/`)
+
+Pedido do usuário: com inscrições e vendas chegando, ele não sabia quais **trials** já abriu e levou pra
+planilha/CRM comercial (vendas ele já controla pelo relatório do checkout). Checkpoint visual na lista de
+Empresas do painel Administração, **só pro superadmin** — controle de trabalho comercial dele, não é status de
+assinatura e o cliente não vê nada.
+
+- **Campo `Empresa.lead_tratado_em`** (migration 0047, timestamp sem timezone, UTC): **vazio = pendente (bolinha
+  vermelha)**, preenchido = tratado (verde). Cadastro público (`registrar_usuario`) deixa vazio (nasce pendente);
+  `criar_empresa` pelo superadmin (implantação) já grava preenchido; a migration preencheu **todas as empresas
+  existentes** com "agora" — o sinalizador vale só daqui pra frente (decisão do usuário).
+- **Só muda por clique manual** (decisão do usuário): `PATCH /api/v1/admin/empresas/{id}` aceita
+  `{"lead_tratado": true|false}` (True grava agora, False limpa → volta a vermelho). Abrir a Equipe, editar e salvar
+  a empresa **não** mexem no campo (o formulário de edição não envia `lead_tratado`). `lead_tratado` não é coluna —
+  a rota traduz pra `lead_tratado_em`; `EmpresaOut.lead_tratado_em` devolve UTC explícito (validator, mesmo cuidado
+  do fix "-1 dias").
+- **Frontend (`AdminEmpresas.jsx`)**: só empresa com `status_assinatura === 'trial'` tem bolinha (vermelha/verde,
+  `data-testid="lead-bolinha"`) e botão "Marcar como tratado"/"Desfazer"; quando vira `ativa`/outro status a bolinha
+  some (vendas já têm o controle do checkout). A aba "Empresas" mostra contador vermelho com os pendentes. Estado
+  atualizado localmente após o PATCH (sem recarregar a lista).
+- **Fora de escopo**: tela dedicada de leads, exportação pro CRM, histórico de quem/quando, filtro "só pendentes"
+  (a lista continua ordenada por nome — se o volume crescer, vira melhoria).
+- **Testes**: `backend/tests/test_admin_lead_trial.py` (7 casos: cadastro público real nasce pendente, marcar/desfazer
+  com UTC, empresa do superadmin nasce tratada, só superadmin marca — admin/membro 403, marcar não altera assinatura,
+  editar não trata); suíte 55/55. Migration upgrade/downgrade/upgrade ok (17 empresas, 0 nulas). Na tela (conta
+  descartável): vermelho→verde, contador 2→1→2, persistiu após recarregar, sem erro de console. **Não testado**: celular
+  e cadastro trial real em produção (só depois do deploy).
+- Sem risco pra dado de usuário: coluna aditiva; o único `UPDATE` só preenche a coluna nova.
+
+---
+
 ## Trial de 15 Dias — Trava Real (em produção desde 2026-08-25)
 
 Cadastro novo (`registrar_usuario`) grava `plano="tecnico"` +
@@ -1752,7 +1783,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 
 ---
 
-## Banco de Dados — Migrations (0001→0046)
+## Banco de Dados — Migrations (0001→0047)
 
 | Migration | Conteúdo |
 |-----------|---------|
@@ -1802,6 +1833,7 @@ na memória, seção "IMPLEMENTADO 2026-08-25".
 | 0043 | Campo `cotacao_item.qtde_cotada` (nullable) — quantidade que o fornecedor cotou, lida do PDF na importação por IA e ajustável na conferência |
 | 0045 | Campo `empresa.proposta_crea` (nullable, String 60) — CREA do engenheiro responsável, exibido no bloco "Aprovação e Aceite" da proposta |
 | 0046 | Campo `empresa.ia_descritivo_habilitado` (boolean, default false) — libera a redação por IA do descritivo técnico (beta fechado), ligado pelo superadmin por empresa |
+| 0047 | Campo `empresa.lead_tratado_em` (timestamp, nullable) — checkpoint comercial do trial novo no painel Administração; backfill = agora nas empresas existentes (só cadastros novos nascem pendentes) |
 
 ---
 
@@ -2503,6 +2535,7 @@ Rate-limiting da API foi adiado de propósito para pré-lançamento (ver
 | Chegada pela landing page abre em "Criar Conta" (`?cadastro=1`) | ✅ em produção desde 2026-09-11 — Codex atualizou o link no mesmo dia, validado ponta a ponta (landing page real → app) |
 | Administração — Relatórios (cadastros por dia, empresas por vencimento) | ✅ em produção desde 2026-09-11 — versão simples, status atual (não funil de conversão) |
 | Administração — Atividade de Usuários (acessos, projetos, último acesso) | ✅ em produção desde 2026-09-16 — grão de usuário (não empresa), pronto pra empresas com equipe sem redesenho |
+| Administração — Sinalizador de trial novo (bolinha vermelha/verde, tratado manual, contador na aba) | ✅ implementado 2026-10-28 (migration 0047) — só trial, só daqui pra frente, só o clique muda; spec em `specs/001-sinalizador-trial-novo/` |
 | Limite de sessões + logout real + métrica IP (admin) | ✅ em produção desde 2026-08-19 |
 | Lista de Engenharia exportável (Excel/PDF) — Card 6 | ✅ em produção desde 2026-08-19 |
 | Catálogo/lista de preços por empresa (Fase B) | ✅ em produção desde 2026-08-20 |
